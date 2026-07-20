@@ -6,12 +6,15 @@ export class AesTokenCipher implements TokenCipher {
   private readonly keys: Map<string, Buffer>;
   private readonly primaryId: string;
   constructor(value: string) {
+    const seen = new Set<string>();
     const entries = value.split(',').map((item) => {
       const separator = item.indexOf(':');
       const id = item.slice(0, separator);
       const key = Buffer.from(item.slice(separator + 1), 'base64');
       if (!id || key.length !== 32)
         throw new Error('TOKEN_ENCRYPTION_KEYS must contain 32-byte base64 keys');
+      if (seen.has(id)) throw new Error('TOKEN_ENCRYPTION_KEYS contains a duplicate key identifier');
+      seen.add(id);
       return [id, key] as const;
     });
     const first = entries[0];

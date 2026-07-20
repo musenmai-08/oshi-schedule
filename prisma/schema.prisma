@@ -15,6 +15,7 @@ enum SubscriptionStatus {
 enum BroadcastKind {
   LIVE
   PREMIERE
+  UNKNOWN
 }
 
 enum BroadcastStatus {
@@ -23,6 +24,7 @@ enum BroadcastStatus {
   COMPLETED
   CANCELLED
   UNKNOWN
+  UNAVAILABLE
 }
 
 enum ConnectionStatus {
@@ -225,15 +227,32 @@ model SyncTargetResult {
 
 /// 段階実行し再開できるアカウント削除要求。
 model AccountDeletionRequest {
-  id            String         @id @default(cuid())
-  userId        String         @unique
-  status        DeletionStatus @default(REQUESTED)
-  attempts      Int            @default(0)
-  lastErrorCode String?        @db.VarChar(64)
-  requestedAt   DateTime       @default(now()) @db.DateTime(3)
-  completedAt   DateTime?      @db.DateTime(3)
-  updatedAt     DateTime       @updatedAt @db.DateTime(3)
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                     String         @id @default(cuid())
+  supabaseUserId         String         @unique @db.VarChar(64)
+  userId                 String?        @unique
+  calendarIdSnapshot     String?        @db.VarChar(255)
+  status                 DeletionStatus @default(REQUESTED)
+  attempts               Int            @default(0)
+  lastErrorCode          String?        @db.VarChar(64)
+  requestedAt            DateTime       @default(now()) @db.DateTime(3)
+  calendarDeletedAt      DateTime?      @db.DateTime(3)
+  googleTokenRevokedAt   DateTime?      @db.DateTime(3)
+  userDataDeletedAt      DateTime?      @db.DateTime(3)
+  supabaseUserDeletedAt  DateTime?      @db.DateTime(3)
+  completedAt            DateTime?      @db.DateTime(3)
+  updatedAt              DateTime       @updatedAt @db.DateTime(3)
+  user                   User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([status, requestedAt])
+}
+
+/// API/worker replicaをまたいで同期のleaseを保持する。
+model SyncLease {
+  key        String   @id @db.VarChar(191)
+  ownerToken String   @db.VarChar(64)
+  expiresAt  DateTime @db.DateTime(3)
+  createdAt  DateTime @default(now()) @db.DateTime(3)
+  updatedAt  DateTime @updatedAt @db.DateTime(3)
+
+  @@index([expiresAt])
 }

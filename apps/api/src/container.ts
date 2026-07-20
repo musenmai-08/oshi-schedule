@@ -44,7 +44,7 @@ export interface ContainerOverrides {
 
 export function createContainer(env: Env, overrides: ContainerOverrides = {}): Container {
   const store =
-    overrides.store ?? (env.APP_MODE === 'fake' ? new MemoryStore() : new PrismaStore());
+    overrides.store ?? (env.APP_MODE === 'fake' ? new MemoryStore(true) : new PrismaStore());
   const cipher = overrides.cipher ?? new AesTokenCipher(env.TOKEN_ENCRYPTION_KEYS);
   const clock = overrides.clock ?? { now: () => new Date() };
   const youtube =

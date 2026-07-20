@@ -10,13 +10,17 @@ export class FakeCalendarGateway implements CalendarGateway {
     this.calendars.add(id);
     return id;
   }
+  async eventExists(_user: UserRecord, _calendarId: string, eventId: string) {
+    return this.events.has(eventId);
+  }
   async upsertEvent(
     _user: UserRecord,
     _calendarId: string,
     eventId: string | null,
     event: CalendarEventInput,
+    deterministicId = false,
   ) {
-    const id = eventId && this.events.has(eventId) ? eventId : randomUUID();
+    const id = eventId && (deterministicId || this.events.has(eventId)) ? eventId : randomUUID();
     this.events.set(id, event);
     return id;
   }

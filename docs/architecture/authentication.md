@@ -12,7 +12,7 @@
 
 ## Cookie・CSRF
 
-Supabase SSR cookie は `HttpOnly`、本番 `Secure`、`SameSite=Lax`。状態変更 API は Bearer JWT を要求し CORS origin を限定するため、通常の cookie CSRF 対象外。OAuth state と PKCE verifier は Supabase SSR に委譲し、callback の `next` は内部パスだけ許可する。
+Supabase SSR cookie はブラウザーでの session refresh に使うため HttpOnly を前提にしない。Supabase が設定する Secure/SameSite 属性を本番で確認し、CSP と短い JWT 寿命を併用する。状態変更 API は Bearer JWT を要求し CORS origin を限定するため、通常の cookie CSRF 対象外。OAuth state と PKCE verifier は Supabase SSR へ委譲する。
 
 ## 公式仕様確認（2026-07-20）
 
@@ -23,4 +23,6 @@ Supabase SSR cookie は `HttpOnly`、本番 `Secure`、`SameSite=Lax`。状態�
 
 ## 再認証・削除
 
-`invalid_grant` / 401 で `reauthRequired=true` とし自動再試行を止める。削除 API は Calendar 削除→Google revoke→credential/関連削除→Supabase Admin 削除を同じ確認入力で再要求でき、404/既失効を成功扱いにする。`AccountDeletionRequest` は非同期補償処理へ移行するためのモデルとして用意したが、MVP API は同期実行である。Supabase Admin 削除だけがローカル削除後に失敗した場合の補償 worker は本番公開前に追加する。
+OAuth token endpoint の `invalid_grant` だけを恒久失効として `reauthRequired=true` にし、429/5xx/network error は指数的delay付き最大3回の一時障害再試行とする。定期 worker は再認証状態の User を対象外とし、再連携成功時に解除する。
+
+ローカル User の暗黙作成は onboarding だけが行う。通常 API は既存の active User を要求し、`AccountDeletionRequest.supabaseUserId` の墓石がある主体を 410 で拒否する。削除は要求を先に永続化し、Calendar 削除→Google revoke→User 固有データ削除→Supabase Admin 削除→完了の各時刻を保存する。User FK は SetNull なのでローカル削除後も墓石が残り、同じ JWT による再実行は削除処理だけを継続できる。同時リクエストはsubject単位のDB leaseで直列化し、競合側は409を返す。404/410 の Calendar と既失効 token は冪等成功として扱い、外部呼び出し中は DB transaction を保持しない。

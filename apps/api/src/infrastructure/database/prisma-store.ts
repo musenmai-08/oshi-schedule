@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import type { ChannelSummary, SubscriptionStatus } from '@oshi-schedule/shared';
 import type {
   AuthIdentity,
@@ -8,6 +8,7 @@ import type {
   SyncResult,
 } from '../../application/models.js';
 import type { NormalizedBroadcast } from '../../domain/scheduling.js';
+import { StoreConstraintError } from '../../domain/errors.js';
 
 const toUser = (row: {
   id: string;
@@ -79,6 +80,64 @@ export class PrismaStore implements Store {
       include: { calendar: true },
     });
     return toUser(row);
+  }
+  async findAccountDeletion(subject: string) {
+    const row = await this.prisma.accountDeletionRequest.findUnique({
+      where: { supabaseUserId: subject },
+    });
+    return row
+      ? {
+          id: row.id,
+          supabaseUserId: row.supabaseUserId,
+          userId: row.userId,
+          calendarIdSnapshot: row.calendarIdSnapshot,
+          status: row.status,
+          calendarDeletedAt: row.calendarDeletedAt,
+          googleTokenRevokedAt: row.googleTokenRevokedAt,
+          userDataDeletedAt: row.userDataDeletedAt,
+          supabaseUserDeletedAt: row.supabaseUserDeletedAt,
+          completedAt: row.completedAt,
+        }
+      : null;
+  }
+  async beginAccountDeletion(user: ReturnType<typeof toUser>) {
+    const row = await this.prisma.accountDeletionRequest.upsert({
+      where: { supabaseUserId: user.subject },
+      update: { attempts: { increment: 1 }, lastErrorCode: null },
+      create: {
+        supabaseUserId: user.subject,
+        userId: user.id,
+        calendarIdSnapshot: user.calendarId,
+        attempts: 1,
+      },
+    });
+    const request = await this.findAccountDeletion(row.supabaseUserId);
+    if (!request) throw new Error('account deletion request not found');
+    return request;
+  }
+  async markAccountDeletionStep(
+    id: string,
+    step: 'CALENDAR_DELETED' | 'TOKEN_REVOKED' | 'DATA_DELETED' | 'AUTH_DELETED' | 'COMPLETED',
+    at: Date,
+  ) {
+    await this.prisma.accountDeletionRequest.update({
+      where: { id },
+      data: {
+        status: step,
+        lastErrorCode: null,
+        ...(step === 'CALENDAR_DELETED' ? { calendarDeletedAt: at } : {}),
+        ...(step === 'TOKEN_REVOKED' ? { googleTokenRevokedAt: at } : {}),
+        ...(step === 'DATA_DELETED' ? { userDataDeletedAt: at } : {}),
+        ...(step === 'AUTH_DELETED' ? { supabaseUserDeletedAt: at } : {}),
+        ...(step === 'COMPLETED' ? { completedAt: at } : {}),
+      },
+    });
+  }
+  async markAccountDeletionFailed(id: string, errorCode: string) {
+    await this.prisma.accountDeletionRequest.update({
+      where: { id },
+      data: { status: 'FAILED', lastErrorCode: errorCode.slice(0, 64) },
+    });
   }
   async saveCredential(userId: string, encryptedToken: string, keyId: string) {
     await this.prisma.googleCredential.upsert({
@@ -195,10 +254,25 @@ export class PrismaStore implements Store {
     });
     return toChannel(row);
   }
-  async createSubscription(userId: string, channelId: string) {
-    return toSubscription(
-      await this.prisma.userChannelSubscription.create({ data: { userId, channelId } }),
-    );
+  async createSubscriptionWithinLimit(userId: string, channelId: string, limit: number) {
+    try {
+      return await this.prisma.$transaction(
+        async (transaction) => {
+          await transaction.$queryRaw`SELECT id FROM User WHERE id = ${userId} FOR UPDATE`;
+          const count = await transaction.userChannelSubscription.count({ where: { userId } });
+          if (count >= limit) throw new StoreConstraintError('CHANNEL_LIMIT');
+          return toSubscription(
+            await transaction.userChannelSubscription.create({ data: { userId, channelId } }),
+          );
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch (error) {
+      if (error instanceof StoreConstraintError) throw error;
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
+        throw new StoreConstraintError('DUPLICATE_CHANNEL');
+      throw error;
+    }
   }
   async getSubscription(userId: string, id: string) {
     const row = await this.prisma.userChannelSubscription.findFirst({
@@ -219,7 +293,7 @@ export class PrismaStore implements Store {
   }
   async listActiveSubscriptions() {
     const rows = await this.prisma.userChannelSubscription.findMany({
-      where: { status: 'ACTIVE' },
+      where: { status: 'ACTIVE', user: { reauthRequired: false } },
       include: { channel: true, user: { include: { calendar: true } } },
     });
     return rows.map((row) => ({
@@ -234,7 +308,7 @@ export class PrismaStore implements Store {
       data: { lastFetchedAt: at },
     });
   }
-  async upsertBroadcasts(channelId: string, items: NormalizedBroadcast[]) {
+  async upsertBroadcasts(channelId: string, items: NormalizedBroadcast[], observedAt: Date) {
     for (const item of items)
       await this.prisma.scheduledBroadcast.upsert({
         where: { youtubeVideoId: item.youtubeVideoId },
@@ -250,8 +324,9 @@ export class PrismaStore implements Store {
           actualStartAt: item.actualStartAt,
           actualEndAt: item.actualEndAt,
           missingCount: 0,
+          sourceUpdatedAt: observedAt,
         },
-        create: { channelId, ...item },
+        create: { channelId, ...item, sourceUpdatedAt: observedAt },
       });
     const rows = await this.prisma.scheduledBroadcast.findMany({
       where: { youtubeVideoId: { in: items.map((item) => item.youtubeVideoId) } },
@@ -259,18 +334,51 @@ export class PrismaStore implements Store {
     return rows.map((row) => ({
       ...row,
       kind: row.kind,
-      status: row.status === 'UNKNOWN' ? 'UPCOMING' : row.status,
+      status: row.status === 'UNKNOWN' ? 'UNAVAILABLE' : row.status,
     }));
+  }
+  async listTrackableBroadcasts(channelId: string, now: Date) {
+    const rows = await this.prisma.scheduledBroadcast.findMany({
+      where: {
+        channelId,
+        scheduledStartAt: { gte: new Date(now.getTime() - 30 * 86_400_000) },
+        status: { notIn: ['COMPLETED', 'CANCELLED'] },
+      },
+    });
+    return rows.map((row) => ({
+      ...row,
+      status: row.status === 'UNKNOWN' ? ('UNAVAILABLE' as const) : row.status,
+    }));
+  }
+  async markBroadcastsUnavailable(channelId: string, youtubeVideoIds: string[], observedAt: Date) {
+    if (!youtubeVideoIds.length) return;
+    await this.prisma.scheduledBroadcast.updateMany({
+      where: { channelId, youtubeVideoId: { in: youtubeVideoIds } },
+      data: { status: 'UNAVAILABLE', sourceUpdatedAt: observedAt },
+    });
   }
   async listFutureBroadcasts(channelId: string, now: Date) {
     const rows = await this.prisma.scheduledBroadcast.findMany({
-      where: { channelId, endAt: { gte: now }, status: { not: 'CANCELLED' } },
+      where: { channelId, scheduledStartAt: { gt: now }, status: { not: 'CANCELLED' } },
       orderBy: { scheduledStartAt: 'asc' },
     });
     return rows.map((row) => ({
       ...row,
       kind: row.kind,
-      status: row.status === 'UNKNOWN' ? 'UPCOMING' : row.status,
+      status: row.status === 'UNKNOWN' ? 'UNAVAILABLE' : row.status,
+    }));
+  }
+  async listBroadcastsForSync(channelId: string, now: Date, since: Date | null) {
+    const rows = await this.prisma.scheduledBroadcast.findMany({
+      where: {
+        channelId,
+        ...(since ? { OR: [{ endAt: { gte: now } }, { sourceUpdatedAt: { gt: since } }] } : {}),
+      },
+      orderBy: { scheduledStartAt: 'asc' },
+    });
+    return rows.map((row) => ({
+      ...row,
+      status: row.status === 'UNKNOWN' ? ('UNAVAILABLE' as const) : row.status,
     }));
   }
   async getMapping(userId: string, broadcastId: string) {
@@ -313,13 +421,129 @@ export class PrismaStore implements Store {
       where: { id: subscriptionId },
       data: {
         lastSyncStatus: result.status,
+        lastErrorCode: result.errorCode ?? null,
         lastErrorMessage: result.message,
-        lastCalendarSyncAt: at,
-        ...(manual ? { lastManualSyncAt: at } : {}),
+        ...(result.status === 'SUCCESS' ? { lastCalendarSyncAt: at } : {}),
+        ...(manual && result.status === 'RUNNING' ? { lastManualSyncAt: at } : {}),
       },
     });
   }
-  async deleteAccount(userId: string) {
-    await this.prisma.user.delete({ where: { id: userId } });
+  async acquireSyncLease(key: string, ownerToken: string, now: Date, expiresAt: Date) {
+    try {
+      await this.prisma.syncLease.create({ data: { key, ownerToken, expiresAt } });
+      return true;
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002')
+        throw error;
+      const updated = await this.prisma.syncLease.updateMany({
+        where: { key, expiresAt: { lte: now } },
+        data: { ownerToken, expiresAt },
+      });
+      return updated.count === 1;
+    }
+  }
+  async renewSyncLease(key: string, ownerToken: string, now: Date, expiresAt: Date) {
+    const updated = await this.prisma.syncLease.updateMany({
+      where: { key, ownerToken, expiresAt: { gt: now } },
+      data: { expiresAt },
+    });
+    return updated.count === 1;
+  }
+  async releaseSyncLease(key: string, ownerToken: string) {
+    await this.prisma.syncLease.deleteMany({ where: { key, ownerToken } });
+  }
+  async startSyncRun(
+    type: 'MANUAL' | 'SCHEDULED',
+    requestedById: string | null,
+    targets: number,
+    at: Date,
+  ) {
+    return (
+      await this.prisma.syncRun.create({
+        data: {
+          type,
+          requestedById,
+          startedAt: at,
+          channelsTotal: targets,
+          usersTotal: targets,
+        },
+      })
+    ).id;
+  }
+  async startSyncTarget(runId: string, subscriptionId: string, at: Date) {
+    await this.prisma.syncTargetResult.create({
+      data: {
+        syncRunId: runId,
+        targetType: 'SUBSCRIPTION',
+        targetId: subscriptionId,
+        status: 'RUNNING',
+        startedAt: at,
+      },
+    });
+  }
+  async finishSyncTarget(runId: string, subscriptionId: string, result: SyncResult, at: Date) {
+    await this.prisma.syncTargetResult.update({
+      where: {
+        syncRunId_targetType_targetId: {
+          syncRunId: runId,
+          targetType: 'SUBSCRIPTION',
+          targetId: subscriptionId,
+        },
+      },
+      data: {
+        status: result.status,
+        errorCode: result.errorCode ?? null,
+        errorMessage: result.message,
+        completedAt: at,
+      },
+    });
+  }
+  async finishSyncRun(
+    runId: string,
+    status: 'SUCCESS' | 'PARTIAL_FAILED' | 'FAILED',
+    at: Date,
+    errorCode?: string,
+  ) {
+    await this.prisma.syncRun.update({
+      where: { id: runId },
+      data: { status, completedAt: at, errorCode: errorCode ?? null },
+    });
+  }
+  async maintainSyncRuns(staleBefore: Date, retainAfter: Date, at: Date) {
+    await this.prisma.$transaction(async (tx) => {
+      const stale = await tx.syncRun.findMany({
+        where: { status: 'RUNNING', startedAt: { lt: staleBefore } },
+        select: { id: true },
+      });
+      const staleIds = stale.map((run) => run.id);
+      if (staleIds.length) {
+        await tx.syncTargetResult.updateMany({
+          where: { syncRunId: { in: staleIds }, status: 'RUNNING' },
+          data: {
+            status: 'FAILED',
+            completedAt: at,
+            errorCode: 'SYNC_RUN_STALE',
+            errorMessage: '同期プロセスが完了を記録しませんでした',
+          },
+        });
+        await tx.syncRun.updateMany({
+          where: { id: { in: staleIds }, status: 'RUNNING' },
+          data: { status: 'FAILED', completedAt: at, errorCode: 'SYNC_RUN_STALE' },
+        });
+      }
+      await tx.syncRun.deleteMany({
+        where: { completedAt: { lt: retainAfter } },
+      });
+    });
+  }
+  async deleteUserData(requestId: string, userId: string) {
+    const at = new Date();
+    await this.prisma.$transaction([
+      this.prisma.user.deleteMany({ where: { id: userId } }),
+      this.prisma.accountDeletionRequest.update({
+        where: { id: requestId },
+        data: { userId: null, status: 'DATA_DELETED', userDataDeletedAt: at },
+      }),
+    ]);
   }
 }

@@ -4,6 +4,7 @@ export const APP_NAME = '推しスケジュール';
 export const MAX_CHANNELS_PER_USER = 3;
 export const SYNC_LOOKAHEAD_DAYS = 30;
 export const MANUAL_SYNC_COOLDOWN_SECONDS = 300;
+export const entityIdSchema = z.string().cuid();
 
 export const channelHandleSchema = z
   .string()
@@ -20,8 +21,8 @@ export const reconnectSchema = onboardingSchema;
 export const deleteAccountSchema = z.object({ confirmation: z.literal('DELETE') });
 
 export type SubscriptionStatus = 'ACTIVE' | 'PAUSED';
-export type BroadcastKind = 'LIVE' | 'PREMIERE';
-export type BroadcastStatus = 'UPCOMING' | 'LIVE' | 'COMPLETED' | 'CANCELLED';
+export type BroadcastKind = 'LIVE' | 'PREMIERE' | 'UNKNOWN';
+export type BroadcastStatus = 'UPCOMING' | 'LIVE' | 'COMPLETED' | 'CANCELLED' | 'UNAVAILABLE';
 
 export interface ChannelSummary {
   id: string;

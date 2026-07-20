@@ -1,13 +1,23 @@
 openapi: 3.1.0
 info:
   title: 推しスケジュール API
-  version: 1.0.0
+  version: 1.1.0
 servers:
   - url: http://localhost:4000
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    SubscriptionId:
+      in: path
+      name: subscriptionId
+      required: true
+      schema: { $ref: '#/components/schemas/Cuid' }
   schemas:
+    Cuid:
+      type: string
+      pattern: '^c[a-z0-9]{8,}$'
+      examples: [cm0wz73bk0000qzrmn831i7rn]
     Error:
       type: object
       required: [error, requestId]
@@ -15,12 +25,45 @@ components:
         error:
           type: object
           required: [code, message]
-          properties: { code: { type: string }, message: { type: string } }
+          properties:
+            code: { type: string }
+            message: { type: string }
         requestId: { type: string }
     Handle:
       type: object
       required: [handle]
       properties: { handle: { type: string, pattern: '^@[A-Za-z0-9._-]{3,30}$' } }
+    ProviderToken:
+      type: object
+      required: [providerRefreshToken]
+      properties:
+        providerRefreshToken: { type: string, minLength: 1, writeOnly: true }
+        providerAccessToken: { type: string, minLength: 1, writeOnly: true }
+    CreateChannel:
+      type: object
+      required: [youtubeChannelId]
+      properties: { youtubeChannelId: { type: string, minLength: 1 } }
+    UpdateSubscription:
+      type: object
+      required: [status]
+      properties: { status: { type: string, enum: [ACTIVE, PAUSED] } }
+    DeleteConfirmation:
+      type: object
+      required: [confirmation]
+      properties: { confirmation: { type: string, const: DELETE } }
+  responses:
+    BadRequest:
+      description: validation error
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Unauthorized:
+      description: unauthorized
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Forbidden:
+      description: not invited
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Gone:
+      description: account deletion is pending or complete
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
 security: [{ bearerAuth: [] }]
 paths:
   /health:
@@ -29,48 +72,88 @@ paths:
       responses: { '200': { description: healthy } }
   /api/v1/me:
     get:
-      responses: { '200': { description: current user }, '401': { description: unauthorized } }
+      responses:
+        '200': { description: current active user }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { description: onboarding required }
+        '410': { $ref: '#/components/responses/Gone' }
   /api/v1/onboarding:
     post:
-      responses: { '200': { description: configured }, '403': { description: not invited } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ProviderToken' } } }
+      responses:
+        '200': { description: configured }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '410': { $ref: '#/components/responses/Gone' }
   /api/v1/channels:
-    get: { responses: { '200': { description: subscriptions } } }
+    get:
+      responses:
+        '200': { description: subscriptions }
+        '410': { $ref: '#/components/responses/Gone' }
     post:
-      {
-        responses:
-          {
-            '201': { description: created },
-            '409': { description: duplicate },
-            '422': { description: limit },
-          },
-      }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CreateChannel' } } }
+      responses:
+        '201': { description: created }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { description: duplicate or channel not resolved }
+        '422': { description: three-channel limit }
   /api/v1/channels/resolve:
     post:
       requestBody:
-        {
-          required: true,
-          content: { application/json: { schema: { $ref: '#/components/schemas/Handle' } } },
-        }
-      responses: { '200': { description: resolved channel }, '404': { description: not found } }
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/Handle' } } }
+      responses:
+        '200': { description: resolved channel }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { description: not found }
   /api/v1/channels/{subscriptionId}:
-    parameters: [{ in: path, name: subscriptionId, required: true, schema: { type: string } }]
-    patch: { responses: { '200': { description: updated }, '404': { description: not found } } }
-    delete: { responses: { '204': { description: deleted }, '404': { description: not found } } }
+    parameters: [{ $ref: '#/components/parameters/SubscriptionId' }]
+    patch:
+      requestBody:
+        required: true
+        content:
+          { application/json: { schema: { $ref: '#/components/schemas/UpdateSubscription' } } }
+      responses:
+        '200': { description: updated }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { description: not found or not owned }
+    delete:
+      responses:
+        '204': { description: deleted }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { description: not found or not owned }
   /api/v1/channels/{subscriptionId}/sync:
-    parameters: [{ in: path, name: subscriptionId, required: true, schema: { type: string } }]
+    parameters: [{ $ref: '#/components/parameters/SubscriptionId' }]
     post:
-      {
-        responses:
-          {
-            '202': { description: accepted },
-            '409': { description: running },
-            '429': { description: cooldown },
-          },
-      }
+      responses:
+        '202': { description: synchronously completed and accepted result }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { description: not found or not owned }
+        '409': { description: paused or already running }
+        '429': { description: cooldown }
   /api/v1/sync-status:
-    get: { responses: { '200': { description: latest status } } }
+    get: { responses: { '200': { description: latest per-subscription status } } }
   /api/v1/google/reconnect:
-    post: { responses: { '200': { description: reconnected } } }
+    post:
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ProviderToken' } } }
+      responses:
+        '200': { description: reconnected }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '410': { $ref: '#/components/responses/Gone' }
   /api/v1/account:
     delete:
-      { responses: { '202': { description: deletion started }, '204': { description: deleted } } }
+      requestBody:
+        required: true
+        content:
+          { application/json: { schema: { $ref: '#/components/schemas/DeleteConfirmation' } } }
+      responses:
+        '204': { description: deletion completed or already complete }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { description: deletion for this subject is already running }
+        '502': { description: external deletion step failed; request can be retried }

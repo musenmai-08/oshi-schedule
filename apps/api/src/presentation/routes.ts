@@ -1,5 +1,5 @@
 import { Router, type Router as ExpressRouter } from 'express';
-import { z } from 'zod';
+import type { z } from 'zod';
 import {
   createChannelSchema,
   deleteAccountSchema,
@@ -7,12 +7,12 @@ import {
   reconnectSchema,
   resolveChannelSchema,
   updateSubscriptionSchema,
+  entityIdSchema,
 } from '@oshi-schedule/shared';
 import type { Container } from '../container.js';
 import { AppError } from '../domain/errors.js';
 import { asyncRoute, success } from './http.js';
 
-const idSchema = z.string().uuid();
 const parse = <T>(schema: z.ZodType<T>, value: unknown): T => {
   const result = schema.safeParse(value);
   if (!result.success) throw new AppError('VALIDATION_ERROR', '入力内容を確認してください', 400);
@@ -71,7 +71,10 @@ export function createApiRouter(container: Container): ExpressRouter {
     asyncRoute(async (request, response) => {
       success(
         response,
-        await container.service.resolve(parse(resolveChannelSchema, request.body).handle),
+        await container.service.resolve(
+          response.locals.identity,
+          parse(resolveChannelSchema, request.body).handle,
+        ),
       );
     }),
   );
@@ -91,7 +94,7 @@ export function createApiRouter(container: Container): ExpressRouter {
   router.patch(
     '/channels/:subscriptionId',
     asyncRoute(async (request, response) => {
-      const id = parse(idSchema, request.params.subscriptionId);
+      const id = parse(entityIdSchema, request.params.subscriptionId);
       success(
         response,
         await container.service.setStatus(
@@ -105,7 +108,7 @@ export function createApiRouter(container: Container): ExpressRouter {
   router.delete(
     '/channels/:subscriptionId',
     asyncRoute(async (request, response) => {
-      const id = parse(idSchema, request.params.subscriptionId);
+      const id = parse(entityIdSchema, request.params.subscriptionId);
       await container.service.remove(response.locals.identity, id);
       response.status(204).end();
     }),
@@ -116,7 +119,7 @@ export function createApiRouter(container: Container): ExpressRouter {
       const user = await container.service.me(response.locals.identity);
       const result = await container.service.sync.syncSubscription(
         user.id,
-        parse(idSchema, request.params.subscriptionId),
+        parse(entityIdSchema, request.params.subscriptionId),
       );
       success(response, result, 202);
     }),

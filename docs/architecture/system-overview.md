@@ -22,8 +22,8 @@ flowchart LR
 - `packages/shared`: API 契約、Zod schema、上限・期間などの定数。
 - `prisma`: 永続モデルと migration。Channel/Broadcast は全利用者で共有する。
 
-同期コアは port (`YouTubeGateway`, `CalendarGateway`, `SyncRepository`, `Clock`) のみに依存する。実 API と Fake は adapter として交換する。
+同期コアは port (`YouTubeGateway`, `CalendarGateway`, `Store`, `Clock`) のみに依存する。実 API と Fake は adapter として交換する。
 
 ## 可用性・拡張
 
-MVP は単一 API/worker プロセスを前提に、subscription 単位のプロセス内ロックと DB に保存するクールダウン時刻で多重実行を防ぐ。複数 replica 化する前に MySQL advisory lock または分散ロックを追加する。将来はジョブキューへチャンネル取得・利用者反映を分割できる。特定クラウドの SDK は domain/application に置かない。
+API と worker をまたぐ多重実行は、subscription 単位の `SyncLease` を MySQL に保存して防ぐ。lease は owner token と期限を持ち、同期中も更新するため長時間処理で別 replica に奪われない。異常終了後は期限切れ lease を取得し直せる。手動同期のクールダウンも DB 時刻で共有する。将来はジョブキューへチャンネル取得・利用者反映を分割できる。特定クラウドの SDK は domain/application に置かない。

@@ -17,6 +17,8 @@ pnpm install --frozen-lockfile
 cp .env.example .env
 ```
 
+`pnpm install` の postinstall、`pnpm typecheck` の pretypecheck、`pnpm build` の prebuild は Prisma Client を生成します。Prisma生成だけを明示実行する場合は `pnpm db:generate` を使います。
+
 ## 資格情報なしで起動（Fakeモード）
 
 ターミナルを2つ使用します。
@@ -42,7 +44,7 @@ APP_MODE=fake ALLOWED_EMAILS=developer@example.com pnpm sync:scheduled
 ```bash
 docker compose up -d mysql
 pnpm db:generate
-pnpm db:migrate
+pnpm exec prisma migrate deploy
 pnpm db:seed
 ```
 
@@ -54,6 +56,8 @@ pnpm db:seed
 - Google OAuth client ID / secret
 - YouTube Data API key
 - `TOKEN_ENCRYPTION_KEYS`（32 byte乱数のbase64。例: `openssl rand -base64 32`）
+
+APIとworkerは、各workspace packageをcwdとして起動した場合もproject rootの `.env` を読みます。real/productionでは `.env.example` の全ゼロ暗号鍵を拒否するため、必ず乱数鍵へ置換してください。
 
 Supabase の Google provider に Calendar API scope を許可し、Site URL/redirect URL に `http://localhost:3000/auth/callback` を登録してください。Google Cloud 側でも同じ Supabase callback URI、YouTube Data API v3、Google Calendar API、OAuth同意画面を設定します。
 
@@ -81,6 +85,13 @@ pnpm exec playwright install chromium  # 初回のみ
 pnpm test:e2e
 ```
 
+MySQLを含むAPI結合テストは、migration適用済みの分離DBを `TEST_DATABASE_URL` で指定して実行します。
+
+```bash
+TEST_DATABASE_URL=mysql://oshi:oshi_password@127.0.0.1:3306/oshi_schedule \
+  pnpm --filter @oshi-schedule/api test -- src/prisma-api.integration.test.ts
+```
+
 APIの確認例:
 
 ```bash
@@ -106,4 +117,4 @@ e2e             Playwrightシナリオ
 
 ## 本番前の注意
 
-Fake認証は `production` で起動できません。実Google/Supabase/YouTube接続、OAuth審査、利用規約・プライバシーポリシーの公開、scheduler/Secret Manager/監視、DB backup、鍵ローテーション手順、負荷・クォータ試験を本番環境で確認してください。
+Fake認証と既知の開発用暗号鍵は `production` で起動できません。実Google/Supabase/YouTube接続、OAuth審査、利用規約・プライバシーポリシーの公開、scheduler/Secret Manager/監視、DB backup、鍵ローテーション手順、負荷・クォータ試験を本番環境で確認してください。第三者向けYouTube Data APIだけでプレミア公開を確定できない項目は、誤推測せず「種別未確定」として扱います。

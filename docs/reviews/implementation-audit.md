@@ -17,6 +17,28 @@
 
 検出件数は Critical 2件、High 11件、Medium 14件、Low 5件。実サービス資格情報を用いたOAuth、YouTube、Calendarの受入確認は未実施であり、上記ブロッカー解消後にも別途必要である。
 
+### Critical・High対応追記（2026-07-20）
+
+元の指摘は監査履歴として以下に残し、詳細計画・検証結果を [Critical・High修正台帳](./critical-high-remediation.md) で追跡する。
+
+| 監査項目                         | 対応状況 | 主な修正ファイル                                         | 追加テスト                               | 検証結果                                                  | 残存リスク                               |
+| -------------------------------- | -------- | -------------------------------------------------------- | ---------------------------------------- | --------------------------------------------------------- | ---------------------------------------- |
+| C-01 / AUDIT-002 CUID不整合      | 修正済み | shared/index.ts、routes.ts、memory/prisma store、OpenAPI | app.test、prisma-api.integration         | Memory HTTPと実MySQLの主要4操作、所有権、400/404成功      | stagingの既存データも公開前に確認        |
+| C-02 / AUDIT-001 account削除     | 修正済み | schema/migration、OshiService、Store                     | account-deletion、prisma-api.integration | 段階失敗・同時実行・再開・旧JWT拒否・墓石成功             | 実Google/Supabaseの応答はstaging確認     |
+| H-01 / AUDIT-003 Calendar復旧    | 修正済み | SyncService、Calendar gateways                           | sync-service、google-calendar gateway    | event/Calendar 404から再作成、mapping差替成功             | 実Calendar tombstone挙動はstaging確認    |
+| H-02 / AUDIT-004 配信状態追跡    | 修正済み | YouTube gateway、SyncService、Store、schema              | YouTube gateway、sync-service            | LIVE/COMPLETED/actualEnd/UNAVAILABLE成功                  | 実第三者動画fixtureをstaging確認         |
+| H-03 / AUDIT-005 premiere推測    | 修正済み | shared、schema/migration、YouTube gateway、scheduling    | YouTube gateway                          | duration非依存UNKNOWNと通常動画除外を確認                 | 公式確定fieldがないためUNKNOWN表示が残る |
+| H-04 / AUDIT-006 process間排他   | 修正済み | SyncLease、Memory/Prisma Store、SyncService              | sync-service、prisma-api.integration     | 競合取得をDBで1件に限定しowner更新・延長成功              | 多replica負荷試験はstaging確認           |
+| H-05 / AUDIT-007 mapping境界重複 | 修正済み | SyncService、Calendar gateways                           | sync-service、google-calendar gateway    | mapping失敗再試行でもevent 1件、409→PATCH成功             | 実Calendar契約はstaging確認              |
+| H-06 / AUDIT-008 reauth分類      | 修正済み | Google gateway、Store、SyncService                       | google-calendar gateway、sync-service    | invalid_grant/client、429/500/timeout、skip/reconnect成功 | 実OAuth error subtypeはstaging確認       |
+| H-07 / AUDIT-009 同期履歴        | 修正済み | Store、SyncService、SyncRun/Target                       | sync-service                             | success/partial/all failed、stale回収、retention成功      | 運用監視はstaging確認                    |
+| H-08 / AUDIT-010 3件競合         | 修正済み | PrismaStore、OshiService                                 | prisma-api.integration                   | 実MySQL並列で201/422、合計3件                             | 高負荷deadlock率はstaging確認            |
+| H-09 / AUDIT-011 既知暗号鍵      | 修正済み | env.ts、AesTokenCipher                                   | env、cipher                              | default/重複ID拒否、非default受理成功                     | entropy運用とSecret Managerはstaging確認 |
+| H-10 / AUDIT-012 clean生成       | 修正済み | package.json、prisma.config.ts、README                   | env/toolchain契約、clean install         | node_modules削除後install/type/lint/test/build成功        | CI環境でも同じ手順を継続実行             |
+| H-11 / AUDIT-013 root .env       | 修正済み | env.ts、api package、README                              | env path、startup smoke                  | apps/api cwdからroot .envで起動しhealth成功               | deploy secret注入はstaging確認           |
+
+以下の第2節以降は2026-07-20の修正前監査スナップショットであり、文言と件数を監査履歴として保持する。修正後の正本は上表と[修正台帳](./critical-high-remediation.md)を参照する。
+
 ## 2. 現在の完成度
 
 | 領域               | 判定                 | コメント                                                                         |

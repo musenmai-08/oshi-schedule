@@ -1,0 +1,48 @@
+import { describe, expect, it } from 'vitest';
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { loadEnv, ROOT_ENV_PATH } from './env.js';
+
+const realEnv = {
+  NODE_ENV: 'production',
+  APP_MODE: 'real',
+  DATABASE_URL: 'mysql://user:password@localhost:3306/test',
+  SUPABASE_URL: 'https://example.supabase.co',
+  SUPABASE_SERVICE_ROLE_KEY: 'service-role',
+  YOUTUBE_API_KEY: 'youtube-key',
+  GOOGLE_CLIENT_ID: 'client-id',
+  GOOGLE_CLIENT_SECRET: 'client-secret',
+};
+
+describe('loadEnv production encryption keys', () => {
+  it('rejects the documented all-zero development key', () => {
+    expect(() => loadEnv(realEnv)).toThrow(/TOKEN_ENCRYPTION_KEYS/);
+  });
+
+  it('accepts a non-default 32-byte key', () => {
+    expect(
+      loadEnv({
+        ...realEnv,
+        TOKEN_ENCRYPTION_KEYS: `v2:${Buffer.alloc(32, 9).toString('base64')}`,
+      }).APP_MODE,
+    ).toBe('real');
+  });
+
+  it('loads dotenv from the repository root independently of the working directory', () => {
+    expect(ROOT_ENV_PATH).toBe(
+      resolve(fileURLToPath(new URL('../../../../', import.meta.url)), '.env'),
+    );
+  });
+
+  it('keeps Prisma generation in clean install and build/typecheck lifecycles', async () => {
+    const packageJson = JSON.parse(
+      await readFile(new URL('../../../../package.json', import.meta.url), 'utf8'),
+    ) as { scripts: Record<string, string> };
+    expect(packageJson.scripts).toMatchObject({
+      postinstall: 'prisma generate',
+      prebuild: 'prisma generate',
+      pretypecheck: 'prisma generate',
+    });
+  });
+});

@@ -7,9 +7,12 @@
     "node": ">=22.23.1 <25"
   },
   "scripts": {
+    "postinstall": "prisma generate",
+    "prebuild": "prisma generate",
     "dev": "turbo dev",
     "build": "turbo build",
     "lint": "turbo lint",
+    "pretypecheck": "prisma generate",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
     "test:e2e": "playwright test",

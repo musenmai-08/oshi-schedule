@@ -4,48 +4,82 @@ import type { CalendarEventInput } from '../../domain/scheduling.js';
 import type { CalendarGateway, Store, TokenCipher, UserRecord } from '../../application/models.js';
 
 export class GoogleCalendarGateway implements CalendarGateway {
+  private readonly accessTokens = new Map<string, { token: string; expiresAt: number }>();
   constructor(
     private readonly store: Store,
     private readonly cipher: TokenCipher,
     private readonly clientId: string,
     private readonly clientSecret: string,
     private readonly timeoutMs = 10_000,
+    private readonly sleep: (milliseconds: number) => Promise<void> = (milliseconds) =>
+      new Promise((resolve) => setTimeout(resolve, milliseconds)),
   ) {}
   private async accessToken(userId: string) {
+    const cached = this.accessTokens.get(userId);
+    if (cached && cached.expiresAt > Date.now() + 30_000) return cached.token;
     const encrypted = await this.store.getEncryptedCredential(userId);
     if (!encrypted) throw new AppError('GOOGLE_REAUTH_REQUIRED', 'Googleの再連携が必要です', 401);
     const refreshToken = this.cipher.decrypt(encrypted);
-    const response = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: this.clientId,
-        client_secret: this.clientSecret,
-        refresh_token: refreshToken,
-        grant_type: 'refresh_token',
-      }),
-      signal: AbortSignal.timeout(this.timeoutMs),
-    });
-    if (!response.ok) {
-      await this.store.markReauthRequired(userId);
-      throw new AppError('GOOGLE_REAUTH_REQUIRED', 'Googleの再連携が必要です', 401);
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      let response: Response;
+      try {
+        response = await fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            client_id: this.clientId,
+            client_secret: this.clientSecret,
+            refresh_token: refreshToken,
+            grant_type: 'refresh_token',
+          }),
+          signal: AbortSignal.timeout(this.timeoutMs),
+        });
+      } catch {
+        if (attempt < 2) {
+          await this.sleep(50 * 2 ** attempt);
+          continue;
+        }
+        throw new AppError('GOOGLE_TOKEN_ERROR', 'Googleへ接続できません', 502, true);
+      }
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as { error?: string };
+        if (body.error === 'invalid_grant') {
+          await this.store.markReauthRequired(userId);
+          throw new AppError('GOOGLE_REAUTH_REQUIRED', 'Googleの再連携が必要です', 401);
+        }
+        const retryable = response.status === 429 || response.status >= 500;
+        if (retryable && attempt < 2) {
+          await this.sleep(50 * 2 ** attempt);
+          continue;
+        }
+        throw new AppError('GOOGLE_TOKEN_ERROR', 'Googleへ接続できません', 502, retryable);
+      }
+      const body = (await response.json()) as { access_token?: string; expires_in?: number };
+      if (!body.access_token)
+        throw new AppError('GOOGLE_TOKEN_ERROR', 'Googleへ接続できません', 502, true);
+      this.accessTokens.set(userId, {
+        token: body.access_token,
+        expiresAt: Date.now() + (body.expires_in ?? 3600) * 1000,
+      });
+      return body.access_token;
     }
-    const body = (await response.json()) as { access_token?: string };
-    if (!body.access_token)
-      throw new AppError('GOOGLE_TOKEN_ERROR', 'Googleへ接続できません', 502, true);
-    return body.access_token;
+    throw new AppError('GOOGLE_TOKEN_ERROR', 'Googleへ接続できません', 502, true);
   }
   private async request(userId: string, path: string, init: RequestInit = {}) {
     const token = await this.accessToken(userId);
-    return fetch(`https://www.googleapis.com/calendar/v3${path}`, {
-      ...init,
-      headers: {
-        authorization: `Bearer ${token}`,
-        'content-type': 'application/json',
-        ...init.headers,
-      },
-      signal: AbortSignal.timeout(this.timeoutMs),
-    });
+    try {
+      return await fetch(`https://www.googleapis.com/calendar/v3${path}`, {
+        ...init,
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+          ...init.headers,
+        },
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
+    } catch {
+      throw new AppError('GOOGLE_CALENDAR_UNAVAILABLE', 'Googleへ接続できません', 502, true);
+    }
   }
   async ensureCalendar(user: UserRecord) {
     if (user.calendarId) {
@@ -79,8 +113,23 @@ export class GoogleCalendarGateway implements CalendarGateway {
     await this.store.setCalendarId(user.id, body.id);
     return body.id;
   }
-  private eventBody(event: CalendarEventInput) {
+  async eventExists(user: UserRecord, calendarId: string, eventId: string) {
+    const response = await this.request(
+      user.id,
+      `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+    );
+    if (response.ok) return true;
+    if ([404, 410].includes(response.status)) return false;
+    throw new AppError(
+      'GOOGLE_EVENT_CHECK_FAILED',
+      '予定を確認できません',
+      502,
+      response.status === 429 || response.status >= 500,
+    );
+  }
+  private eventBody(event: CalendarEventInput, id?: string) {
     return {
+      ...(id ? { id } : {}),
       summary: event.summary,
       description: event.description,
       start: { dateTime: event.start },
@@ -94,6 +143,7 @@ export class GoogleCalendarGateway implements CalendarGateway {
     calendarId: string,
     eventId: string | null,
     event: CalendarEventInput,
+    deterministicId = false,
   ) {
     if (eventId) {
       const patched = await this.request(
@@ -113,8 +163,21 @@ export class GoogleCalendarGateway implements CalendarGateway {
     const created = await this.request(
       user.id,
       `/calendars/${encodeURIComponent(calendarId)}/events`,
-      { method: 'POST', body: JSON.stringify(this.eventBody(event)) },
+      {
+        method: 'POST',
+        body: JSON.stringify(
+          this.eventBody(event, deterministicId ? (eventId ?? undefined) : undefined),
+        ),
+      },
     );
+    if (created.status === 409 && eventId && deterministicId) {
+      const patched = await this.request(
+        user.id,
+        `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+        { method: 'PATCH', body: JSON.stringify(this.eventBody(event)) },
+      );
+      if (patched.ok) return eventId;
+    }
     if (!created.ok)
       throw new AppError(
         'GOOGLE_EVENT_CREATE_FAILED',
@@ -145,12 +208,17 @@ export class GoogleCalendarGateway implements CalendarGateway {
   async revokeAuthorization(user: UserRecord) {
     const encrypted = await this.store.getEncryptedCredential(user.id);
     if (!encrypted) return;
-    const response = await fetch('https://oauth2.googleapis.com/revoke', {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ token: this.cipher.decrypt(encrypted) }),
-      signal: AbortSignal.timeout(this.timeoutMs),
-    });
+    let response: Response;
+    try {
+      response = await fetch('https://oauth2.googleapis.com/revoke', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ token: this.cipher.decrypt(encrypted) }),
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
+    } catch {
+      throw new AppError('GOOGLE_REVOKE_FAILED', 'Google連携を解除できません', 502, true);
+    }
     if (!response.ok && response.status !== 400)
       throw new AppError(
         'GOOGLE_REVOKE_FAILED',

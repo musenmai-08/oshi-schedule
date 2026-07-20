@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
 import type { ChannelSummary } from '@oshi-schedule/shared';
 import type { ChannelRecord, YouTubeGateway } from '../../application/models.js';
-import { calculateEndAt } from '../../domain/scheduling.js';
+import { calculateEndAt, type NormalizedBroadcast } from '../../domain/scheduling.js';
 
 export class FakeYouTubeGateway implements YouTubeGateway {
+  private readonly known = new Map<string, NormalizedBroadcast>();
   async resolveHandle(handle: string): Promise<ChannelSummary> {
     const seed = createHash('sha1').update(handle.toLowerCase()).digest('hex').slice(0, 12);
     return {
@@ -19,7 +20,7 @@ export class FakeYouTubeGateway implements YouTubeGateway {
     const start = new Date(from.getTime() + 24 * 60 * 60_000);
     if (start > to) return [];
     const end = calculateEndAt('LIVE', start);
-    return [
+    const items = [
       {
         youtubeVideoId: `fake-${channel.youtubeChannelId}`,
         title: '次回の推し配信',
@@ -34,5 +35,20 @@ export class FakeYouTubeGateway implements YouTubeGateway {
         actualEndAt: null,
       },
     ];
+    items.forEach((item) => this.known.set(item.youtubeVideoId, item));
+    return items;
+  }
+  setBroadcast(item: NormalizedBroadcast) {
+    this.known.set(item.youtubeVideoId, item);
+  }
+  async refreshBroadcasts(_channel: ChannelRecord, youtubeVideoIds: string[]) {
+    const items = youtubeVideoIds.flatMap((id) => {
+      const item = this.known.get(id);
+      return item ? [item] : [];
+    });
+    return {
+      items,
+      unavailableVideoIds: youtubeVideoIds.filter((id) => !this.known.has(id)),
+    };
   }
 }

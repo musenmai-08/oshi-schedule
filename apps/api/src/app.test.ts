@@ -25,7 +25,13 @@ async function resolveAndRegister(handle: string) {
 }
 
 describe('API', () => {
-  beforeEach(() => store.reset());
+  beforeEach(async () => {
+    store.reset();
+    await request(app)
+      .post('/api/v1/onboarding')
+      .set(auth)
+      .send({ providerRefreshToken: 'fake-refresh-token' });
+  });
   it('serves health and rejects missing authentication', async () => {
     expect((await request(app).get('/health')).status).toBe(200);
     expect((await request(app).get('/api/v1/me')).status).toBe(401);
@@ -58,9 +64,24 @@ describe('API', () => {
     expect((await request(app).post(`/api/v1/channels/${id}/sync`).set(auth)).status).toBe(429);
     expect((await request(app).delete(`/api/v1/channels/${id}`).set(auth)).status).toBe(204);
   });
+  it('validates CUID path parameters and distinguishes a missing valid CUID', async () => {
+    expect((await request(app).patch('/api/v1/channels/not-a-cuid').set(auth).send({ status: 'PAUSED' })).status).toBe(400);
+    expect(
+      (
+        await request(app)
+          .patch('/api/v1/channels/cm0wz73bk0000qzrmn831i7rn')
+          .set(auth)
+          .send({ status: 'PAUSED' })
+      ).status,
+    ).toBe(404);
+  });
   it('does not expose another user subscription', async () => {
     const created = await resolveAndRegister('@private');
     const id = created.body.data.id as string;
+    await request(app)
+      .post('/api/v1/onboarding')
+      .set('authorization', 'Bearer test:second:second@example.com')
+      .send({ providerRefreshToken: 'second-refresh-token' });
     const response = await request(app)
       .patch(`/api/v1/channels/${id}`)
       .set('authorization', 'Bearer test:second:second@example.com')

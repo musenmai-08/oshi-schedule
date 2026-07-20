@@ -23,3 +23,7 @@
 - Docker MySQL 8.4 が healthy になり、`prisma migrate deploy` と seed が成功。初期 migration と schema の diff も一致。
 - `APP_MODE=fake pnpm sync:scheduled` が正常終了。
 - 実 Supabase/Google/YouTube は資格情報がないため未接続。公開前に実環境で OAuth callback、refresh、失効、quota/error を検証する。
+
+## Critical・High remediation（2026-07-20）
+
+監査で検出したCritical 2件、High 11件は [修正台帳](../reviews/critical-high-remediation.md) で追跡し、全件を修正済みにした。追加migrationで削除墓石、broadcast状態、SyncLeaseを導入し、CUID契約、Calendar reconciliation、既知video追跡、DB排他、SyncRun、暗号鍵fail-fast、clean生成、root `.env` 読込を実装した。Node 22.23.1で通常43件、MySQL 4件、E2E 1件、型/lint/build/worker、clean install、空/既存DB migrationを検証した。実資格情報が必要な受入手順と残存リスクは台帳に記録する。

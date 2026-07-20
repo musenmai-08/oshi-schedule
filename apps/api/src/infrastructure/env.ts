@@ -1,4 +1,11 @@
+import { config as loadDotenv } from 'dotenv';
+import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
+
+export const ROOT_ENV_PATH = fileURLToPath(new URL('../../../../.env', import.meta.url));
+loadDotenv({ path: ROOT_ENV_PATH, quiet: true });
+
+export const DEVELOPMENT_TOKEN_ENCRYPTION_KEYS = 'v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
 
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -13,7 +20,7 @@ const schema = z.object({
   YOUTUBE_API_KEY: z.string().optional(),
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
-  TOKEN_ENCRYPTION_KEYS: z.string().default('v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='),
+  TOKEN_ENCRYPTION_KEYS: z.string().default(DEVELOPMENT_TOKEN_ENCRYPTION_KEYS),
 });
 export type Env = z.infer<typeof schema>;
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
@@ -30,6 +37,8 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
       if (!env[key]) throw new Error(`Missing required environment variable: ${key}`);
     }
     if (env.APP_MODE === 'fake') throw new Error('Fake mode is forbidden in production');
+    if (env.TOKEN_ENCRYPTION_KEYS === DEVELOPMENT_TOKEN_ENCRYPTION_KEYS)
+      throw new Error('TOKEN_ENCRYPTION_KEYS must not use the development default');
   }
   return env;
 }

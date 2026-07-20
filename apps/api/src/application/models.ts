@@ -30,6 +30,7 @@ export interface BroadcastRecord extends NormalizedBroadcast {
   id: string;
   channelId: string;
   missingCount: number;
+  sourceUpdatedAt: Date | null;
 }
 export interface MappingRecord {
   id: string;
@@ -39,14 +40,33 @@ export interface MappingRecord {
   managedFieldsHash: string;
 }
 export interface SyncResult {
-  status: 'SUCCESS' | 'FAILED';
+  status: 'RUNNING' | 'SUCCESS' | 'FAILED';
   message: string | null;
+  errorCode?: string | null;
+}
+export type DeletionStep =
+  'CALENDAR_DELETED' | 'TOKEN_REVOKED' | 'DATA_DELETED' | 'AUTH_DELETED' | 'COMPLETED';
+export interface AccountDeletionRecord {
+  id: string;
+  supabaseUserId: string;
+  userId: string | null;
+  calendarIdSnapshot: string | null;
+  status: string;
+  calendarDeletedAt: Date | null;
+  googleTokenRevokedAt: Date | null;
+  userDataDeletedAt: Date | null;
+  supabaseUserDeletedAt: Date | null;
+  completedAt: Date | null;
 }
 
 export interface Store {
   findUserBySubject(subject: string): Promise<UserRecord | null>;
   findUserById(id: string): Promise<UserRecord | null>;
   ensureUser(identity: AuthIdentity): Promise<UserRecord>;
+  findAccountDeletion(subject: string): Promise<AccountDeletionRecord | null>;
+  beginAccountDeletion(user: UserRecord): Promise<AccountDeletionRecord>;
+  markAccountDeletionStep(id: string, step: DeletionStep, at: Date): Promise<void>;
+  markAccountDeletionFailed(id: string, errorCode: string): Promise<void>;
   saveCredential(userId: string, encryptedToken: string, keyId: string): Promise<void>;
   completeOnboarding(
     userId: string,
@@ -63,7 +83,11 @@ export interface Store {
   countSubscriptions(userId: string): Promise<number>;
   findChannelByYoutubeId(youtubeChannelId: string): Promise<ChannelRecord | null>;
   upsertChannel(channel: ChannelSummary): Promise<ChannelRecord>;
-  createSubscription(userId: string, channelId: string): Promise<SubscriptionRecord>;
+  createSubscriptionWithinLimit(
+    userId: string,
+    channelId: string,
+    limit: number,
+  ): Promise<SubscriptionRecord>;
   getSubscription(
     userId: string,
     id: string,
@@ -78,8 +102,23 @@ export interface Store {
     Array<{ subscription: SubscriptionRecord; channel: ChannelRecord; user: UserRecord }>
   >;
   updateChannelFetchedAt(channelId: string, at: Date): Promise<void>;
-  upsertBroadcasts(channelId: string, items: NormalizedBroadcast[]): Promise<BroadcastRecord[]>;
+  upsertBroadcasts(
+    channelId: string,
+    items: NormalizedBroadcast[],
+    observedAt: Date,
+  ): Promise<BroadcastRecord[]>;
+  listTrackableBroadcasts(channelId: string, now: Date): Promise<BroadcastRecord[]>;
+  markBroadcastsUnavailable(
+    channelId: string,
+    youtubeVideoIds: string[],
+    observedAt: Date,
+  ): Promise<void>;
   listFutureBroadcasts(channelId: string, now: Date): Promise<BroadcastRecord[]>;
+  listBroadcastsForSync(
+    channelId: string,
+    now: Date,
+    since: Date | null,
+  ): Promise<BroadcastRecord[]>;
   getMapping(userId: string, broadcastId: string): Promise<MappingRecord | null>;
   saveMapping(mapping: Omit<MappingRecord, 'id'>): Promise<MappingRecord>;
   deleteMapping(userId: string, broadcastId: string): Promise<void>;
@@ -89,21 +128,50 @@ export interface Store {
     at: Date,
     manual: boolean,
   ): Promise<void>;
-  deleteAccount(userId: string): Promise<void>;
+  acquireSyncLease(key: string, ownerToken: string, now: Date, expiresAt: Date): Promise<boolean>;
+  renewSyncLease(key: string, ownerToken: string, now: Date, expiresAt: Date): Promise<boolean>;
+  releaseSyncLease(key: string, ownerToken: string): Promise<void>;
+  startSyncRun(
+    type: 'MANUAL' | 'SCHEDULED',
+    requestedById: string | null,
+    targets: number,
+    at: Date,
+  ): Promise<string>;
+  startSyncTarget(runId: string, subscriptionId: string, at: Date): Promise<void>;
+  finishSyncTarget(
+    runId: string,
+    subscriptionId: string,
+    result: SyncResult,
+    at: Date,
+  ): Promise<void>;
+  finishSyncRun(
+    runId: string,
+    status: 'SUCCESS' | 'PARTIAL_FAILED' | 'FAILED',
+    at: Date,
+    errorCode?: string,
+  ): Promise<void>;
+  maintainSyncRuns(staleBefore: Date, retainAfter: Date, at: Date): Promise<void>;
+  deleteUserData(requestId: string, userId: string): Promise<void>;
 }
 
 export interface YouTubeGateway {
   resolveHandle(handle: string): Promise<ChannelSummary>;
   listUpcoming(channel: ChannelRecord, from: Date, to: Date): Promise<NormalizedBroadcast[]>;
+  refreshBroadcasts(
+    channel: ChannelRecord,
+    youtubeVideoIds: string[],
+  ): Promise<{ items: NormalizedBroadcast[]; unavailableVideoIds: string[] }>;
 }
 
 export interface CalendarGateway {
   ensureCalendar(user: UserRecord): Promise<string>;
+  eventExists(user: UserRecord, calendarId: string, eventId: string): Promise<boolean>;
   upsertEvent(
     user: UserRecord,
     calendarId: string,
     eventId: string | null,
     event: CalendarEventInput,
+    deterministicId?: boolean,
   ): Promise<string>;
   deleteEvent(user: UserRecord, calendarId: string, eventId: string): Promise<void>;
   deleteCalendar(user: UserRecord, calendarId: string): Promise<void>;

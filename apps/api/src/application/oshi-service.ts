@@ -1,5 +1,6 @@
 import { MAX_CHANNELS_PER_USER } from '@oshi-schedule/shared';
-import { AppError } from '../domain/errors.js';
+import { randomUUID } from 'node:crypto';
+import { AppError, StoreConstraintError } from '../domain/errors.js';
 import type {
   AuthAdmin,
   AuthIdentity,
@@ -22,11 +23,25 @@ export class OshiService {
     readonly sync: SyncService,
   ) {}
 
+  private async requireActiveUser(identity: AuthIdentity) {
+    if (await this.store.findAccountDeletion(identity.subject))
+      throw new AppError(
+        'ACCOUNT_DELETION_IN_PROGRESS',
+        'アカウント削除処理中のため利用できません',
+        410,
+      );
+    const user = await this.store.findUserBySubject(identity.subject);
+    if (!user) throw new AppError('ONBOARDING_REQUIRED', '初回設定を完了してください', 409);
+    return user;
+  }
+
   async me(identity: AuthIdentity) {
-    return this.store.ensureUser(identity);
+    return this.requireActiveUser(identity);
   }
 
   async onboard(identity: AuthIdentity, refreshToken: string) {
+    if (await this.store.findAccountDeletion(identity.subject))
+      throw new AppError('ACCOUNT_DELETED', '削除済みのアカウントです', 410);
     const user = await this.store.ensureUser(identity);
     const encrypted = this.cipher.encrypt(refreshToken);
     await this.store.saveCredential(user.id, encrypted.ciphertext, encrypted.keyId);
@@ -39,40 +54,46 @@ export class OshiService {
     );
   }
 
-  async resolve(handle: string) {
+  async resolve(identity: AuthIdentity, handle: string) {
+    await this.requireActiveUser(identity);
     const resolved = await this.youtube.resolveHandle(handle);
     return this.store.upsertChannel(resolved);
   }
 
   async list(identity: AuthIdentity) {
-    const user = await this.store.ensureUser(identity);
+    const user = await this.requireActiveUser(identity);
     return this.store.listSubscriptions(user.id);
   }
 
   async register(identity: AuthIdentity, youtubeChannelId: string) {
-    const user = await this.store.ensureUser(identity);
-    const count = await this.store.countSubscriptions(user.id);
-    if (count >= MAX_CHANNELS_PER_USER)
-      throw new AppError('CHANNEL_LIMIT_REACHED', '登録上限は3件です', 422);
+    const user = await this.requireActiveUser(identity);
     const channel = await this.store.findChannelByYoutubeId(youtubeChannelId);
     if (!channel)
       throw new AppError('CHANNEL_NOT_RESOLVED', '先にチャンネルを検索してください', 409);
     try {
-      return await this.store.createSubscription(user.id, channel.id);
-    } catch {
-      throw new AppError('DUPLICATE_CHANNEL', 'このチャンネルは登録済みです', 409);
+      return await this.store.createSubscriptionWithinLimit(
+        user.id,
+        channel.id,
+        MAX_CHANNELS_PER_USER,
+      );
+    } catch (error) {
+      if (error instanceof StoreConstraintError && error.reason === 'CHANNEL_LIMIT')
+        throw new AppError('CHANNEL_LIMIT_REACHED', '登録上限は3件です', 422);
+      if (error instanceof StoreConstraintError && error.reason === 'DUPLICATE_CHANNEL')
+        throw new AppError('DUPLICATE_CHANNEL', 'このチャンネルは登録済みです', 409);
+      throw error;
     }
   }
 
   async setStatus(identity: AuthIdentity, id: string, status: 'ACTIVE' | 'PAUSED') {
-    const user = await this.store.ensureUser(identity);
+    const user = await this.requireActiveUser(identity);
     const result = await this.store.updateSubscription(user.id, id, status);
     if (!result) throw new AppError('NOT_FOUND', '対象が見つかりません', 404);
     return result;
   }
 
   async remove(identity: AuthIdentity, id: string) {
-    const user = await this.store.ensureUser(identity);
+    const user = await this.requireActiveUser(identity);
     const target = await this.store.getSubscription(user.id, id);
     if (!target) throw new AppError('NOT_FOUND', '対象が見つかりません', 404);
     if (user.calendarId) {
@@ -93,10 +114,88 @@ export class OshiService {
   }
 
   async deleteAccount(identity: AuthIdentity) {
-    const user = await this.store.ensureUser(identity);
-    if (user.calendarId) await this.calendar.deleteCalendar(user, user.calendarId);
-    await this.calendar.revokeAuthorization(user);
-    await this.store.deleteAccount(user.id);
-    await this.authAdmin.deleteUser(identity.subject);
+    let deletion = await this.store.findAccountDeletion(identity.subject);
+    let user = await this.store.findUserBySubject(identity.subject);
+    if (!deletion) {
+      if (!user) throw new AppError('NOT_FOUND', '対象が見つかりません', 404);
+      deletion = await this.store.beginAccountDeletion(user);
+    }
+    const leaseKey = `account-deletion:${identity.subject}`;
+    const ownerToken = randomUUID();
+    const leaseAt = this.clock.now();
+    const acquired = await this.store.acquireSyncLease(
+      leaseKey,
+      ownerToken,
+      leaseAt,
+      new Date(leaseAt.getTime() + 15 * 60_000),
+    );
+    if (!acquired)
+      throw new AppError('ACCOUNT_DELETION_IN_PROGRESS', 'アカウント削除処理中です', 409, true);
+    const renewLease = async () => {
+      const at = this.clock.now();
+      if (
+        !(await this.store.renewSyncLease(
+          leaseKey,
+          ownerToken,
+          at,
+          new Date(at.getTime() + 15 * 60_000),
+        ))
+      )
+        throw new AppError(
+          'ACCOUNT_DELETION_LEASE_LOST',
+          '削除処理の排他権を失いました',
+          409,
+          true,
+        );
+    };
+    const now = () => this.clock.now();
+    try {
+      if (!deletion.calendarDeletedAt) {
+        await renewLease();
+        if (user && deletion.calendarIdSnapshot) {
+          try {
+            await this.calendar.deleteCalendar(user, deletion.calendarIdSnapshot);
+          } catch (error) {
+            if (!(error instanceof AppError) || error.code !== 'GOOGLE_REAUTH_REQUIRED')
+              throw error;
+          }
+        }
+        const at = now();
+        await this.store.markAccountDeletionStep(deletion.id, 'CALENDAR_DELETED', at);
+        deletion.calendarDeletedAt = at;
+      }
+      if (!deletion.googleTokenRevokedAt) {
+        await renewLease();
+        if (user) await this.calendar.revokeAuthorization(user);
+        const at = now();
+        await this.store.markAccountDeletionStep(deletion.id, 'TOKEN_REVOKED', at);
+        deletion.googleTokenRevokedAt = at;
+      }
+      if (!deletion.userDataDeletedAt) {
+        await renewLease();
+        if (deletion.userId) await this.store.deleteUserData(deletion.id, deletion.userId);
+        const at = now();
+        await this.store.markAccountDeletionStep(deletion.id, 'DATA_DELETED', at);
+        deletion.userDataDeletedAt = at;
+        user = null;
+      }
+      if (!deletion.supabaseUserDeletedAt) {
+        await renewLease();
+        await this.authAdmin.deleteUser(identity.subject);
+        const at = now();
+        await this.store.markAccountDeletionStep(deletion.id, 'AUTH_DELETED', at);
+        deletion.supabaseUserDeletedAt = at;
+      }
+      if (!deletion.completedAt)
+        await this.store.markAccountDeletionStep(deletion.id, 'COMPLETED', now());
+    } catch (error) {
+      await this.store.markAccountDeletionFailed(
+        deletion.id,
+        error instanceof AppError ? error.code : 'ACCOUNT_DELETE_FAILED',
+      );
+      throw error;
+    } finally {
+      await this.store.releaseSyncLease(leaseKey, ownerToken);
+    }
   }
 }
