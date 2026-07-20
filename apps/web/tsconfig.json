@@ -1,0 +1,13 @@
+{
+  "extends": "@oshi-schedule/typescript-config/nextjs.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "types": ["node"],
+    "isolatedModules": true
+  },
+  "include": ["next-env.d.ts", ".next/types/**/*.ts", "src/**/*.ts", "src/**/*.tsx"],
+  "exclude": ["node_modules"]
+}

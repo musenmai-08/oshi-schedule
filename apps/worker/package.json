@@ -1,0 +1,26 @@
+{
+  "name": "@oshi-schedule/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint src",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "sync:scheduled": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@oshi-schedule/api": "workspace:*"
+  },
+  "devDependencies": {
+    "@oshi-schedule/eslint-config": "workspace:*",
+    "@oshi-schedule/typescript-config": "workspace:*",
+    "@types/node": "20.19.33",
+    "eslint": "9.39.4",
+    "tsx": "4.23.1",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  }
+}

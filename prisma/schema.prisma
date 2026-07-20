@@ -1,0 +1,239 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAUSED
+}
+
+enum BroadcastKind {
+  LIVE
+  PREMIERE
+}
+
+enum BroadcastStatus {
+  UPCOMING
+  LIVE
+  COMPLETED
+  CANCELLED
+  UNKNOWN
+}
+
+enum ConnectionStatus {
+  NOT_CONNECTED
+  ACTIVE
+  MISSING
+  ERROR
+}
+
+enum SyncRunType {
+  SCHEDULED
+  MANUAL
+}
+
+enum SyncStatus {
+  RUNNING
+  SUCCESS
+  PARTIAL_FAILED
+  FAILED
+  SKIPPED
+}
+
+enum TargetType {
+  CHANNEL
+  USER
+  SUBSCRIPTION
+}
+
+enum DeletionStatus {
+  REQUESTED
+  CALENDAR_DELETED
+  TOKEN_REVOKED
+  DATA_DELETED
+  AUTH_DELETED
+  COMPLETED
+  FAILED
+}
+
+/// Supabase Auth の主体とアプリ固有状態を保持する利用者。
+model User {
+  id                    String                    @id @default(cuid())
+  supabaseUserId        String                    @unique @db.VarChar(64)
+  email                 String                    @db.VarChar(320)
+  onboardingCompletedAt DateTime?                 @db.DateTime(3)
+  reauthRequired        Boolean                   @default(false)
+  createdAt             DateTime                  @default(now()) @db.DateTime(3)
+  updatedAt             DateTime                  @updatedAt @db.DateTime(3)
+  credential            GoogleCredential?
+  calendar              CalendarConnection?
+  subscriptions         UserChannelSubscription[]
+  calendarEventMappings CalendarEventMapping[]
+  syncRuns              SyncRun[]
+  deletionRequest       AccountDeletionRequest?
+
+  @@index([email])
+}
+
+/// Google refresh token の認証付き暗号文。平文を保存しない。
+model GoogleCredential {
+  id                    String   @id @default(cuid())
+  userId                String   @unique
+  encryptedRefreshToken String   @db.Text
+  keyId                 String   @db.VarChar(32)
+  scopes                String   @db.Text
+  tokenUpdatedAt        DateTime @default(now()) @db.DateTime(3)
+  createdAt             DateTime @default(now()) @db.DateTime(3)
+  updatedAt             DateTime @updatedAt @db.DateTime(3)
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// 利用者専用の Google Calendar と接続状態。
+model CalendarConnection {
+  id               String           @id @default(cuid())
+  userId           String           @unique
+  googleCalendarId String?          @unique @db.VarChar(255)
+  status           ConnectionStatus @default(NOT_CONNECTED)
+  lastCheckedAt    DateTime?        @db.DateTime(3)
+  createdAt        DateTime         @default(now()) @db.DateTime(3)
+  updatedAt        DateTime         @updatedAt @db.DateTime(3)
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// 利用者間で共有する YouTube チャンネル。
+model YouTubeChannel {
+  id               String                    @id @default(cuid())
+  youtubeChannelId String                    @unique @db.VarChar(64)
+  handle           String                    @db.VarChar(64)
+  title            String                    @db.VarChar(255)
+  thumbnailUrl     String                    @db.Text
+  channelUrl       String                    @db.Text
+  lastFetchedAt    DateTime?                 @db.DateTime(3)
+  etag             String?                   @db.VarChar(255)
+  createdAt        DateTime                  @default(now()) @db.DateTime(3)
+  updatedAt        DateTime                  @updatedAt @db.DateTime(3)
+  subscriptions    UserChannelSubscription[]
+  broadcasts       ScheduledBroadcast[]
+
+  @@index([handle])
+  @@index([lastFetchedAt])
+}
+
+/// 利用者ごとの登録・一時停止・表示用同期結果。
+model UserChannelSubscription {
+  id                 String             @id @default(cuid())
+  userId             String
+  channelId          String
+  status             SubscriptionStatus @default(ACTIVE)
+  lastCalendarSyncAt DateTime?          @db.DateTime(3)
+  lastManualSyncAt   DateTime?          @db.DateTime(3)
+  lastSyncStatus     SyncStatus?
+  lastErrorCode      String?            @db.VarChar(64)
+  lastErrorMessage   String?            @db.VarChar(255)
+  createdAt          DateTime           @default(now()) @db.DateTime(3)
+  updatedAt          DateTime           @updatedAt @db.DateTime(3)
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel            YouTubeChannel     @relation(fields: [channelId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, channelId])
+  @@index([userId, status])
+  @@index([channelId, status])
+}
+
+/// YouTube video ID で共有・履歴保持するライブまたはプレミア予定。
+model ScheduledBroadcast {
+  id                 String                 @id @default(cuid())
+  channelId          String
+  youtubeVideoId     String                 @unique @db.VarChar(32)
+  title              String                 @db.VarChar(500)
+  kind               BroadcastKind
+  status             BroadcastStatus        @default(UPCOMING)
+  youtubeUrl         String                 @db.Text
+  thumbnailUrl       String                 @db.Text
+  scheduledStartAt   DateTime               @db.DateTime(3)
+  endAt              DateTime               @db.DateTime(3)
+  endTimeProvisional Boolean                @default(true)
+  actualStartAt      DateTime?              @db.DateTime(3)
+  actualEndAt        DateTime?              @db.DateTime(3)
+  missingCount       Int                    @default(0)
+  sourceUpdatedAt    DateTime?              @db.DateTime(3)
+  createdAt          DateTime               @default(now()) @db.DateTime(3)
+  updatedAt          DateTime               @updatedAt @db.DateTime(3)
+  channel            YouTubeChannel         @relation(fields: [channelId], references: [id], onDelete: Restrict)
+  calendarMappings   CalendarEventMapping[]
+
+  @@index([channelId, scheduledStartAt])
+  @@index([status, scheduledStartAt])
+}
+
+/// 利用者・配信・Google event ID の冪等対応。
+model CalendarEventMapping {
+  id                    String             @id @default(cuid())
+  userId                String
+  broadcastId           String
+  googleCalendarEventId String             @db.VarChar(255)
+  managedFieldsHash     String             @db.VarChar(64)
+  lastSyncedAt          DateTime           @db.DateTime(3)
+  createdAt             DateTime           @default(now()) @db.DateTime(3)
+  updatedAt             DateTime           @updatedAt @db.DateTime(3)
+  user                  User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  broadcast             ScheduledBroadcast @relation(fields: [broadcastId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, broadcastId])
+  @@index([googleCalendarEventId])
+}
+
+/// 定期・手動同期の実行全体。相関 ID と集計結果を保持する。
+model SyncRun {
+  id            String             @id @default(cuid())
+  type          SyncRunType
+  status        SyncStatus         @default(RUNNING)
+  requestedById String?
+  startedAt     DateTime           @default(now()) @db.DateTime(3)
+  completedAt   DateTime?          @db.DateTime(3)
+  channelsTotal Int                @default(0)
+  usersTotal    Int                @default(0)
+  apiCalls      Int                @default(0)
+  errorCode     String?            @db.VarChar(64)
+  requestedBy   User?              @relation(fields: [requestedById], references: [id], onDelete: SetNull)
+  targetResults SyncTargetResult[]
+
+  @@index([type, status, startedAt])
+}
+
+/// 同期対象ごとの部分成功・失敗。
+model SyncTargetResult {
+  id           String     @id @default(cuid())
+  syncRunId    String
+  targetType   TargetType
+  targetId     String     @db.VarChar(64)
+  status       SyncStatus
+  errorCode    String?    @db.VarChar(64)
+  errorMessage String?    @db.VarChar(255)
+  startedAt    DateTime   @default(now()) @db.DateTime(3)
+  completedAt  DateTime?  @db.DateTime(3)
+  syncRun      SyncRun    @relation(fields: [syncRunId], references: [id], onDelete: Cascade)
+
+  @@unique([syncRunId, targetType, targetId])
+  @@index([targetType, targetId, startedAt])
+}
+
+/// 段階実行し再開できるアカウント削除要求。
+model AccountDeletionRequest {
+  id            String         @id @default(cuid())
+  userId        String         @unique
+  status        DeletionStatus @default(REQUESTED)
+  attempts      Int            @default(0)
+  lastErrorCode String?        @db.VarChar(64)
+  requestedAt   DateTime       @default(now()) @db.DateTime(3)
+  completedAt   DateTime?      @db.DateTime(3)
+  updatedAt     DateTime       @updatedAt @db.DateTime(3)
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, requestedAt])
+}

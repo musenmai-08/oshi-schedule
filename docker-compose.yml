@@ -1,0 +1,22 @@
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: oshi_schedule
+      MYSQL_USER: oshi
+      MYSQL_PASSWORD: oshi_password
+      MYSQL_ROOT_PASSWORD: local_root_password
+      TZ: UTC
+    command: ['--character-set-server=utf8mb4', '--collation-server=utf8mb4_0900_ai_ci']
+    ports:
+      - '3306:3306'
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost', '-uoshi', '-poshi_password']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+volumes:
+  mysql-data:

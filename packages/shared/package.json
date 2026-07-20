@@ -1,0 +1,29 @@
+{
+  "name": "@oshi-schedule/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint src",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@oshi-schedule/eslint-config": "workspace:*",
+    "@oshi-schedule/typescript-config": "workspace:*",
+    "eslint": "9.39.4",
+    "vitest": "3.2.7"
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "extends": "@oshi-schedule/typescript-config/base.json",
+  "compilerOptions": { "outDir": "dist", "rootDir": "src" },
+  "include": ["src/**/*.ts"]
+}

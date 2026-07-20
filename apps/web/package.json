@@ -1,0 +1,38 @@
+{
+  "name": "@oshi-schedule/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start -p 3000",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@emotion/cache": "11.14.0",
+    "@emotion/react": "11.14.0",
+    "@emotion/styled": "11.14.1",
+    "@mui/icons-material": "7.3.11",
+    "@mui/material": "7.3.11",
+    "@mui/material-nextjs": "7.3.10",
+    "@oshi-schedule/shared": "workspace:*",
+    "@supabase/ssr": "0.12.3",
+    "@supabase/supabase-js": "2.110.7",
+    "next": "15.5.20",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@oshi-schedule/eslint-config": "workspace:*",
+    "@oshi-schedule/typescript-config": "workspace:*",
+    "@types/node": "20.19.33",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "eslint": "9.39.4",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  }
+}
