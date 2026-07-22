@@ -1,0 +1,158 @@
+apps/api/src/infrastructure/youtube/youtube-quota.ts
+  s_3a50bad78ea1cd::t_0df5bf46f9e18e 1-35
+apps/api/src/infrastructure/database/memory-store.test.ts
+  s_3a50bad78ea1cd::t_03714e8a32a931 33-35
+  s_3a50bad78ea1cd::t_c520d3a2799e34 1-32,36-37
+docs/architecture/authentication.md
+  s_3a50bad78ea1cd::t_b7b535d8a6a487 11,28-32
+  s_3a50bad78ea1cd::t_000d1ddb91ef1c 26
+apps/api/src/presentation/http.ts
+  s_3a50bad78ea1cd::t_03714e8a32a931 68-72
+docs/security/security-policy.md
+  s_3a50bad78ea1cd::t_698a15f072fdf0 5,7,13,15
+docs/database/schema.md
+  s_3a50bad78ea1cd::t_b7b535d8a6a487 18,22-24
+apps/api/src/infrastructure/env.ts
+  s_3a50bad78ea1cd::t_03714e8a32a931 19-80
+  s_3a50bad78ea1cd::t_ccfbff64643043 10-18,96-102
+.env.example
+  s_3a50bad78ea1cd::t_3686f0f2990261 26,35
+  s_3a50bad78ea1cd::t_ccfbff64643043 23-25,27-34
+apps/api/src/application/models.ts
+  s_3a50bad78ea1cd::t_984b30deb88bef 199-204
+  s_3a50bad78ea1cd::t_03714e8a32a931 178
+  s_3a50bad78ea1cd::t_eda89b04f64515 55
+  s_3a50bad78ea1cd::t_7351a031836346 26,43
+  s_3a50bad78ea1cd::t_a875495c371f8f 63-81,88-99,115,162-177,208-214,218
+apps/api/src/infrastructure/auth/auth.ts
+  s_3a50bad78ea1cd::t_cc2ed254de0f2c 41-42,45-64
+packages/shared/src/index.ts
+  s_3a50bad78ea1cd::t_7351a031836346 41
+apps/api/src/infrastructure/youtube/youtube-data-gateway.ts
+  s_3a50bad78ea1cd::t_3be9a9ca74f5af 66,136-140,166-171
+  s_3a50bad78ea1cd::t_da4e2aabf30d89 3-16,54-65,67-70,72-82,84-109,111-135,141-165,172-173,178,180-181,215,226,232,236,254-259,282,290-294,296
+  s_3a50bad78ea1cd::t_bcdb60de925eff 262,272-273,280
+  s_3a50bad78ea1cd::t_03714e8a32a931 83
+apps/api/src/application/sync-service.test.ts
+  s_3a50bad78ea1cd::t_03714e8a32a931 328-334,339-343,387-393,420-426,430-432,457-460
+  s_3a50bad78ea1cd::t_f2238229a207e9 17,29,300-327,335-338,344-386,394-419,427-429,433-456,461-477
+  s_3a50bad78ea1cd::t_f8a3dd0f5e0a69 103-105,117-118,121-122,131-132
+  s_3a50bad78ea1cd::t_e6737ae8793979 185,202
+apps/api/src/infrastructure/youtube/youtube-data-gateway.test.ts
+  s_3a50bad78ea1cd::t_65735351165c2e 4-5,26-34,36,128-197,201-202,206-207,211-212,216-226
+  s_3a50bad78ea1cd::t_000d1ddb91ef1c 35
+  s_3a50bad78ea1cd::t_03714e8a32a931 198-200,203-205,208-210,213-215
+docs/api/api-specification.md
+  s_3a50bad78ea1cd::t_b7b535d8a6a487 17,25-26
+  s_3a50bad78ea1cd::t_03714e8a32a931 7-16,18-20
+docs/reviews/reaudit-remediation.md
+  s_3a50bad78ea1cd::t_464fb427fc428b 8-14,22-24,32-50,63-73
+  s_3a50bad78ea1cd::t_266219d845807f 6-7,51-62
+  s_3a50bad78ea1cd::t_c85b0cd76b4dd1 25-31
+  s_3a50bad78ea1cd::t_f2ee6712b520e7 1-5,15-21
+README.md
+  s_3a50bad78ea1cd::t_698a15f072fdf0 62-63,77
+apps/api/src/domain/errors.ts
+  s_3a50bad78ea1cd::t_0df5bf46f9e18e 7
+apps/api/src/application/account-deletion.test.ts
+  s_3a50bad78ea1cd::t_aa2a1266801747 75-91,220-251
+  s_3a50bad78ea1cd::t_9393a69bbf0c12 38-52,186-210,214-216
+  s_3a50bad78ea1cd::t_856cfa53225eef 19,111
+  s_3a50bad78ea1cd::t_eda89b04f64515 114-118
+  s_3a50bad78ea1cd::t_03714e8a32a931 211-213,217-219
+docs/reviews/critical-high-reaudit.md
+  s_3a50bad78ea1cd::t_03714e8a32a931 29-35,40-61,67-70,84-96,102-103,105-115
+  s_3a50bad78ea1cd::t_698a15f072fdf0 117,187-188,224-228,238-239
+  s_3a50bad78ea1cd::t_266219d845807f 229-237
+  s_3a50bad78ea1cd::t_d5b7c3d31ac144 116
+apps/api/src/infrastructure/database/memory-store.ts
+  s_3a50bad78ea1cd::t_984b30deb88bef 461-462,468-473
+  s_3a50bad78ea1cd::t_03714e8a32a931 125-127,130,143
+  s_3a50bad78ea1cd::t_3fc79b0199874c 135
+  s_3a50bad78ea1cd::t_eaaed580e437df 298-303
+  s_3a50bad78ea1cd::t_eda89b04f64515 111,146-149
+  s_3a50bad78ea1cd::t_7351a031836346 349
+  s_3a50bad78ea1cd::t_367d768e63b356 14-16,29-30,74,121-124,128-129,131,141,144,150,193-195,352,354-362,365-367,370-395
+  s_3a50bad78ea1cd::t_bd27ea4f81bf87 260-274
+apps/api/src/application/sync-service.ts
+  s_3a50bad78ea1cd::t_bf9c9c592479f0 206
+  s_3a50bad78ea1cd::t_03714e8a32a931 59,95-96,99-102,142-147
+  s_3a50bad78ea1cd::t_36658262fc7081 113-126,163,204
+  s_3a50bad78ea1cd::t_56a60f57e5f2dd 5-12,27,30,32,71,79,84-88,90-94,97-98,103-112,127-141,148-155,157,170,174,189,197-203,205,208-212,215,218-228,248,264-270
+docs/testing/testing-policy.md
+  s_3a50bad78ea1cd::t_698a15f072fdf0 6,10
+  s_3a50bad78ea1cd::t_464fb427fc428b 11-12
+apps/api/src/infrastructure/env.test.ts
+  s_3a50bad78ea1cd::t_c62c6d8109ffb4 24,28,33-57
+  s_3a50bad78ea1cd::t_114552f502edb6 58
+apps/api/src/container.ts
+  s_3a50bad78ea1cd::t_03714e8a32a931 54-71
+  s_3a50bad78ea1cd::t_a729a0198f8b1f 81-83,96-111
+  s_3a50bad78ea1cd::t_3be9a9ca74f5af 84-85
+apps/api/src/application/oshi-service.ts
+  s_3a50bad78ea1cd::t_a8cc96348409d4 24,131,137-146,166,168,174,176,182-192,199,201,209-210,214
+  s_3a50bad78ea1cd::t_03714e8a32a931 204
+docs/architecture/synchronization.md
+  s_3a50bad78ea1cd::t_b7b535d8a6a487 25-27,31-41,52-53,57,59
+apps/api/src/infrastructure/google-calendar/google-calendar-gateway.ts
+  s_3a50bad78ea1cd::t_d158d8fb1aa82c 51,56-63
+  s_3a50bad78ea1cd::t_60881a532d28c9 16-17,20-23,25-28,30,53,73,101-109,247-255
+  s_3a50bad78ea1cd::t_3be9a9ca74f5af 18,24,29
+apps/api/src/infrastructure/encryption/aes-token-cipher.test.ts
+  s_3a50bad78ea1cd::t_c62c6d8109ffb4 16-34
+apps/api/src/infrastructure/database/prisma-store.ts
+  s_3a50bad78ea1cd::t_d7f06cd4e5b9bd 5-6,11-12,125-127,129-146,150-152,154-163,262-265,340-341,344-359,371-376,378,479-486,488-490,492-497,499-507,509-516,518-555
+  s_3a50bad78ea1cd::t_6facfc8ee8285f 128,153,487,491,508,645
+  s_3a50bad78ea1cd::t_03714e8a32a931 124,149,641
+  s_3a50bad78ea1cd::t_eda89b04f64515 100
+  s_3a50bad78ea1cd::t_984b30deb88bef 642-644,646-652,655-657
+  s_3a50bad78ea1cd::t_7351a031836346 60-61,474
+  s_3a50bad78ea1cd::t_5b1b350d44e29b 360-370,377
+  s_3a50bad78ea1cd::t_eaaed580e437df 404
+docs/development/implementation-plan.md
+  s_3a50bad78ea1cd::t_464fb427fc428b 34
+  s_3a50bad78ea1cd::t_698a15f072fdf0 31-33
+  s_3a50bad78ea1cd::t_266219d845807f 14
+docs/reviews/critical-high-remediation.md
+  s_3a50bad78ea1cd::t_698a15f072fdf0 76-79
+docs/api/openapi.yaml
+  s_3a50bad78ea1cd::t_b7b535d8a6a487 31-35,59-65,125,146-155
+apps/api/src/prisma-api.integration.test.ts
+  s_3a50bad78ea1cd::t_8bc337d76e338d 218-234,236-239
+  s_3a50bad78ea1cd::t_03714e8a32a931 210
+  s_3a50bad78ea1cd::t_09f5d105ffd569 38-40,173-174,177,180-182,185-201,203-209,211-217
+apps/api/src/infrastructure/database/lease.test.ts
+  s_3a50bad78ea1cd::t_9393a69bbf0c12 1-20,24-33,62
+  s_3a50bad78ea1cd::t_03714e8a32a931 21-23,40-45
+  s_3a50bad78ea1cd::t_4cee661f94aac7 34-39,46-61
+apps/api/src/infrastructure/google-calendar/google-calendar-gateway.test.ts
+  s_3a50bad78ea1cd::t_55b4e2788a99d0 126-155,159-171,175-186
+  s_3a50bad78ea1cd::t_d158d8fb1aa82c 97-108
+  s_3a50bad78ea1cd::t_03714e8a32a931 156-158,172-174
+prisma/schema.prisma
+  s_3a50bad78ea1cd::t_a875495c371f8f 66-70,258,265-277
+  s_3a50bad78ea1cd::t_2f2e0725438e80 235-249
+prisma/migrations/20260720150000_reaudit_remediation/migration.sql
+  s_3a50bad78ea1cd::t_a875495c371f8f 1-16
+apps/api/src/infrastructure/auth/auth.test.ts
+  s_3a50bad78ea1cd::t_03714e8a32a931 8-13,26-31
+  s_3a50bad78ea1cd::t_9393a69bbf0c12 1-7,14-25,32-57
+prisma/migrations/20260720160000_align_quota_updated_at/migration.sql
+  s_3a50bad78ea1cd::t_d9640d60b07b69 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "838e1705f147e371e95c464f46158ed27209fa2f",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
