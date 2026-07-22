@@ -1,0 +1,123 @@
+docs/reviews/reaudit-remediation.md
+  s_3a50bad78ea1cd::t_ae2439d1966a7e 74-77
+docs/reviews/final-audit-remediation.md
+  s_3a50bad78ea1cd::t_04e94a299f57f3 8-15,18-81,83-87
+  s_3a50bad78ea1cd::t_b5ee860339f6a9 82
+  s_3a50bad78ea1cd::t_5304dde80099a2 1-7,16-17
+apps/api/src/infrastructure/youtube/youtube-data-gateway.test.ts
+  s_3a50bad78ea1cd::t_cc836a656e9b11 203
+  s_3a50bad78ea1cd::t_18968829a6c5c9 202,204-214
+  s_3a50bad78ea1cd::t_f1fb5dcf59505c 15-20
+playwright.config.ts
+  s_3a50bad78ea1cd::t_782dc2dbd24726 3-7,13,17-19,23,25,29-32
+prisma/migrations/20260722120000_final_audit_remediation/migration.sql
+  s_3a50bad78ea1cd::t_6a1a39bb7a5ad0 1-28
+apps/api/src/app.test.ts
+  s_3a50bad78ea1cd::t_782dc2dbd24726 36-38
+docs/security/security-policy.md
+  s_3a50bad78ea1cd::t_ae2439d1966a7e 5
+apps/api/src/infrastructure/database/memory-store.ts
+  s_3a50bad78ea1cd::t_a0758789007708 352-361
+  s_3a50bad78ea1cd::t_70104daad9a7f5 44-47,206-215,267-318,481-484,494-497,500-504
+  s_3a50bad78ea1cd::t_f8e0053168b1c3 416
+apps/api/src/app.ts
+  s_3a50bad78ea1cd::t_782dc2dbd24726 24-27
+apps/api/src/infrastructure/encryption/aes-token-cipher.test.ts
+  s_3a50bad78ea1cd::t_387ad7634dd7a3 33-53
+  s_3a50bad78ea1cd::t_046da9d0ec3a71 23
+apps/api/src/infrastructure/database/prisma-store.ts
+  s_3a50bad78ea1cd::t_f1fb5dcf59505c 733-742
+  s_3a50bad78ea1cd::t_89946e80766d13 390-401,414
+  s_3a50bad78ea1cd::t_a0758789007708 517,521,524-525
+  s_3a50bad78ea1cd::t_570124c04fe118 40-45,67-68,343-389,402-413,415-465,605-607,748
+apps/api/src/infrastructure/encryption/aes-token-cipher.ts
+  s_3a50bad78ea1cd::t_a0758789007708 6-26,35-36
+  s_3a50bad78ea1cd::t_8433271d04e600 5
+apps/api/src/infrastructure/youtube/youtube-quota.test.ts
+  s_3a50bad78ea1cd::t_15a2d9dda6eae3 1-37
+apps/api/src/application/models.ts
+  s_3a50bad78ea1cd::t_a0758789007708 170-175
+  s_3a50bad78ea1cd::t_6a1a39bb7a5ad0 18-23,32,49,52-57,59-60,150-164,228
+docs/architecture/authentication.md
+  s_3a50bad78ea1cd::t_ae2439d1966a7e 11
+docs/database/schema.md
+  s_3a50bad78ea1cd::t_ae2439d1966a7e 10,26-28
+docs/reviews/final-critical-high-audit.md
+  s_3a50bad78ea1cd::t_04e94a299f57f3 229-230
+  s_3a50bad78ea1cd::t_ae2439d1966a7e 225-228
+apps/api/src/application/sync-service.ts
+  s_3a50bad78ea1cd::t_89946e80766d13 257-258,325-326,405-407
+  s_3a50bad78ea1cd::t_0e0ac27f69c83e 15,34-41,50-62,64-78,80-82,118-125,133-137,148,150-151,160-165,188,190,193,195-199,201-210,212-225,236-239,244-256,259-268,276,312,315,317-319,321,328,330-332,335,347-348,360-361,402,408-415
+  s_3a50bad78ea1cd::t_86dbe2789e50fe 16,63,79,313
+  s_3a50bad78ea1cd::t_ac097a6877ae30 4-8,289
+apps/api/src/infrastructure/env.test.ts
+  s_3a50bad78ea1cd::t_387ad7634dd7a3 2,25,34-51,71
+  s_3a50bad78ea1cd::t_15a2d9dda6eae3 78-94
+.env.example
+  s_3a50bad78ea1cd::t_18968829a6c5c9 17-18,34-35
+apps/api/src/application/sync-service.test.ts
+  s_3a50bad78ea1cd::t_cd84a5c0018138 449,452
+  s_3a50bad78ea1cd::t_f111703f673aba 473-550
+  s_3a50bad78ea1cd::t_89946e80766d13 254-266,447
+  s_3a50bad78ea1cd::t_387ad7634dd7a3 325-329
+  s_3a50bad78ea1cd::t_32da17358c7b12 324
+apps/api/src/infrastructure/youtube/youtube-quota.ts
+  s_3a50bad78ea1cd::t_a0758789007708 12-38
+apps/api/src/prisma-api.integration.test.ts
+  s_3a50bad78ea1cd::t_63e93f238dcb78 291
+  s_3a50bad78ea1cd::t_b38378da21f3af 10-13,34,246-290,292-327
+  s_3a50bad78ea1cd::t_1709605735dc03 328
+docs/api/openapi.yaml
+  s_3a50bad78ea1cd::t_90b6de55847599 61,65-72,92-105
+README.md
+  s_3a50bad78ea1cd::t_18968829a6c5c9 58,60,62,77,90
+  s_3a50bad78ea1cd::t_c8c121b643b514 91
+apps/api/src/domain/scheduling.ts
+  s_3a50bad78ea1cd::t_ac097a6877ae30 71-86
+  s_3a50bad78ea1cd::t_f1fb5dcf59505c 8
+apps/api/src/infrastructure/youtube/youtube-data-gateway.ts
+  s_3a50bad78ea1cd::t_cd84a5c0018138 15,218-219
+apps/api/src/infrastructure/env.ts
+  s_3a50bad78ea1cd::t_a0758789007708 4-8,54-55,61-65,92-103,122-124
+  s_3a50bad78ea1cd::t_8433271d04e600 125-127
+prisma/schema.prisma
+  s_3a50bad78ea1cd::t_6a1a39bb7a5ad0 45,47-63,142-147,156,252-255
+apps/api/src/container.ts
+  s_3a50bad78ea1cd::t_cd84a5c0018138 101-106
+apps/api/src/infrastructure/database/memory-store.test.ts
+  s_3a50bad78ea1cd::t_387ad7634dd7a3 37-69
+packages/shared/src/index.ts
+  s_3a50bad78ea1cd::t_90b6de55847599 41
+e2e/dashboard.spec.ts
+  s_3a50bad78ea1cd::t_782dc2dbd24726 3-9
+docs/architecture/synchronization.md
+  s_3a50bad78ea1cd::t_ae2439d1966a7e 31,39,41,52,57
+docs/testing/testing-policy.md
+  s_3a50bad78ea1cd::t_ae2439d1966a7e 5,10
+  s_3a50bad78ea1cd::t_04e94a299f57f3 13-14
+docs/development/implementation-plan.md
+  s_3a50bad78ea1cd::t_ae2439d1966a7e 35-38
+  s_3a50bad78ea1cd::t_04e94a299f57f3 39-40
+docs/api/api-specification.md
+  s_3a50bad78ea1cd::t_90b6de55847599 9,26
+apps/api/src/domain/scheduling.test.ts
+  s_3a50bad78ea1cd::t_ac097a6877ae30 2-8,41-52,54-64,66-68
+  s_3a50bad78ea1cd::t_f1fb5dcf59505c 53,65
+  s_3a50bad78ea1cd::t_087a463047c963 69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "2fc2918dda054106b1fa1d85c8b83c10512ea83f",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
