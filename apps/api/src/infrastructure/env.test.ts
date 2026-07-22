@@ -21,12 +21,39 @@ describe('loadEnv production encryption keys', () => {
   });
 
   it('accepts a non-default 32-byte key', () => {
+    const key = Buffer.from(Array.from({ length: 32 }, (_, index) => index)).toString('base64');
     expect(
       loadEnv({
         ...realEnv,
-        TOKEN_ENCRYPTION_KEYS: `v2:${Buffer.alloc(32, 9).toString('base64')}`,
+        TOKEN_ENCRYPTION_KEYS: `v2:${key}`,
       }).APP_MODE,
     ).toBe('real');
+  });
+
+  it('rejects all-zero and low-entropy keys even when the key identifier changes', () => {
+    expect(() =>
+      loadEnv({
+        ...realEnv,
+        TOKEN_ENCRYPTION_KEYS: `v2:${Buffer.alloc(32).toString('base64')}`,
+      }),
+    ).toThrow(/low-entropy/);
+    expect(() =>
+      loadEnv({
+        ...realEnv,
+        TOKEN_ENCRYPTION_KEYS: `production:${Buffer.alloc(32, 9).toString('base64')}`,
+      }),
+    ).toThrow(/low-entropy/);
+  });
+
+  it('requires deletion lease duration to exceed every deletion HTTP timeout', () => {
+    expect(() =>
+      loadEnv({
+        ...realEnv,
+        TOKEN_ENCRYPTION_KEYS: `v1:${Buffer.from(Array.from({ length: 32 }, (_, index) => index)).toString('base64')}`,
+        EXTERNAL_API_TIMEOUT_MS: '10000',
+        ACCOUNT_DELETION_LEASE_MS: '10000',
+      }),
+    ).toThrow(/ACCOUNT_DELETION_LEASE_MS/);
   });
 
   it('loads dotenv from the repository root independently of the working directory', () => {

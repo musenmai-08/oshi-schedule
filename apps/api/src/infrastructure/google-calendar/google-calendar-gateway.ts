@@ -13,7 +13,21 @@ export class GoogleCalendarGateway implements CalendarGateway {
     private readonly timeoutMs = 10_000,
     private readonly sleep: (milliseconds: number) => Promise<void> = (milliseconds) =>
       new Promise((resolve) => setTimeout(resolve, milliseconds)),
+    private readonly retryBaseDelayMs = 1_000,
+    private readonly random: () => number = Math.random,
+    private readonly retryMaxDelayMs = 5_000,
   ) {}
+  private retryDelay(response: Response | null, attempt: number) {
+    const exponential = this.retryBaseDelayMs * 2 ** attempt;
+    const jitter = Math.floor(this.random() * Math.max(1, this.retryBaseDelayMs));
+    const retryAfter = response?.headers.get('retry-after');
+    if (!retryAfter) return Math.min(this.retryMaxDelayMs, exponential + jitter);
+    const seconds = Number(retryAfter);
+    const retryAt = Number.isFinite(seconds)
+      ? seconds * 1_000
+      : Math.max(0, new Date(retryAfter).getTime() - Date.now());
+    return Math.min(this.retryMaxDelayMs, Math.max(exponential + jitter, retryAt));
+  }
   private async accessToken(userId: string) {
     const cached = this.accessTokens.get(userId);
     if (cached && cached.expiresAt > Date.now() + 30_000) return cached.token;
@@ -34,12 +48,19 @@ export class GoogleCalendarGateway implements CalendarGateway {
           }),
           signal: AbortSignal.timeout(this.timeoutMs),
         });
-      } catch {
+      } catch (error) {
         if (attempt < 2) {
-          await this.sleep(50 * 2 ** attempt);
+          await this.sleep(this.retryDelay(null, attempt));
           continue;
         }
-        throw new AppError('GOOGLE_TOKEN_ERROR', 'Googleへ接続できません', 502, true);
+        const timedOut =
+          error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+        throw new AppError(
+          timedOut ? 'GOOGLE_TOKEN_TIMEOUT' : 'GOOGLE_TOKEN_ERROR',
+          timedOut ? 'Google認証がタイムアウトしました' : 'Googleへ接続できません',
+          502,
+          true,
+        );
       }
       if (!response.ok) {
         const body = (await response.json().catch(() => ({}))) as { error?: string };
@@ -49,7 +70,7 @@ export class GoogleCalendarGateway implements CalendarGateway {
         }
         const retryable = response.status === 429 || response.status >= 500;
         if (retryable && attempt < 2) {
-          await this.sleep(50 * 2 ** attempt);
+          await this.sleep(this.retryDelay(response, attempt));
           continue;
         }
         throw new AppError('GOOGLE_TOKEN_ERROR', 'Googleへ接続できません', 502, retryable);
@@ -77,8 +98,15 @@ export class GoogleCalendarGateway implements CalendarGateway {
         },
         signal: AbortSignal.timeout(this.timeoutMs),
       });
-    } catch {
-      throw new AppError('GOOGLE_CALENDAR_UNAVAILABLE', 'Googleへ接続できません', 502, true);
+    } catch (error) {
+      const timedOut =
+        error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+      throw new AppError(
+        timedOut ? 'GOOGLE_CALENDAR_TIMEOUT' : 'GOOGLE_CALENDAR_UNAVAILABLE',
+        timedOut ? 'Googleカレンダーへの接続がタイムアウトしました' : 'Googleへ接続できません',
+        502,
+        true,
+      );
     }
   }
   async ensureCalendar(user: UserRecord) {
@@ -216,8 +244,15 @@ export class GoogleCalendarGateway implements CalendarGateway {
         body: new URLSearchParams({ token: this.cipher.decrypt(encrypted) }),
         signal: AbortSignal.timeout(this.timeoutMs),
       });
-    } catch {
-      throw new AppError('GOOGLE_REVOKE_FAILED', 'Google連携を解除できません', 502, true);
+    } catch (error) {
+      const timedOut =
+        error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+      throw new AppError(
+        timedOut ? 'GOOGLE_REVOKE_TIMEOUT' : 'GOOGLE_REVOKE_FAILED',
+        timedOut ? 'Google連携解除がタイムアウトしました' : 'Google連携を解除できません',
+        502,
+        true,
+      );
     }
     if (!response.ok && response.status !== 400)
       throw new AppError(

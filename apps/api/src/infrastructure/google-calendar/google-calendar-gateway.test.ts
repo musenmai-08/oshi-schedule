@@ -94,6 +94,18 @@ describe('GoogleCalendarGateway token refresh', () => {
     expect(timeoutFetch).toHaveBeenCalledTimes(3);
   });
 
+  it('classifies a bounded token endpoint timeout separately', async () => {
+    const { user, gateway } = await setup();
+    const timeout = Object.assign(new Error('timeout'), { name: 'TimeoutError' });
+    const fetchMock = vi.fn<typeof fetch>().mockRejectedValue(timeout);
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(gateway.eventExists(user, 'calendar-id', 'event-id')).rejects.toMatchObject({
+      code: 'GOOGLE_TOKEN_TIMEOUT',
+      retryable: true,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
   it('reuses one access token for multiple Calendar requests', async () => {
     const { user, gateway } = await setup();
     const fetchMock = vi.fn<typeof fetch>(async (input) => {
@@ -109,6 +121,67 @@ describe('GoogleCalendarGateway token refresh', () => {
         String(input).includes('oauth2.googleapis.com/token'),
       ),
     ).toHaveLength(1);
+  });
+
+  it('uses exponential delay with jitter and honors Retry-After', async () => {
+    const store = new MemoryStore();
+    const user = await store.ensureUser({ subject: 'retry-user', email: 'developer@example.com' });
+    const cipher = new AesTokenCipher(`v1:${Buffer.alloc(32, 6).toString('base64')}`);
+    const encrypted = cipher.encrypt('refresh-token');
+    await store.completeOnboarding(user.id, encrypted.ciphertext, encrypted.keyId, 'calendar-id');
+    const delays: number[] = [];
+    const gateway = new GoogleCalendarGateway(
+      store,
+      cipher,
+      'client',
+      'secret',
+      10_000,
+      async (delay) => void delays.push(delay),
+      1_000,
+      () => 0.5,
+    );
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ error: 'rate_limited' }), {
+            status: 429,
+            headers: { 'content-type': 'application/json', 'retry-after': '3' },
+          }),
+        )
+        .mockResolvedValueOnce(json({ access_token: 'token', expires_in: 3600 }))
+        .mockResolvedValueOnce(json({ id: 'event-id' })),
+    );
+    await expect(
+      gateway.eventExists((await store.findUserById(user.id))!, 'calendar-id', 'event-id'),
+    ).resolves.toBe(true);
+    expect(delays).toEqual([3_000]);
+  });
+
+  it('classifies Calendar and revoke timeouts separately for resumable deletion', async () => {
+    const calendar = await setup();
+    const timeout = Object.assign(new Error('timeout'), { name: 'TimeoutError' });
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(json({ access_token: 'token', expires_in: 3600 }))
+        .mockRejectedValueOnce(timeout),
+    );
+    await expect(
+      calendar.gateway.deleteCalendar(calendar.user, 'calendar-id'),
+    ).rejects.toMatchObject({
+      code: 'GOOGLE_CALENDAR_TIMEOUT',
+      retryable: true,
+    });
+
+    const revoke = await setup();
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockRejectedValue(timeout));
+    await expect(revoke.gateway.revokeAuthorization(revoke.user)).rejects.toMatchObject({
+      code: 'GOOGLE_REVOKE_TIMEOUT',
+      retryable: true,
+    });
   });
 
   it('recreates a deleted calendar and treats already-deleted calendar/token as idempotent', async () => {

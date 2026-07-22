@@ -2,10 +2,14 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import type { ChannelSummary, SubscriptionStatus } from '@oshi-schedule/shared';
 import type {
   AuthIdentity,
+  DeletionStep,
+  LeaseOwnership,
   MappingRecord,
   Store,
   SubscriptionRecord,
   SyncResult,
+  YouTubeQuotaBucket,
+  YouTubeQuotaMode,
 } from '../../application/models.js';
 import type { NormalizedBroadcast } from '../../domain/scheduling.js';
 import { StoreConstraintError } from '../../domain/errors.js';
@@ -53,7 +57,8 @@ const toSubscription = (row: {
   lastSyncStatus:
     row.lastSyncStatus === 'SUCCESS' ||
     row.lastSyncStatus === 'FAILED' ||
-    row.lastSyncStatus === 'RUNNING'
+    row.lastSyncStatus === 'RUNNING' ||
+    row.lastSyncStatus === 'SKIPPED'
       ? row.lastSyncStatus
       : null,
   lastErrorMessage: row.lastErrorMessage,
@@ -92,6 +97,7 @@ export class PrismaStore implements Store {
           userId: row.userId,
           calendarIdSnapshot: row.calendarIdSnapshot,
           status: row.status,
+          lastErrorCode: row.lastErrorCode,
           calendarDeletedAt: row.calendarDeletedAt,
           googleTokenRevokedAt: row.googleTokenRevokedAt,
           userDataDeletedAt: row.userDataDeletedAt,
@@ -115,28 +121,46 @@ export class PrismaStore implements Store {
     if (!request) throw new Error('account deletion request not found');
     return request;
   }
-  async markAccountDeletionStep(
-    id: string,
-    step: 'CALENDAR_DELETED' | 'TOKEN_REVOKED' | 'DATA_DELETED' | 'AUTH_DELETED' | 'COMPLETED',
-    at: Date,
-  ) {
-    await this.prisma.accountDeletionRequest.update({
-      where: { id },
-      data: {
-        status: step,
-        lastErrorCode: null,
-        ...(step === 'CALENDAR_DELETED' ? { calendarDeletedAt: at } : {}),
-        ...(step === 'TOKEN_REVOKED' ? { googleTokenRevokedAt: at } : {}),
-        ...(step === 'DATA_DELETED' ? { userDataDeletedAt: at } : {}),
-        ...(step === 'AUTH_DELETED' ? { supabaseUserDeletedAt: at } : {}),
-        ...(step === 'COMPLETED' ? { completedAt: at } : {}),
-      },
+  async markAccountDeletionStep(id: string, step: DeletionStep, at: Date, lease: LeaseOwnership) {
+    return this.prisma.$transaction(async (transaction) => {
+      const valid = await transaction.$queryRaw<Array<{ valid: number }>>`
+        SELECT 1 AS valid FROM SyncLease
+        WHERE SyncLease.key = ${lease.key}
+          AND ownerToken = ${lease.ownerToken}
+          AND version = ${lease.version}
+          AND expiresAt > UTC_TIMESTAMP(3)
+        FOR UPDATE`;
+      if (!valid.length) return false;
+      await transaction.accountDeletionRequest.update({
+        where: { id },
+        data: {
+          status: step,
+          lastErrorCode: null,
+          ...(step === 'CALENDAR_DELETED' ? { calendarDeletedAt: at } : {}),
+          ...(step === 'TOKEN_REVOKED' ? { googleTokenRevokedAt: at } : {}),
+          ...(step === 'DATA_DELETED' ? { userDataDeletedAt: at } : {}),
+          ...(step === 'AUTH_DELETED' ? { supabaseUserDeletedAt: at } : {}),
+          ...(step === 'COMPLETED' ? { completedAt: at } : {}),
+        },
+      });
+      return true;
     });
   }
-  async markAccountDeletionFailed(id: string, errorCode: string) {
-    await this.prisma.accountDeletionRequest.update({
-      where: { id },
-      data: { status: 'FAILED', lastErrorCode: errorCode.slice(0, 64) },
+  async markAccountDeletionFailed(id: string, errorCode: string, _at: Date, lease: LeaseOwnership) {
+    return this.prisma.$transaction(async (transaction) => {
+      const valid = await transaction.$queryRaw<Array<{ valid: number }>>`
+        SELECT 1 AS valid FROM SyncLease
+        WHERE SyncLease.key = ${lease.key}
+          AND ownerToken = ${lease.ownerToken}
+          AND version = ${lease.version}
+          AND expiresAt > UTC_TIMESTAMP(3)
+        FOR UPDATE`;
+      if (!valid.length) return false;
+      await transaction.accountDeletionRequest.update({
+        where: { id },
+        data: { status: 'FAILED', lastErrorCode: errorCode.slice(0, 64) },
+      });
+      return true;
     });
   }
   async saveCredential(userId: string, encryptedToken: string, keyId: string) {
@@ -235,6 +259,10 @@ export class PrismaStore implements Store {
     const row = await this.prisma.youTubeChannel.findUnique({ where: { youtubeChannelId } });
     return row ? toChannel(row) : null;
   }
+  async findChannelById(id: string) {
+    const row = await this.prisma.youTubeChannel.findUnique({ where: { id } });
+    return row ? toChannel(row) : null;
+  }
   async upsertChannel(channel: ChannelSummary) {
     const row = await this.prisma.youTubeChannel.upsert({
       where: { youtubeChannelId: channel.youtubeChannelId },
@@ -309,25 +337,45 @@ export class PrismaStore implements Store {
     });
   }
   async upsertBroadcasts(channelId: string, items: NormalizedBroadcast[], observedAt: Date) {
-    for (const item of items)
-      await this.prisma.scheduledBroadcast.upsert({
+    for (const item of items) {
+      const existing = await this.prisma.scheduledBroadcast.findUnique({
         where: { youtubeVideoId: item.youtubeVideoId },
-        update: {
-          title: item.title,
-          kind: item.kind,
-          status: item.status,
-          youtubeUrl: item.youtubeUrl,
-          thumbnailUrl: item.thumbnailUrl,
-          scheduledStartAt: item.scheduledStartAt,
-          endAt: item.endAt,
-          endTimeProvisional: item.endTimeProvisional,
-          actualStartAt: item.actualStartAt,
-          actualEndAt: item.actualEndAt,
-          missingCount: 0,
-          sourceUpdatedAt: observedAt,
-        },
-        create: { channelId, ...item, sourceUpdatedAt: observedAt },
       });
+      const changed =
+        !existing ||
+        existing.title !== item.title ||
+        existing.kind !== item.kind ||
+        existing.status !== item.status ||
+        existing.youtubeUrl !== item.youtubeUrl ||
+        existing.thumbnailUrl !== item.thumbnailUrl ||
+        existing.scheduledStartAt.getTime() !== item.scheduledStartAt.getTime() ||
+        existing.endAt.getTime() !== item.endAt.getTime() ||
+        existing.endTimeProvisional !== item.endTimeProvisional ||
+        existing.actualStartAt?.getTime() !== item.actualStartAt?.getTime() ||
+        existing.actualEndAt?.getTime() !== item.actualEndAt?.getTime();
+      if (existing)
+        await this.prisma.scheduledBroadcast.update({
+          where: { id: existing.id },
+          data: {
+            title: item.title,
+            kind: item.kind,
+            status: item.status,
+            youtubeUrl: item.youtubeUrl,
+            thumbnailUrl: item.thumbnailUrl,
+            scheduledStartAt: item.scheduledStartAt,
+            endAt: item.endAt,
+            endTimeProvisional: item.endTimeProvisional,
+            actualStartAt: item.actualStartAt,
+            actualEndAt: item.actualEndAt,
+            missingCount: 0,
+            ...(changed ? { sourceUpdatedAt: observedAt } : {}),
+          },
+        });
+      else
+        await this.prisma.scheduledBroadcast.create({
+          data: { channelId, ...item, sourceUpdatedAt: observedAt },
+        });
+    }
     const rows = await this.prisma.scheduledBroadcast.findMany({
       where: { youtubeVideoId: { in: items.map((item) => item.youtubeVideoId) } },
     });
@@ -353,7 +401,7 @@ export class PrismaStore implements Store {
   async markBroadcastsUnavailable(channelId: string, youtubeVideoIds: string[], observedAt: Date) {
     if (!youtubeVideoIds.length) return;
     await this.prisma.scheduledBroadcast.updateMany({
-      where: { channelId, youtubeVideoId: { in: youtubeVideoIds } },
+      where: { channelId, youtubeVideoId: { in: youtubeVideoIds }, status: { not: 'UNAVAILABLE' } },
       data: { status: 'UNAVAILABLE', sourceUpdatedAt: observedAt },
     });
   }
@@ -423,34 +471,88 @@ export class PrismaStore implements Store {
         lastSyncStatus: result.status,
         lastErrorCode: result.errorCode ?? null,
         lastErrorMessage: result.message,
-        ...(result.status === 'SUCCESS' ? { lastCalendarSyncAt: at } : {}),
+        ...(['SUCCESS', 'SKIPPED'].includes(result.status) ? { lastCalendarSyncAt: at } : {}),
         ...(manual && result.status === 'RUNNING' ? { lastManualSyncAt: at } : {}),
       },
     });
   }
-  async acquireSyncLease(key: string, ownerToken: string, now: Date, expiresAt: Date) {
-    try {
-      await this.prisma.syncLease.create({ data: { key, ownerToken, expiresAt } });
-      return true;
-    } catch (error) {
-      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002')
-        throw error;
-      const updated = await this.prisma.syncLease.updateMany({
-        where: { key, expiresAt: { lte: now } },
-        data: { ownerToken, expiresAt },
-      });
-      return updated.count === 1;
+  async acquireSyncLease(key: string, ownerToken: string, _now: Date, ttlMs: number) {
+    const microseconds = ttlMs * 1_000;
+    const updated = await this.prisma.$executeRaw`
+      UPDATE SyncLease
+      SET ownerToken = ${ownerToken},
+          version = version + 1,
+          expiresAt = TIMESTAMPADD(MICROSECOND, ${microseconds}, UTC_TIMESTAMP(3)),
+          updatedAt = UTC_TIMESTAMP(3)
+      WHERE SyncLease.key = ${key} AND expiresAt <= UTC_TIMESTAMP(3)`;
+    let acquired = updated === 1;
+    if (!acquired) {
+      const inserted = await this.prisma.$executeRaw`
+        INSERT IGNORE INTO SyncLease (${Prisma.raw('`key`')}, ownerToken, version, expiresAt, createdAt, updatedAt)
+        VALUES (
+          ${key}, ${ownerToken}, 1,
+          TIMESTAMPADD(MICROSECOND, ${microseconds}, UTC_TIMESTAMP(3)),
+          UTC_TIMESTAMP(3), UTC_TIMESTAMP(3)
+        )`;
+      acquired = inserted === 1;
     }
+    if (!acquired) return null;
+    const row = await this.prisma.syncLease.findFirst({ where: { key, ownerToken } });
+    return row ? { key, ownerToken, version: row.version } : null;
   }
-  async renewSyncLease(key: string, ownerToken: string, now: Date, expiresAt: Date) {
-    const updated = await this.prisma.syncLease.updateMany({
-      where: { key, ownerToken, expiresAt: { gt: now } },
-      data: { expiresAt },
+  async renewSyncLease(lease: LeaseOwnership, _now: Date, ttlMs: number) {
+    const updated = await this.prisma.$executeRaw`
+      UPDATE SyncLease
+      SET expiresAt = TIMESTAMPADD(MICROSECOND, ${ttlMs * 1_000}, UTC_TIMESTAMP(3)),
+          updatedAt = UTC_TIMESTAMP(3)
+      WHERE SyncLease.key = ${lease.key}
+        AND ownerToken = ${lease.ownerToken}
+        AND version = ${lease.version}
+        AND expiresAt > UTC_TIMESTAMP(3)`;
+    return updated === 1;
+  }
+  async releaseSyncLease(lease: LeaseOwnership) {
+    const deleted = await this.prisma.syncLease.deleteMany({
+      where: { key: lease.key, ownerToken: lease.ownerToken, version: lease.version },
     });
-    return updated.count === 1;
+    return deleted.count === 1;
   }
-  async releaseSyncLease(key: string, ownerToken: string) {
-    await this.prisma.syncLease.deleteMany({ where: { key, ownerToken } });
+  async reserveYouTubeQuota(
+    quotaDate: string,
+    bucket: YouTubeQuotaBucket,
+    units: number,
+    dailyBudget: number,
+    scheduledReserve: number,
+    mode: YouTubeQuotaMode,
+  ) {
+    await this.prisma.$executeRaw`
+      INSERT IGNORE INTO YouTubeQuotaUsage
+        (quotaDate, bucket, unitsUsed, unitsReserved, createdAt, updatedAt)
+      VALUES (${quotaDate}, ${bucket}, 0, 0, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))`;
+    const effectiveBudget = mode === 'MANUAL' ? dailyBudget - scheduledReserve : dailyBudget;
+    const reserved = await this.prisma.$executeRaw`
+      UPDATE YouTubeQuotaUsage
+      SET unitsReserved = unitsReserved + ${units}, updatedAt = UTC_TIMESTAMP(3)
+      WHERE quotaDate = ${quotaDate} AND bucket = ${bucket}
+        AND unitsUsed + unitsReserved + ${units} <= ${effectiveBudget}`;
+    const usage = await this.prisma.youTubeQuotaUsage.findUniqueOrThrow({
+      where: { quotaDate_bucket: { quotaDate, bucket } },
+    });
+    return {
+      granted: reserved === 1,
+      unitsUsed: usage.unitsUsed,
+      unitsReserved: usage.unitsReserved,
+      remaining: Math.max(0, dailyBudget - usage.unitsUsed - usage.unitsReserved),
+    };
+  }
+  async consumeYouTubeQuota(quotaDate: string, bucket: YouTubeQuotaBucket, units: number) {
+    const consumed = await this.prisma.$executeRaw`
+      UPDATE YouTubeQuotaUsage
+      SET unitsReserved = unitsReserved - ${units},
+          unitsUsed = unitsUsed + ${units},
+          updatedAt = UTC_TIMESTAMP(3)
+      WHERE quotaDate = ${quotaDate} AND bucket = ${bucket} AND unitsReserved >= ${units}`;
+    if (consumed !== 1) throw new Error('YouTube quota reservation not found');
   }
   async startSyncRun(
     type: 'MANUAL' | 'SCHEDULED',
@@ -536,14 +638,22 @@ export class PrismaStore implements Store {
       });
     });
   }
-  async deleteUserData(requestId: string, userId: string) {
-    const at = new Date();
-    await this.prisma.$transaction([
-      this.prisma.user.deleteMany({ where: { id: userId } }),
-      this.prisma.accountDeletionRequest.update({
+  async deleteUserData(requestId: string, userId: string, at: Date, lease: LeaseOwnership) {
+    return this.prisma.$transaction(async (transaction) => {
+      const valid = await transaction.$queryRaw<Array<{ valid: number }>>`
+        SELECT 1 AS valid FROM SyncLease
+        WHERE SyncLease.key = ${lease.key}
+          AND ownerToken = ${lease.ownerToken}
+          AND version = ${lease.version}
+          AND expiresAt > UTC_TIMESTAMP(3)
+        FOR UPDATE`;
+      if (!valid.length) return false;
+      await transaction.user.deleteMany({ where: { id: userId } });
+      await transaction.accountDeletionRequest.update({
         where: { id: requestId },
         data: { userId: null, status: 'DATA_DELETED', userDataDeletedAt: at },
-      }),
-    ]);
+      });
+      return true;
+    });
   }
 }

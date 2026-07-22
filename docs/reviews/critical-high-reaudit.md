@@ -26,48 +26,48 @@ Git上の修正範囲は `867c6b0..c3e558f` の1コミットで、`git show --st
 
 ## 3. 検証環境
 
-| 項目 | 値 |
-| --- | --- |
-| OS/実行環境 | macOS、リポジトリ `/Users/tezuka/Desktop/products/oshi-schedule` |
-| Node.js | v22.23.1（nvmで明示選択） |
-| pnpm | 9.15.9 |
-| DB | Docker Compose MySQL 8.4 |
-| Browser | Playwright Chromium |
+| 項目               | 値                                                                         |
+| ------------------ | -------------------------------------------------------------------------- |
+| OS/実行環境        | macOS、リポジトリ `/Users/tezuka/Desktop/products/oshi-schedule`           |
+| Node.js            | v22.23.1（nvmで明示選択）                                                  |
+| pnpm               | 9.15.9                                                                     |
+| DB                 | Docker Compose MySQL 8.4                                                   |
+| Browser            | Playwright Chromium                                                        |
 | 実サービス資格情報 | 未使用。Supabase、Google Calendar/OAuth、YouTubeはFake・mock・静的監査まで |
 
 ## 4. 実行したコマンドと結果
 
-| コマンド | 結果 |
-| --- | --- |
-| `git status --short` | 開始時出力なし（clean） |
-| `git log --oneline --decorate -5` | HEAD `c3e558f`、基点 `867c6b0` を確認 |
-| `git show --stat --oneline HEAD` / `git diff HEAD^..HEAD` | 修正コミット全体を確認 |
-| `source ~/.nvm/nvm.sh && nvm use 22.23.1` | Node v22.23.1を選択 |
-| `node -v` / `pnpm -v` | v22.23.1 / 9.15.9 |
-| `docker compose up -d mysql` | MySQL起動済みを確認 |
-| 対象6箇所の `node_modules` 削除後、`CI=true pnpm install --frozen-lockfile` | 成功。434 packages、postinstallでPrisma Client生成 |
-| `pnpm typecheck` | 成功、6/6 tasks |
-| `pnpm lint` | 成功、6/6 tasks |
-| `pnpm test` | 成功、43件。MySQL専用4件は通常runではskip |
-| `pnpm build` | 成功、4/4 build tasks。Next.js ESLint plugin警告のみ |
-| `pnpm test:e2e` | 成功、Chromium 1件 |
-| `APP_MODE=fake ... pnpm sync:scheduled` | 成功、targets=0、failed=0 |
-| `pnpm db:generate` | 成功 |
-| 既存DB `prisma migrate status` | 2 migrations適用済み、up to date |
-| 既存DB `prisma migrate diff ... --exit-code` | 差分なし |
-| 専用空DBへの `prisma migrate deploy` | 2 migrationsを先頭から適用成功 |
-| 専用空DBのschema diff | 差分なし |
-| 専用DBでMySQL integration | 4/4成功 |
-| 環境検証用のread-only診断 | `v2:` 全ゼロ鍵をreal modeが受理すること、初回同期が過去配信を作成対象にすることを再現 |
+| コマンド                                                                    | 結果                                                                                  |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `git status --short`                                                        | 開始時出力なし（clean）                                                               |
+| `git log --oneline --decorate -5`                                           | HEAD `c3e558f`、基点 `867c6b0` を確認                                                 |
+| `git show --stat --oneline HEAD` / `git diff HEAD^..HEAD`                   | 修正コミット全体を確認                                                                |
+| `source ~/.nvm/nvm.sh && nvm use 22.23.1`                                   | Node v22.23.1を選択                                                                   |
+| `node -v` / `pnpm -v`                                                       | v22.23.1 / 9.15.9                                                                     |
+| `docker compose up -d mysql`                                                | MySQL起動済みを確認                                                                   |
+| 対象6箇所の `node_modules` 削除後、`CI=true pnpm install --frozen-lockfile` | 成功。434 packages、postinstallでPrisma Client生成                                    |
+| `pnpm typecheck`                                                            | 成功、6/6 tasks                                                                       |
+| `pnpm lint`                                                                 | 成功、6/6 tasks                                                                       |
+| `pnpm test`                                                                 | 成功、43件。MySQL専用4件は通常runではskip                                             |
+| `pnpm build`                                                                | 成功、4/4 build tasks。Next.js ESLint plugin警告のみ                                  |
+| `pnpm test:e2e`                                                             | 成功、Chromium 1件                                                                    |
+| `APP_MODE=fake ... pnpm sync:scheduled`                                     | 成功、targets=0、failed=0                                                             |
+| `pnpm db:generate`                                                          | 成功                                                                                  |
+| 既存DB `prisma migrate status`                                              | 2 migrations適用済み、up to date                                                      |
+| 既存DB `prisma migrate diff ... --exit-code`                                | 差分なし                                                                              |
+| 専用空DBへの `prisma migrate deploy`                                        | 2 migrationsを先頭から適用成功                                                        |
+| 専用空DBのschema diff                                                       | 差分なし                                                                              |
+| 専用DBでMySQL integration                                                   | 4/4成功                                                                               |
+| 環境検証用のread-only診断                                                   | `v2:` 全ゼロ鍵をreal modeが受理すること、初回同期が過去配信を作成対象にすることを再現 |
 
 空DBへの最初のmigration実行と、2本のread-only診断はsandboxのプロセス/IPC制限で一度失敗したが、同一コマンドを許可済みの外部実行で再実行して成功した。これはアプリケーションの失敗として数えていない。
 
 ## 5. Critical 2件の判定
 
-| ID | 元の重要度 | 判定 | 根拠 | テスト | 残存リスク |
-| -- | ----- | -- | -- | --- | ----- |
-| AUDIT-001 | Critical | **部分解消** | subject基準の永続tombstone、段階再開、通常APIの410、User物理削除後の墓石、DB lease、外部呼出しのtransaction外実行は実装済み。一方 `SupabaseAuthAdmin.deleteUser` にtimeoutがなく、15分leaseを越えて停止できる | MemoryStoreで段階失敗・再開・二重実行・旧JWT・他User、MySQLで墓石とleaseを検証 | Supabase fetchが無期限に待つと削除が `DELETING` のまま残り、lease失効後に同一stepが並行実行され得る。実MySQL上の削除use case同時実行も未検証 |
-| AUDIT-002 | Critical | **解消済み** | Prisma、shared schema、route、OpenAPI、FakeがCUID契約で統一され、WebにUUID前提なし | 実MySQL生成CUIDでpause/resume/sync/delete、400/404/他User所有権を検証 | 実質的なCritical残存なし |
+| ID        | 元の重要度 | 判定         | 根拠                                                                                                                                                                                                          | テスト                                                                         | 残存リスク                                                                                                                                   |
+| --------- | ---------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| AUDIT-001 | Critical   | **部分解消** | subject基準の永続tombstone、段階再開、通常APIの410、User物理削除後の墓石、DB lease、外部呼出しのtransaction外実行は実装済み。一方 `SupabaseAuthAdmin.deleteUser` にtimeoutがなく、15分leaseを越えて停止できる | MemoryStoreで段階失敗・再開・二重実行・旧JWT・他User、MySQLで墓石とleaseを検証 | Supabase fetchが無期限に待つと削除が `DELETING` のまま残り、lease失効後に同一stepが並行実行され得る。実MySQL上の削除use case同時実行も未検証 |
+| AUDIT-002 | Critical   | **解消済み** | Prisma、shared schema、route、OpenAPI、FakeがCUID契約で統一され、WebにUUID前提なし                                                                                                                            | 実MySQL生成CUIDでpause/resume/sync/delete、400/404/他User所有権を検証          | 実質的なCritical残存なし                                                                                                                     |
 
 ### AUDIT-001 詳細
 
@@ -81,40 +81,40 @@ Git上の修正範囲は `867c6b0..c3e558f` の1コミットで、`git show --st
 
 ## 6. High 11件の判定
 
-| ID | 元の重要度 | 判定 | 根拠 | テスト | 残存リスク |
-| -- | ----- | -- | -- | --- | ----- |
-| AUDIT-003 Calendar削除・復旧 | High | **新規問題あり** | hash一致時も存在確認し、event 404とCalendar 404/410、決定的ID、mapping更新を実装。ただし初回同期では履歴を無制限に列挙する | event 404、Calendar 404、mapping差替、重複なしをmockで確認。410と「過去を復元しない」は直接テストなし | 新規High R-H01: 新規登録・Calendar再構築経路で過去のCOMPLETED配信を作成できる |
-| AUDIT-004 配信状態追跡 | High | **新規問題あり** | 既知video IDの詳細再取得、状態・実終了・UNAVAILABLEを実装。通常動画をupcoming検索から除外 | 時系列fixtureでUPCOMING/LIVE/COMPLETED/UNAVAILABLE等を確認 | 新規High R-H02: `search.list` の最大10ページをチャンネルごとに定期実行し、現行既定quotaを容易に枯渇。毎観測時の `sourceUpdatedAt` 更新もCalendar存在確認を増幅 |
-| AUDIT-005 プレミア公開判定 | High | **解消済み** | duration heuristicを廃止し、第三者Data APIで確定不能な種別をUNKNOWNとしてDB/API/Calendarで扱う | duration非依存、live、通常動画除外を確認 | UNKNOWNが増えることは意図した安全側仕様。Webは種別へ依存しない |
-| AUDIT-006 分散ロック | High | **部分解消** | API/worker共通PrismaStoreの `SyncLease`、atomic create/期限切れupdate、owner付きrenew/releaseを実装 | MemoryStore同時同期と実MySQL leaseを確認 | DB時刻でなく各processのアプリ時刻を比較するためclock skewで早期奪取/回収遅延があり得る。期限切れ回収、異なるkey、manual対scheduled、crashを実DB end-to-endで未検証 |
-| AUDIT-007 Calendar重複防止 | High | **解消済み** | user ID + video IDのSHA-256から安定IDを生成し、GoogleのID文字・長さ制約内。409はPATCHへ収束 | mapping保存失敗後、409→PATCH、再実行1件を確認 | 暗号学的衝突は現実的でない。外部実サービス確認はstaging事項 |
-| AUDIT-008 OAuthエラー処理 | High | **部分解消** | invalid_grantのみreauth、429/5xx/network/timeoutはretryable、最大3回、reauth user除外、secret非記録 | 主なstatus分類、3回上限、再連携をmockで確認 | 待機が50ms/100msでjitterなし、`Retry-After` 無視。公式推奨の秒単位指数backoffに比べ短く、quota/障害時に集中再試行する |
-| AUDIT-009 同期履歴 | High | **部分解消** | SyncRun/Targetの開始・成功・部分失敗・全失敗、24時間stale回収、90日保持を実装 | MemoryStore中心に各状態とretentionを確認 | error logに `runId` がなく、永続履歴とログを相関できない。stale/retentionのMySQL検証なし |
-| AUDIT-010 3チャンネル上限 | High | **解消済み** | User行を `FOR UPDATE` し、serializable transaction内でcount+create。一時停止もcount対象 | 実MySQLで本当に並行登録し、成功1/上限エラー1、合計3件を確認 | Prisma P2034の限定再試行はないが、同一User行lockの実経路は成立。将来DB/driver変更時は監視が必要 |
-| AUDIT-011 暗号鍵 | High | **部分解消** | 32-byte、重複ID、既知の正確なdefault文字列は拒否。AES-256-GCM、ランダム12-byte IV、auth tag、key IDを暗号文に保持 | default/長さ/重複/複数鍵を確認 | `v2:` に変更した同じ全ゼロ32-byte鍵はreal/productionで受理することを再現。既知・低entropy鍵の拒否という根本要件を満たさない。IV非再利用・tamper/rotationの明示テストも不足 |
-| AUDIT-012 clean install | High | **解消済み** | postinstall、pretypecheck、prebuildとTurbo依存がPrisma生成を保証 | 実際に全6 `node_modules` を削除しfrozen installから品質ゲート成功 | postinstall自体の問題は再現せず |
-| AUDIT-013 root `.env` | High | **解消済み** | `import.meta.url` からroot `.env` の絶対位置を解決し、API/workerが同じloaderを使用。real/production必須値をfail-fast | path契約とenv test、clean buildを確認 | 実資格情報による起動はstaging事項。今回の再監査では唯一許可されたreport以外を作らないため一時 `.env` smokeは再実施せず、既存回帰テストと静的経路を確認 |
+| ID                           | 元の重要度 | 判定             | 根拠                                                                                                                       | テスト                                                                                                | 残存リスク                                                                                                                                                                 |
+| ---------------------------- | ---------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AUDIT-003 Calendar削除・復旧 | High       | **新規問題あり** | hash一致時も存在確認し、event 404とCalendar 404/410、決定的ID、mapping更新を実装。ただし初回同期では履歴を無制限に列挙する | event 404、Calendar 404、mapping差替、重複なしをmockで確認。410と「過去を復元しない」は直接テストなし | 新規High R-H01: 新規登録・Calendar再構築経路で過去のCOMPLETED配信を作成できる                                                                                              |
+| AUDIT-004 配信状態追跡       | High       | **新規問題あり** | 既知video IDの詳細再取得、状態・実終了・UNAVAILABLEを実装。通常動画をupcoming検索から除外                                  | 時系列fixtureでUPCOMING/LIVE/COMPLETED/UNAVAILABLE等を確認                                            | 新規High R-H02: `search.list` の最大10ページをチャンネルごとに定期実行し、現行既定quotaを容易に枯渇。毎観測時の `sourceUpdatedAt` 更新もCalendar存在確認を増幅             |
+| AUDIT-005 プレミア公開判定   | High       | **解消済み**     | duration heuristicを廃止し、第三者Data APIで確定不能な種別をUNKNOWNとしてDB/API/Calendarで扱う                             | duration非依存、live、通常動画除外を確認                                                              | UNKNOWNが増えることは意図した安全側仕様。Webは種別へ依存しない                                                                                                             |
+| AUDIT-006 分散ロック         | High       | **部分解消**     | API/worker共通PrismaStoreの `SyncLease`、atomic create/期限切れupdate、owner付きrenew/releaseを実装                        | MemoryStore同時同期と実MySQL leaseを確認                                                              | DB時刻でなく各processのアプリ時刻を比較するためclock skewで早期奪取/回収遅延があり得る。期限切れ回収、異なるkey、manual対scheduled、crashを実DB end-to-endで未検証         |
+| AUDIT-007 Calendar重複防止   | High       | **解消済み**     | user ID + video IDのSHA-256から安定IDを生成し、GoogleのID文字・長さ制約内。409はPATCHへ収束                                | mapping保存失敗後、409→PATCH、再実行1件を確認                                                         | 暗号学的衝突は現実的でない。外部実サービス確認はstaging事項                                                                                                                |
+| AUDIT-008 OAuthエラー処理    | High       | **部分解消**     | invalid_grantのみreauth、429/5xx/network/timeoutはretryable、最大3回、reauth user除外、secret非記録                        | 主なstatus分類、3回上限、再連携をmockで確認                                                           | 待機が50ms/100msでjitterなし、`Retry-After` 無視。公式推奨の秒単位指数backoffに比べ短く、quota/障害時に集中再試行する                                                      |
+| AUDIT-009 同期履歴           | High       | **部分解消**     | SyncRun/Targetの開始・成功・部分失敗・全失敗、24時間stale回収、90日保持を実装                                              | MemoryStore中心に各状態とretentionを確認                                                              | error logに `runId` がなく、永続履歴とログを相関できない。stale/retentionのMySQL検証なし                                                                                   |
+| AUDIT-010 3チャンネル上限    | High       | **解消済み**     | User行を `FOR UPDATE` し、serializable transaction内でcount+create。一時停止もcount対象                                    | 実MySQLで本当に並行登録し、成功1/上限エラー1、合計3件を確認                                           | Prisma P2034の限定再試行はないが、同一User行lockの実経路は成立。将来DB/driver変更時は監視が必要                                                                            |
+| AUDIT-011 暗号鍵             | High       | **部分解消**     | 32-byte、重複ID、既知の正確なdefault文字列は拒否。AES-256-GCM、ランダム12-byte IV、auth tag、key IDを暗号文に保持          | default/長さ/重複/複数鍵を確認                                                                        | `v2:` に変更した同じ全ゼロ32-byte鍵はreal/productionで受理することを再現。既知・低entropy鍵の拒否という根本要件を満たさない。IV非再利用・tamper/rotationの明示テストも不足 |
+| AUDIT-012 clean install      | High       | **解消済み**     | postinstall、pretypecheck、prebuildとTurbo依存がPrisma生成を保証                                                           | 実際に全6 `node_modules` を削除しfrozen installから品質ゲート成功                                     | postinstall自体の問題は再現せず                                                                                                                                            |
+| AUDIT-013 root `.env`        | High       | **解消済み**     | `import.meta.url` からroot `.env` の絶対位置を解決し、API/workerが同じloaderを使用。real/production必須値をfail-fast       | path契約とenv test、clean buildを確認                                                                 | 実資格情報による起動はstaging事項。今回の再監査では唯一許可されたreport以外を作らないため一時 `.env` smokeは再実施せず、既存回帰テストと静的経路を確認                     |
 
 ## 7. 根拠となるファイルとコード
 
 主要な根拠を以下にまとめる（行番号は対象HEAD時点）。
 
-| 論点 | 根拠 |
-| --- | --- |
+| 論点                           | 根拠                                                                                                                                                   |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | 削除tombstone・段階再開・lease | `apps/api/src/application/oshi-service.ts:116-199`、`prisma/schema.prisma`、`prisma/migrations/20260720090000_critical_high_remediation/migration.sql` |
-| Supabase削除timeout欠落 | `apps/api/src/infrastructure/auth/auth.ts:37-53` |
-| CUID契約 | `packages/shared/src/schemas.ts`、`apps/api/src/presentation/routes.ts`、`docs/api/openapi.yaml`、`apps/api/src/prisma-api.integration.test.ts` |
-| 初回同期の無制限履歴 | `apps/api/src/infrastructure/database/prisma-store.ts:371-382`、`apps/api/src/application/sync-service.ts:110-141` |
-| Calendar存在確認・決定的ID | `apps/api/src/application/sync-service.ts:11-12,119-140`、`apps/api/src/infrastructure/google-calendar/google-calendar-gateway.ts` |
-| YouTubeページング・追跡 | `apps/api/src/infrastructure/youtube/youtube-data-gateway.ts:130-170`、`apps/api/src/infrastructure/database/prisma-store.ts:311-357` |
-| DB lease | `apps/api/src/infrastructure/database/prisma-store.ts:431-453`、`apps/api/src/application/sync-service.ts:23-31,53-73,104,116,190` |
-| OAuth分類・retry | `apps/api/src/infrastructure/google-calendar/google-calendar-gateway.ts:17-66` |
-| 同期履歴・ログ相関 | `apps/api/src/application/sync-service.ts:55-72,148-187,194-215`、`apps/api/src/infrastructure/database/prisma-store.ts:455-535` |
-| 3件上限 | `apps/api/src/infrastructure/database/prisma-store.ts:257-275` |
-| 暗号鍵 | `apps/api/src/infrastructure/env.ts:8,26-43`、`apps/api/src/infrastructure/encryption/aes-token-cipher.ts` |
-| clean install / env | `package.json`、`turbo.json`、`prisma.config.ts`、`apps/api/src/infrastructure/env.ts:5-6` |
+| Supabase削除timeout欠落        | `apps/api/src/infrastructure/auth/auth.ts:37-53`                                                                                                       |
+| CUID契約                       | `packages/shared/src/schemas.ts`、`apps/api/src/presentation/routes.ts`、`docs/api/openapi.yaml`、`apps/api/src/prisma-api.integration.test.ts`        |
+| 初回同期の無制限履歴           | `apps/api/src/infrastructure/database/prisma-store.ts:371-382`、`apps/api/src/application/sync-service.ts:110-141`                                     |
+| Calendar存在確認・決定的ID     | `apps/api/src/application/sync-service.ts:11-12,119-140`、`apps/api/src/infrastructure/google-calendar/google-calendar-gateway.ts`                     |
+| YouTubeページング・追跡        | `apps/api/src/infrastructure/youtube/youtube-data-gateway.ts:130-170`、`apps/api/src/infrastructure/database/prisma-store.ts:311-357`                  |
+| DB lease                       | `apps/api/src/infrastructure/database/prisma-store.ts:431-453`、`apps/api/src/application/sync-service.ts:23-31,53-73,104,116,190`                     |
+| OAuth分類・retry               | `apps/api/src/infrastructure/google-calendar/google-calendar-gateway.ts:17-66`                                                                         |
+| 同期履歴・ログ相関             | `apps/api/src/application/sync-service.ts:55-72,148-187,194-215`、`apps/api/src/infrastructure/database/prisma-store.ts:455-535`                       |
+| 3件上限                        | `apps/api/src/infrastructure/database/prisma-store.ts:257-275`                                                                                         |
+| 暗号鍵                         | `apps/api/src/infrastructure/env.ts:8,26-43`、`apps/api/src/infrastructure/encryption/aes-token-cipher.ts`                                             |
+| clean install / env            | `package.json`、`turbo.json`、`prisma.config.ts`、`apps/api/src/infrastructure/env.ts:5-6`                                                             |
 
-外部仕様との照合では、Google Calendar event IDは小文字 `a-v` と数字 `0-9`、長さ5–1024という制約であり、現行の `oshi` + SHA-256 hexは適合する。一方、YouTube Data APIの現行ドキュメントでは `search.list` は別枠の既定100 calls/dayで、追加ページも1 callを消費する。OAuth/Calendar quotaの公式ガイドはtruncated exponential backoffとjitterを推奨する。
+外部仕様との照合では、Google Calendar event IDは小文字 `a-v` と数字 `0-9`、長さ5–1024という制約であり、現行の `oshi` + SHA-256 hexは適合する。一方、2026-06-01時点のYouTube Data APIでは `search.list` は独立bucketで1 request=1 unit、現行の標準割当は100 unit/dayであり、追加ページもrequestごとに1 unitを消費する。割当は変更され得るためCloud Consoleを正とする。OAuth/Calendar quotaの公式ガイドはtruncated exponential backoffとjitterを推奨する。
 
 - [Google Calendar events.insert](https://developers.google.com/workspace/calendar/api/v3/reference/events/insert)
 - [YouTube quota cost calculator](https://developers.google.com/youtube/v3/determine_quota_cost)
@@ -184,8 +184,8 @@ Git上の修正範囲は `867c6b0..c3e558f` の1コミットで、`git show --st
 - 重要度: **High**
 - 対象ファイル: `apps/api/src/infrastructure/youtube/youtube-data-gateway.ts:130-149`、`apps/api/src/application/sync-service.ts:81-103,194-210`、`apps/api/src/infrastructure/database/prisma-store.ts:311-330`
 - 対象コード: 1チャンネル取得で `search.list` を最大10ページ実行し、scheduled workerは購読単位で同期する。チャンネルfreshnessは通常の直列run内では重複を抑えるが、別process/別subscription leaseから同一チャンネルを同時取得するchannel-level leaseはない。またupsertは実質差分がなくても `sourceUpdatedAt=observedAt` にする。
-- 発生条件: hourly workerで5チャンネルを各1ページ取得すると120 calls/day。1チャンネルが10ページなら10時間で100 callsへ達する。同一チャンネルへの並行manual/worker実行はさらに重複し得る。
-- 影響: 現行の既定100 calls/dayの `search.list` 別枠quotaを枯渇し、予定取得が日中に停止する。再試行・Calendar存在確認のfan-outも増える。
+- 発生条件: hourly workerで5チャンネルを各1ページ取得するとsearch bucketを120 unit/day要求する。1チャンネル10ページなら10時間で100 unitを要求する。同一チャンネルへの並行manual/worker実行はさらに重複し得る。
+- 影響: 現行標準割当ではsearch bucketを枯渇し、予定取得が日中に停止する。割当値が異なるprojectでも予算管理がなければ同じ障害になる。再試行・Calendar存在確認のfan-outも増える。
 - 修正方針: channel単位のDB leaseと取得jobを導入し、subscription同期とYouTube取得を分離する。日次quota budget、ページ上限/停止条件、quota使用量の監視と劣化動作を定義し、必要ならquota増枠を申請する。変更があるときだけ `sourceUpdatedAt` を進める。
 - 必要なテスト: 24時間・最大3購読/User・共有チャンネル・複数workerをモデル化したcall budget、最大ページ、同一channel並行、quota超過時の部分失敗と翌日復帰、無変更時にCalendar GETを増やさないことを検証する。
 
@@ -221,3 +221,19 @@ Git上の修正範囲は `867c6b0..c3e558f` の1コミットで、`git show --st
 5. OAuthを秒単位+jitter+`Retry-After` 対応へし、Sync error logへ `runId` を含める。DB lease/stale/retentionの実MySQL異常系を拡張する。
 
 本再監査で変更したのはこのレポートだけであり、アプリケーションコード、設定、既存テスト、既存ドキュメントは変更していない。
+
+## 修正追跡（2026-07-20）
+
+本節は元の独立判定を削除・上書きせず、後続修正を追跡する。
+
+| 再監査項目        | 対応状況 | 主な修正                                                      | 主な修正ファイル                                                  | 追加テスト                                                     | 検証結果                   | 修正後の残存リスク                                  |
+| ----------------- | -------- | ------------------------------------------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------- | --------------------------------------------------- |
+| AUDIT-001部分解消 | 修正済み | 全削除HTTPへtimeout、owner+version fencing、条件付きstep更新  | `auth.ts`、`google-calendar-gateway.ts`、`oshi-service.ts`、Store | timeout/404/5xx、再開、stale writer、owner/version/期限        | unit/API/MySQL成功         | 実Supabaseでのtimeout/削除済み曖昧応答はstaging確認 |
+| AUDIT-006部分解消 | 修正済み | DB時刻lease、version takeover、channel lease、stale owner拒否 | `prisma-store.ts`、`memory-store.ts`、`sync-service.ts`、schema   | 固定Clock、MySQL期限切れtakeover/非owner/別key                 | unit/MySQL成功             | 複数host process kill負荷はstaging確認              |
+| AUDIT-008部分解消 | 修正済み | 秒単位指数backoff+jitter、Retry-After、最大待機               | `google-calendar-gateway.ts`、`env.ts`                            | 429/5xx/timeout、delay、jitter、Retry-After、3回上限           | gateway 10件成功           | 実Googleのheader/date形式はstaging確認              |
+| AUDIT-009部分解消 | 修正済み | error logへrunId追加、quota延期をSKIPPED履歴化                | `sync-service.ts`、shared status、OpenAPI                         | logger spy、延期target                                         | sync 13件・API契約成功     | 集約監視基盤への表示はdeploy作業                    |
+| AUDIT-011部分解消 | 修正済み | key ID非依存の低entropy鍵拒否                                 | `env.ts`、`aes-token-cipher.ts`関連test                           | v2全ゼロ、反復byte、IV、tamper、rotation                       | env 6件・AES 4件成功       | Secret Manager実運用rotationはstaging/運用確認      |
+| R-H01             | 修正済み | mappingなしはUPCOMING/LIVEだけ新規作成                        | `sync-service.ts`、Store                                          | mapped/unmapped COMPLETED/UNAVAILABLE、LIVE、未来、反復        | sync 13件成功              | 実Calendar復元はstaging確認                         |
+| R-H02             | 修正済み | DB quota予約、bucket、channel共有、延期cache、真の差分更新    | YouTube gateway/quota、Store、SyncService、schema/migration       | unit、retry、page、日付/DST、予約上限、共有、延期、MySQL30並列 | gateway 9件・MySQL 6件成功 | 実project割当・実消費はCloud Console/staging確認    |
+
+修正ファイル、最終コマンド結果、件数、migration、残存リスクの確定値は[再監査修正台帳](./reaudit-remediation.md)に記録する。

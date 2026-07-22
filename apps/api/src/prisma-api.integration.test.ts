@@ -35,6 +35,9 @@ async function clean() {
   await prisma.accountDeletionRequest.deleteMany({
     where: { supabaseUserId: { in: ['prisma-owner', 'prisma-other'] } },
   });
+  await prisma.youTubeQuotaUsage.deleteMany({
+    where: { quotaDate: { startsWith: '2099-' } },
+  });
   await prisma.user.deleteMany({
     where: { supabaseUserId: { in: ['prisma-owner', 'prisma-other'] } },
   });
@@ -166,30 +169,73 @@ describe.runIf(Boolean(databaseUrl))('API with Prisma/MySQL IDs and constraints'
   it('enforces and renews a cross-process lease in MySQL', async () => {
     const key = 'integration:shared-sync';
     const now = new Date('2026-07-20T10:00:00Z');
-    const expiresAt = new Date('2026-07-20T10:15:00Z');
     const results = await Promise.all([
-      store.acquireSyncLease(key, 'owner-a', now, expiresAt),
-      store.acquireSyncLease(key, 'owner-b', now, expiresAt),
+      store.acquireSyncLease(key, 'owner-a', now, 900_000),
+      store.acquireSyncLease(key, 'owner-b', now, 900_000),
     ]);
     expect(results.filter(Boolean)).toHaveLength(1);
-    const owner = results[0] ? 'owner-a' : 'owner-b';
-    const other = owner === 'owner-a' ? 'owner-b' : 'owner-a';
+    const lease = results.find((result) => result)!;
     expect(
       await store.renewSyncLease(
-        key,
-        other,
-        new Date('2026-07-20T10:01:00Z'),
-        new Date('2026-07-20T10:16:00Z'),
+        { ...lease, ownerToken: lease.ownerToken === 'owner-a' ? 'owner-b' : 'owner-a' },
+        now,
+        900_000,
       ),
     ).toBe(false);
-    expect(
-      await store.renewSyncLease(
-        key,
-        owner,
-        new Date('2026-07-20T10:01:00Z'),
-        new Date('2026-07-20T10:16:00Z'),
+    expect(await store.renewSyncLease(lease, now, 900_000)).toBe(true);
+
+    await prisma.syncLease.update({
+      where: { key },
+      data: { expiresAt: new Date('2000-01-01T00:00:00Z') },
+    });
+    const successor = await store.acquireSyncLease(key, 'owner-successor', now, 900_000);
+    expect(successor?.version).toBe(lease.version + 1);
+    expect(await store.renewSyncLease(lease, now, 900_000)).toBe(false);
+    expect(await store.releaseSyncLease(lease)).toBe(false);
+    expect(await store.releaseSyncLease(successor!)).toBe(true);
+  });
+
+  it('atomically reserves YouTube quota without exceeding the budget', async () => {
+    const attempts = await Promise.all(
+      Array.from({ length: 30 }, () =>
+        store.reserveYouTubeQuota('2099-07-20', 'GENERAL', 1, 10, 0, 'SCHEDULED'),
       ),
+    );
+    expect(attempts.filter((result) => result.granted)).toHaveLength(10);
+    const usage = await prisma.youTubeQuotaUsage.findUnique({
+      where: { quotaDate_bucket: { quotaDate: '2099-07-20', bucket: 'GENERAL' } },
+    });
+    expect(usage).toMatchObject({ unitsUsed: 0, unitsReserved: 10 });
+    await Promise.all(
+      Array.from({ length: 10 }, () => store.consumeYouTubeQuota('2099-07-20', 'GENERAL', 1)),
+    );
+    expect(
+      await prisma.youTubeQuotaUsage.findUnique({
+        where: { quotaDate_bucket: { quotaDate: '2099-07-20', bucket: 'GENERAL' } },
+      }),
+    ).toMatchObject({ unitsUsed: 10, unitsReserved: 0 });
+  });
+
+  it('atomically fences account deletion step updates in MySQL', async () => {
+    const user = await store.findUserBySubject('prisma-owner');
+    const deletion = await store.beginAccountDeletion(user!);
+    const key = 'integration:fenced-account-deletion';
+    const first = (await store.acquireSyncLease(key, 'old-owner', new Date(), 900_000))!;
+    await prisma.syncLease.update({
+      where: { key },
+      data: { expiresAt: new Date('2000-01-01T00:00:00Z') },
+    });
+    const successor = (await store.acquireSyncLease(key, 'new-owner', new Date(), 900_000))!;
+    const at = new Date('2026-07-20T10:00:00Z');
+    expect(await store.markAccountDeletionStep(deletion.id, 'CALENDAR_DELETED', at, first)).toBe(
+      false,
+    );
+    expect(
+      await store.markAccountDeletionStep(deletion.id, 'CALENDAR_DELETED', at, successor),
     ).toBe(true);
-    await store.releaseSyncLease(key, owner);
+    expect(await store.findAccountDeletion('prisma-owner')).toMatchObject({
+      status: 'CALENDAR_DELETED',
+    });
+    await store.releaseSyncLease(successor);
   });
 });

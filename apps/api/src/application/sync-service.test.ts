@@ -14,6 +14,7 @@ class MutableYouTube implements YouTubeGateway {
   refreshed: NormalizedBroadcast[] = [];
   unavailableVideoIds: string[] = [];
   pause: Promise<void> | null = null;
+  upcomingCalls = 0;
   async resolveHandle(handle: string) {
     return {
       id: 'external',
@@ -25,6 +26,7 @@ class MutableYouTube implements YouTubeGateway {
     };
   }
   async listUpcoming() {
+    this.upcomingCalls += 1;
     if (this.pause) await this.pause;
     return this.upcoming;
   }
@@ -98,7 +100,9 @@ describe('SyncService', () => {
     const store = new MemoryStore();
     const { user, channel, subscription } = await setup(store);
     const observedAt = new Date('2026-07-20T10:30:00.000Z');
-    await store.upsertBroadcasts(channel.id, [broadcast()], observedAt);
+    const initialAt = new Date('2026-07-20T08:30:00.000Z');
+    await store.upsertBroadcasts(channel.id, [broadcast()], initialAt);
+    await store.updateChannelFetchedAt(channel.id, initialAt);
     const youtube = new MutableYouTube();
     youtube.refreshed = [
       broadcast({
@@ -110,9 +114,12 @@ describe('SyncService', () => {
       }),
     ];
     const calendar = new CountingCalendar();
-    const clock = { now: () => observedAt };
+    let current = initialAt;
+    const clock = { now: () => current };
     const service = new SyncService(store, youtube, calendar, clock, logger);
 
+    await service.syncSubscription(user.id, subscription.id, false);
+    current = observedAt;
     await service.syncSubscription(user.id, subscription.id, false);
     const stored = await store.listBroadcastsForSync(channel.id, observedAt, null);
     expect(stored[0]).toMatchObject({ status: 'COMPLETED', endTimeProvisional: false });
@@ -121,8 +128,8 @@ describe('SyncService', () => {
 
     await service.syncSubscription(user.id, subscription.id, false);
     expect(calendar.events.size).toBe(1);
-    expect(calendar.upserts).toBe(1);
-    expect(store.syncRuns.map((run) => run.status)).toEqual(['SUCCESS', 'SUCCESS']);
+    expect(calendar.upserts).toBe(2);
+    expect(store.syncRuns.map((run) => run.status)).toEqual(['SUCCESS', 'SUCCESS', 'SUCCESS']);
   });
 
   it('recreates a manually deleted event even when managed fields are unchanged', async () => {
@@ -175,7 +182,7 @@ describe('SyncService', () => {
     expect(store.syncRuns.map((run) => run.status)).toEqual(['FAILED', 'SUCCESS']);
   });
 
-  it('rejects a concurrent sync through the shared store lease', async () => {
+  it('rejects a concurrent manual sync while a scheduled sync holds the shared lease', async () => {
     const store = new MemoryStore();
     const { user, subscription } = await setup(store);
     const youtube = new MutableYouTube();
@@ -192,7 +199,7 @@ describe('SyncService', () => {
     );
     const first = service.syncSubscription(user.id, subscription.id, false);
     await new Promise((resolve) => setTimeout(resolve, 0));
-    await expect(service.syncSubscription(user.id, subscription.id, false)).rejects.toMatchObject({
+    await expect(service.syncSubscription(user.id, subscription.id)).rejects.toMatchObject({
       code: 'SYNC_ALREADY_RUNNING',
     });
     release();
@@ -289,5 +296,183 @@ describe('SyncService', () => {
     expect(store.syncTargets.find((target) => target.runId === staleRun)?.status).toBe('FAILED');
     expect(store.syncRuns.some((run) => run.id === recentRun)).toBe(true);
     expect(store.syncRuns.some((run) => run.id === expiredRun)).toBe(false);
+  });
+
+  it('creates only future or live events when no mapping exists, regardless of provisional end', async () => {
+    const store = new MemoryStore();
+    const { user, channel, subscription } = await setup(store);
+    const now = new Date('2026-07-20T10:00:00Z');
+    await store.updateChannelFetchedAt(channel.id, now);
+    await store.upsertBroadcasts(
+      channel.id,
+      [
+        broadcast({ youtubeVideoId: 'past-completed', status: 'COMPLETED' }),
+        broadcast({ youtubeVideoId: 'past-unavailable', status: 'UNAVAILABLE' }),
+        broadcast({
+          youtubeVideoId: 'overrunning-live',
+          status: 'LIVE',
+          actualStartAt: new Date('2026-07-20T09:00:00Z'),
+          endAt: new Date('2026-07-20T09:30:00Z'),
+          endTimeProvisional: true,
+        }),
+        broadcast({
+          youtubeVideoId: 'future-upcoming',
+          status: 'UPCOMING',
+          scheduledStartAt: new Date('2026-07-21T09:00:00Z'),
+          endAt: new Date('2026-07-21T10:00:00Z'),
+        }),
+      ],
+      now,
+    );
+    const calendar = new CountingCalendar();
+    const service = new SyncService(
+      store,
+      new MutableYouTube(),
+      calendar,
+      { now: () => now },
+      logger,
+    );
+
+    await service.syncSubscription(user.id, subscription.id, false);
+    await service.syncSubscription(user.id, subscription.id, false);
+    expect(calendar.events.size).toBe(2);
+    expect(
+      [...calendar.events.values()]
+        .map((event) => event.extendedProperties.private.youtubeVideoId)
+        .sort(),
+    ).toEqual(['future-upcoming', 'overrunning-live']);
+    expect(calendar.upserts).toBe(2);
+  });
+
+  it('updates mapped past completed and unavailable events without backfilling unmapped history', async () => {
+    const store = new MemoryStore();
+    const { user, channel, subscription } = await setup(store);
+    const now = new Date('2026-07-20T10:00:00Z');
+    await store.updateChannelFetchedAt(channel.id, now);
+    const [completed, unavailable] = await store.upsertBroadcasts(
+      channel.id,
+      [
+        broadcast({ youtubeVideoId: 'mapped-completed', status: 'COMPLETED' }),
+        broadcast({ youtubeVideoId: 'mapped-unavailable', status: 'UNAVAILABLE' }),
+      ],
+      now,
+    );
+    const calendar = new CountingCalendar();
+    for (const [item, eventId] of [
+      [completed!, 'mappedcompleted'],
+      [unavailable!, 'mappedunavailable'],
+    ] as const) {
+      await calendar.upsertEvent(
+        user,
+        'calendar-sync',
+        eventId,
+        {
+          summary: 'old',
+          description: 'old',
+          start: start.toISOString(),
+          end: start.toISOString(),
+          status: 'confirmed',
+          extendedProperties: { private: { youtubeVideoId: item.youtubeVideoId } },
+        },
+        true,
+      );
+      await store.saveMapping({
+        userId: user.id,
+        broadcastId: item.id,
+        eventId,
+        managedFieldsHash: 'old-hash',
+      });
+    }
+    calendar.upserts = 0;
+    await new SyncService(
+      store,
+      new MutableYouTube(),
+      calendar,
+      { now: () => now },
+      logger,
+    ).syncSubscription(user.id, subscription.id, false);
+    expect(calendar.upserts).toBe(2);
+    expect(calendar.events.size).toBe(2);
+  });
+
+  it('uses cached broadcasts and records a deferred target when quota is unavailable', async () => {
+    const store = new MemoryStore();
+    const { user, channel, subscription } = await setup(store);
+    const now = new Date('2026-07-20T10:00:00Z');
+    await store.upsertBroadcasts(
+      channel.id,
+      [
+        broadcast({
+          youtubeVideoId: 'cached-future',
+          scheduledStartAt: new Date('2026-07-21T09:00:00Z'),
+          endAt: new Date('2026-07-21T10:00:00Z'),
+        }),
+      ],
+      now,
+    );
+    const youtube = new MutableYouTube();
+    youtube.listUpcoming = async () => {
+      throw new AppError('YOUTUBE_QUOTA_DEFERRED', 'deferred', 429, true, {
+        nextRetryAt: '2026-07-21T07:00:00.000Z',
+      });
+    };
+    const calendar = new FakeCalendarGateway();
+    const result = await new SyncService(
+      store,
+      youtube,
+      calendar,
+      { now: () => now },
+      logger,
+    ).syncSubscription(user.id, subscription.id, false);
+    expect(result).toMatchObject({ status: 'DEFERRED', nextRetryAt: '2026-07-21T07:00:00.000Z' });
+    expect(calendar.events.size).toBe(1);
+    expect(store.syncTargets[0]?.status).toBe('SKIPPED');
+    expect(
+      (await store.getSubscription(user.id, subscription.id))?.subscription.lastSyncStatus,
+    ).toBe('SKIPPED');
+    expect((await store.listBroadcastsForSync(channel.id, now, null))[0]?.status).toBe('UPCOMING');
+  });
+
+  it('fetches a shared YouTube channel once for multiple scheduled subscribers', async () => {
+    const store = new MemoryStore();
+    const first = await setup(store);
+    const secondUser = await store.ensureUser({ subject: 'shared-2', email: 'second@example.com' });
+    await store.completeOnboarding(secondUser.id, 'encrypted', 'v1', 'calendar-2');
+    await store.createSubscriptionWithinLimit(secondUser.id, first.channel.id, 3);
+    const youtube = new MutableYouTube();
+    await new SyncService(
+      store,
+      youtube,
+      new FakeCalendarGateway(),
+      { now: () => new Date('2026-07-20T10:00:00Z') },
+      logger,
+    ).runScheduled();
+    expect(youtube.upcomingCalls).toBe(1);
+  });
+
+  it('includes the persisted run ID in failure logs', async () => {
+    const store = new MemoryStore();
+    const { user, subscription } = await setup(store);
+    const entries: Array<Record<string, unknown>> = [];
+    const recordingLogger: AppLogger = {
+      info: () => undefined,
+      error: (data) => entries.push(data),
+    };
+    const calendar = new OneUserFailingCalendar();
+    calendar.failUserId = user.id;
+    await expect(
+      new SyncService(
+        store,
+        new MutableYouTube(),
+        calendar,
+        { now: () => new Date('2026-07-20T10:00:00Z') },
+        recordingLogger,
+      ).syncSubscription(user.id, subscription.id, false),
+    ).rejects.toBeInstanceOf(AppError);
+    expect(entries[0]).toMatchObject({
+      subscriptionId: subscription.id,
+      runId: store.syncRuns[0]?.id,
+      code: 'GOOGLE_CALENDAR_ERROR',
+    });
   });
 });

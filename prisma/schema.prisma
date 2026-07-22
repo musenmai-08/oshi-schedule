@@ -63,6 +63,11 @@ enum DeletionStatus {
   FAILED
 }
 
+enum YouTubeQuotaBucket {
+  GENERAL
+  SEARCH
+}
+
 /// Supabase Auth の主体とアプリ固有状態を保持する利用者。
 model User {
   id                    String                    @id @default(cuid())
@@ -227,21 +232,21 @@ model SyncTargetResult {
 
 /// 段階実行し再開できるアカウント削除要求。
 model AccountDeletionRequest {
-  id                     String         @id @default(cuid())
-  supabaseUserId         String         @unique @db.VarChar(64)
-  userId                 String?        @unique
-  calendarIdSnapshot     String?        @db.VarChar(255)
-  status                 DeletionStatus @default(REQUESTED)
-  attempts               Int            @default(0)
-  lastErrorCode          String?        @db.VarChar(64)
-  requestedAt            DateTime       @default(now()) @db.DateTime(3)
-  calendarDeletedAt      DateTime?      @db.DateTime(3)
-  googleTokenRevokedAt   DateTime?      @db.DateTime(3)
-  userDataDeletedAt      DateTime?      @db.DateTime(3)
-  supabaseUserDeletedAt  DateTime?      @db.DateTime(3)
-  completedAt            DateTime?      @db.DateTime(3)
-  updatedAt              DateTime       @updatedAt @db.DateTime(3)
-  user                   User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  id                    String         @id @default(cuid())
+  supabaseUserId        String         @unique @db.VarChar(64)
+  userId                String?        @unique
+  calendarIdSnapshot    String?        @db.VarChar(255)
+  status                DeletionStatus @default(REQUESTED)
+  attempts              Int            @default(0)
+  lastErrorCode         String?        @db.VarChar(64)
+  requestedAt           DateTime       @default(now()) @db.DateTime(3)
+  calendarDeletedAt     DateTime?      @db.DateTime(3)
+  googleTokenRevokedAt  DateTime?      @db.DateTime(3)
+  userDataDeletedAt     DateTime?      @db.DateTime(3)
+  supabaseUserDeletedAt DateTime?      @db.DateTime(3)
+  completedAt           DateTime?      @db.DateTime(3)
+  updatedAt             DateTime       @updatedAt @db.DateTime(3)
+  user                  User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([status, requestedAt])
 }
@@ -250,9 +255,23 @@ model AccountDeletionRequest {
 model SyncLease {
   key        String   @id @db.VarChar(191)
   ownerToken String   @db.VarChar(64)
+  version    Int      @default(1)
   expiresAt  DateTime @db.DateTime(3)
   createdAt  DateTime @default(now()) @db.DateTime(3)
   updatedAt  DateTime @updatedAt @db.DateTime(3)
 
   @@index([expiresAt])
+}
+
+/// YouTube Data APIの日次quota予約。quotaDateは設定timezoneでの日付ラベル。
+model YouTubeQuotaUsage {
+  quotaDate     String             @db.Char(10)
+  bucket        YouTubeQuotaBucket
+  unitsUsed     Int                @default(0)
+  unitsReserved Int                @default(0)
+  createdAt     DateTime           @default(now()) @db.DateTime(3)
+  updatedAt     DateTime           @updatedAt @db.DateTime(3)
+
+  @@id([quotaDate, bucket])
+  @@index([updatedAt])
 }

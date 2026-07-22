@@ -11,6 +11,7 @@
 | 7     | MUI dashboard と状態 UI                          | 完了 |
 | 8     | 再連携・account deletion                         | 完了 |
 | 9     | unit/integration/E2E、型/lint/build、文書同期    | 完了 |
+| 10    | 再監査残件、fencing、quota budget、再回帰検証    | 完了 |
 
 ## ローカル受入
 
@@ -27,3 +28,7 @@
 ## Critical・High remediation（2026-07-20）
 
 監査で検出したCritical 2件、High 11件は [修正台帳](../reviews/critical-high-remediation.md) で追跡し、全件を修正済みにした。追加migrationで削除墓石、broadcast状態、SyncLeaseを導入し、CUID契約、Calendar reconciliation、既知video追跡、DB排他、SyncRun、暗号鍵fail-fast、clean生成、root `.env` 読込を実装した。Node 22.23.1で通常43件、MySQL 4件、E2E 1件、型/lint/build/worker、clean install、空/既存DB migrationを検証した。実資格情報が必要な受入手順と残存リスクは台帳に記録する。
+
+## Reaudit remediation（2026-07-20）
+
+[独立再監査](../reviews/critical-high-reaudit.md)で解消済みとされなかったCritical 1件・High 6件を[再監査修正台帳](../reviews/reaudit-remediation.md)で追跡し、全件を修正済みにした。追加migrationでSyncLease versionとYouTubeQuotaUsageを導入し、削除timeout/fencing、過去event作成防止、channel共有取得、quota延期、OAuth backoff、runId相関、低entropy鍵拒否を実装した。Node 22.23.1で通常69件、MySQL 6件、E2E 1件、型/lint/build/worker、clean install、既存/空DB migrationとschema diffを検証し、Phase 10を完了した。

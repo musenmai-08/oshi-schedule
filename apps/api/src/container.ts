@@ -51,7 +51,24 @@ export function createContainer(env: Env, overrides: ContainerOverrides = {}): C
     overrides.youtube ??
     (env.APP_MODE === 'fake'
       ? new FakeYouTubeGateway()
-      : new YouTubeDataGateway(env.YOUTUBE_API_KEY ?? ''));
+      : new YouTubeDataGateway(
+          env.YOUTUBE_API_KEY ?? '',
+          env.EXTERNAL_API_TIMEOUT_MS,
+          store,
+          clock,
+          logger,
+          {
+            dailyBudget: env.YOUTUBE_DAILY_QUOTA_BUDGET,
+            dailySearchBudget: env.YOUTUBE_DAILY_SEARCH_QUOTA_BUDGET,
+            scheduledReserve: env.YOUTUBE_SCHEDULED_QUOTA_RESERVE,
+            scheduledSearchReserve: env.YOUTUBE_SCHEDULED_SEARCH_QUOTA_RESERVE,
+            timeZone: env.YOUTUBE_QUOTA_TIMEZONE,
+            maxSearchPages: env.YOUTUBE_MAX_SEARCH_PAGES,
+            maxAttempts: env.YOUTUBE_API_MAX_ATTEMPTS,
+            retryBaseDelayMs: env.YOUTUBE_RETRY_BASE_DELAY_MS,
+            retryMaxDelayMs: env.YOUTUBE_RETRY_MAX_DELAY_MS,
+          },
+        ));
   const calendar =
     overrides.calendar ??
     (env.APP_MODE === 'fake'
@@ -61,6 +78,11 @@ export function createContainer(env: Env, overrides: ContainerOverrides = {}): C
           cipher,
           env.GOOGLE_CLIENT_ID ?? '',
           env.GOOGLE_CLIENT_SECRET ?? '',
+          env.EXTERNAL_API_TIMEOUT_MS,
+          undefined,
+          env.OAUTH_RETRY_BASE_DELAY_MS,
+          undefined,
+          env.OAUTH_RETRY_MAX_DELAY_MS,
         ));
   const auth =
     overrides.auth ??
@@ -71,8 +93,21 @@ export function createContainer(env: Env, overrides: ContainerOverrides = {}): C
     overrides.authAdmin ??
     (env.APP_MODE === 'fake'
       ? new FakeAuthAdmin()
-      : new SupabaseAuthAdmin(env.SUPABASE_URL ?? '', env.SUPABASE_SERVICE_ROLE_KEY ?? ''));
-  const sync = new SyncService(store, youtube, calendar, clock, logger);
-  const service = new OshiService(store, youtube, calendar, cipher, clock, authAdmin, sync);
+      : new SupabaseAuthAdmin(
+          env.SUPABASE_URL ?? '',
+          env.SUPABASE_SERVICE_ROLE_KEY ?? '',
+          env.EXTERNAL_API_TIMEOUT_MS,
+        ));
+  const sync = new SyncService(store, youtube, calendar, clock, logger, env.SYNC_LEASE_MS);
+  const service = new OshiService(
+    store,
+    youtube,
+    calendar,
+    cipher,
+    clock,
+    authAdmin,
+    sync,
+    env.ACCOUNT_DELETION_LEASE_MS,
+  );
   return { service, store, auth, invitation: new AllowedEmailInvitationPolicy(env.ALLOWED_EMAILS) };
 }

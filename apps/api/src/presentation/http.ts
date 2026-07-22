@@ -65,7 +65,11 @@ export const errorHandler = (
     'request failed',
   );
   response.status(appError.status).json({
-    error: { code: appError.code, message: appError.message },
+    error: {
+      code: appError.code,
+      message: appError.message,
+      ...(appError.details ? { details: appError.details } : {}),
+    },
     requestId: response.locals.requestId,
   });
 };

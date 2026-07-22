@@ -73,3 +73,7 @@
 - 元の指摘は監査履歴として削除せず、[実装監査](./implementation-audit.md)の対応追記から本台帳へ参照する。
 - errorCodeには安全な定数だけを保存し、OAuth/APIレスポンス全文やtokenを保存しない。
 - DB変更は既存初期migrationを書き換えず、追加migrationだけで適用する。
+
+## 独立再監査後の追補
+
+本台帳の「修正済み」は当時の検証結果であり、独立再監査でAUDIT-001/006/008/009/011が部分解消、AUDIT-003/004に新規Highが見つかった。後続対応は[再監査修正台帳](./reaudit-remediation.md)で追跡し、削除HTTP timeoutとfencing、DB時刻lease、OAuth backoff/Retry-After、runIdログ、低entropy鍵拒否、過去event作成防止、YouTube quota unit予算を追加した。元の記録は監査証跡として保持する。

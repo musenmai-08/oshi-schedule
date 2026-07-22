@@ -11,6 +11,9 @@ import type {
   SyncResult,
   UserRecord,
   DeletionStep,
+  LeaseOwnership,
+  YouTubeQuotaBucket,
+  YouTubeQuotaMode,
 } from '../../application/models.js';
 import type { NormalizedBroadcast } from '../../domain/scheduling.js';
 import { StoreConstraintError } from '../../domain/errors.js';
@@ -23,7 +26,8 @@ export class MemoryStore implements Store {
   private broadcasts: BroadcastRecord[] = [];
   private mappings: MappingRecord[] = [];
   private deletions: AccountDeletionRecord[] = [];
-  private leases = new Map<string, { ownerToken: string; expiresAt: Date }>();
+  private leases = new Map<string, { ownerToken: string; expiresAt: Date; version: number }>();
+  private quota = new Map<string, { unitsUsed: number; unitsReserved: number }>();
   readonly syncRuns: Array<{
     id: string;
     status: string;
@@ -67,6 +71,7 @@ export class MemoryStore implements Store {
     this.mappings = [];
     this.deletions = [];
     this.leases.clear();
+    this.quota.clear();
     this.syncRuns.length = 0;
     this.syncTargets.length = 0;
     this.seedDemo();
@@ -103,6 +108,7 @@ export class MemoryStore implements Store {
       userId: user.id,
       calendarIdSnapshot: user.calendarId,
       status: 'REQUESTED',
+      lastErrorCode: null,
       calendarDeletedAt: null,
       googleTokenRevokedAt: null,
       userDataDeletedAt: null,
@@ -112,19 +118,36 @@ export class MemoryStore implements Store {
     this.deletions.push(request);
     return request;
   }
-  async markAccountDeletionStep(id: string, step: DeletionStep, at: Date) {
+  private ownsLease(lease: LeaseOwnership, at: Date) {
+    const found = this.leases.get(lease.key);
+    return Boolean(
+      found &&
+      found.ownerToken === lease.ownerToken &&
+      found.version === lease.version &&
+      found.expiresAt > at,
+    );
+  }
+  async markAccountDeletionStep(id: string, step: DeletionStep, at: Date, lease: LeaseOwnership) {
+    if (!this.ownsLease(lease, at)) return false;
     const request = this.deletions.find((item) => item.id === id);
     if (!request) throw new Error('deletion request not found');
     request.status = step;
+    request.lastErrorCode = null;
     if (step === 'CALENDAR_DELETED') request.calendarDeletedAt = at;
     if (step === 'TOKEN_REVOKED') request.googleTokenRevokedAt = at;
     if (step === 'DATA_DELETED') request.userDataDeletedAt = at;
     if (step === 'AUTH_DELETED') request.supabaseUserDeletedAt = at;
     if (step === 'COMPLETED') request.completedAt = at;
+    return true;
   }
-  async markAccountDeletionFailed(id: string) {
+  async markAccountDeletionFailed(id: string, errorCode: string, at: Date, lease: LeaseOwnership) {
+    if (!this.ownsLease(lease, at)) return false;
     const request = this.deletions.find((item) => item.id === id);
-    if (request) request.status = 'FAILED';
+    if (request) {
+      request.status = 'FAILED';
+      request.lastErrorCode = errorCode;
+    }
+    return Boolean(request);
   }
   async saveCredential(userId: string, encryptedToken: string) {
     this.credentials.set(userId, encryptedToken);
@@ -166,6 +189,9 @@ export class MemoryStore implements Store {
   }
   async findChannelByYoutubeId(id: string) {
     return this.channels.find((item) => item.youtubeChannelId === id) ?? null;
+  }
+  async findChannelById(id: string) {
+    return this.channels.find((item) => item.id === id) ?? null;
   }
   async upsertChannel(input: ChannelSummary) {
     const found = await this.findChannelByYoutubeId(input.youtubeChannelId);
@@ -231,7 +257,21 @@ export class MemoryStore implements Store {
     return inputs.map((input) => {
       const found = this.broadcasts.find((item) => item.youtubeVideoId === input.youtubeVideoId);
       if (found) {
-        Object.assign(found, input, { missingCount: 0, sourceUpdatedAt: observedAt });
+        const changed =
+          found.title !== input.title ||
+          found.kind !== input.kind ||
+          found.status !== input.status ||
+          found.youtubeUrl !== input.youtubeUrl ||
+          found.thumbnailUrl !== input.thumbnailUrl ||
+          found.scheduledStartAt.getTime() !== input.scheduledStartAt.getTime() ||
+          found.endAt.getTime() !== input.endAt.getTime() ||
+          found.endTimeProvisional !== input.endTimeProvisional ||
+          found.actualStartAt?.getTime() !== input.actualStartAt?.getTime() ||
+          found.actualEndAt?.getTime() !== input.actualEndAt?.getTime();
+        Object.assign(found, input, {
+          missingCount: 0,
+          ...(changed ? { sourceUpdatedAt: observedAt } : {}),
+        });
         return found;
       }
       const item: BroadcastRecord = {
@@ -255,7 +295,12 @@ export class MemoryStore implements Store {
   }
   async markBroadcastsUnavailable(channelId: string, ids: string[], observedAt: Date) {
     this.broadcasts
-      .filter((item) => item.channelId === channelId && ids.includes(item.youtubeVideoId))
+      .filter(
+        (item) =>
+          item.channelId === channelId &&
+          ids.includes(item.youtubeVideoId) &&
+          item.status !== 'UNAVAILABLE',
+      )
       .forEach((item) =>
         Object.assign(item, { status: 'UNAVAILABLE', sourceUpdatedAt: observedAt }),
       );
@@ -301,23 +346,53 @@ export class MemoryStore implements Store {
     if (!item) return;
     item.lastSyncStatus = result.status;
     item.lastErrorMessage = result.message;
-    if (result.status === 'SUCCESS') item.lastCalendarSyncAt = at;
+    if (result.status === 'SUCCESS' || result.status === 'SKIPPED') item.lastCalendarSyncAt = at;
     if (manual && result.status === 'RUNNING') item.lastManualSyncAt = at;
   }
-  async acquireSyncLease(key: string, ownerToken: string, now: Date, expiresAt: Date) {
+  async acquireSyncLease(key: string, ownerToken: string, now: Date, ttlMs: number) {
     const found = this.leases.get(key);
-    if (found && found.expiresAt > now) return false;
-    this.leases.set(key, { ownerToken, expiresAt });
+    if (found && found.expiresAt > now) return null;
+    const version = (found?.version ?? 0) + 1;
+    this.leases.set(key, { ownerToken, expiresAt: new Date(now.getTime() + ttlMs), version });
+    return { key, ownerToken, version };
+  }
+  async renewSyncLease(lease: LeaseOwnership, now: Date, ttlMs: number) {
+    const found = this.leases.get(lease.key);
+    if (!this.ownsLease(lease, now) || !found) return false;
+    found.expiresAt = new Date(now.getTime() + ttlMs);
     return true;
   }
-  async renewSyncLease(key: string, ownerToken: string, now: Date, expiresAt: Date) {
-    const found = this.leases.get(key);
-    if (!found || found.ownerToken !== ownerToken || found.expiresAt <= now) return false;
-    found.expiresAt = expiresAt;
+  async releaseSyncLease(lease: LeaseOwnership) {
+    if (!this.ownsLease(lease, new Date(0))) return false;
+    this.leases.delete(lease.key);
     return true;
   }
-  async releaseSyncLease(key: string, ownerToken: string) {
-    if (this.leases.get(key)?.ownerToken === ownerToken) this.leases.delete(key);
+  async reserveYouTubeQuota(
+    quotaDate: string,
+    bucket: YouTubeQuotaBucket,
+    units: number,
+    dailyBudget: number,
+    scheduledReserve: number,
+    mode: YouTubeQuotaMode,
+  ) {
+    const key = `${quotaDate}:${bucket}`;
+    const usage = this.quota.get(key) ?? { unitsUsed: 0, unitsReserved: 0 };
+    this.quota.set(key, usage);
+    const effectiveBudget = mode === 'MANUAL' ? dailyBudget - scheduledReserve : dailyBudget;
+    const granted = usage.unitsUsed + usage.unitsReserved + units <= effectiveBudget;
+    if (granted) usage.unitsReserved += units;
+    return {
+      granted,
+      unitsUsed: usage.unitsUsed,
+      unitsReserved: usage.unitsReserved,
+      remaining: Math.max(0, dailyBudget - usage.unitsUsed - usage.unitsReserved),
+    };
+  }
+  async consumeYouTubeQuota(quotaDate: string, bucket: YouTubeQuotaBucket, units: number) {
+    const usage = this.quota.get(`${quotaDate}:${bucket}`);
+    if (!usage || usage.unitsReserved < units) throw new Error('quota reservation not found');
+    usage.unitsReserved -= units;
+    usage.unitsUsed += units;
   }
   async startSyncRun(
     type: 'MANUAL' | 'SCHEDULED',
@@ -383,12 +458,18 @@ export class MemoryStore implements Store {
       if (expiredIds.has(this.syncTargets[index]!.runId)) this.syncTargets.splice(index, 1);
     }
   }
-  async deleteUserData(requestId: string, userId: string) {
+  async deleteUserData(requestId: string, userId: string, at: Date, lease: LeaseOwnership) {
+    if (!this.ownsLease(lease, at)) return false;
     this.users = this.users.filter((item) => item.id !== userId);
     this.credentials.delete(userId);
     this.subscriptions = this.subscriptions.filter((item) => item.userId !== userId);
     this.mappings = this.mappings.filter((item) => item.userId !== userId);
     const request = this.deletions.find((item) => item.id === requestId);
-    if (request) request.userId = null;
+    if (request) {
+      request.userId = null;
+      request.status = 'DATA_DELETED';
+      request.userDataDeletedAt = at;
+    }
+    return Boolean(request);
   }
 }

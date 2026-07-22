@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { YouTubeDataGateway } from './youtube-data-gateway.js';
 import type { ChannelRecord } from '../../application/models.js';
+import { MemoryStore } from '../database/memory-store.js';
+import { nextQuotaResetAt, quotaDateAt, YOUTUBE_QUOTA_COSTS } from './youtube-quota.js';
 
 const channel: ChannelRecord = {
   id: 'cm0wz73bk0000qzrmn831i7rn',
@@ -21,6 +23,17 @@ const json = (body: unknown, status = 200) =>
 afterEach(() => vi.unstubAllGlobals());
 
 describe('YouTubeDataGateway', () => {
+  const quotaConfig = {
+    dailyBudget: 8_000,
+    dailySearchBudget: 80,
+    scheduledReserve: 432,
+    scheduledSearchReserve: 72,
+    timeZone: 'America/Los_Angeles',
+    maxSearchPages: 1,
+    maxAttempts: 3,
+    retryBaseDelayMs: 1,
+    retryMaxDelayMs: 5_000,
+  };
   it('does not infer premiere from duration and follows a completed broadcast by video ID', async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
@@ -111,5 +124,104 @@ describe('YouTubeDataGateway', () => {
     await expect(
       new YouTubeDataGateway('key').refreshBroadcasts(channel, ['video-1']),
     ).rejects.toMatchObject({ code: 'YOUTUBE_API_ERROR', retryable: true });
+  });
+
+  it('defines the current official unit cost for each API method used by the design', () => {
+    expect(YOUTUBE_QUOTA_COSTS).toEqual({
+      'channels.list': { bucket: 'GENERAL', units: 1 },
+      'playlistItems.list': { bucket: 'GENERAL', units: 1 },
+      'videos.list': { bucket: 'GENERAL', units: 1 },
+      'search.list': { bucket: 'SEARCH', units: 1 },
+    });
+  });
+
+  it('reserves each retry and does not call the API after the application budget is exhausted', async () => {
+    const store = new MemoryStore();
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(json({}, 500));
+    vi.stubGlobal('fetch', fetchMock);
+    const gateway = new YouTubeDataGateway(
+      'key',
+      10_000,
+      store,
+      { now: () => new Date('2026-07-20T10:00:00Z') },
+      { info: () => undefined, error: () => undefined },
+      { ...quotaConfig, dailyBudget: 3, scheduledReserve: 0 },
+      async () => undefined,
+      () => 0,
+    );
+    await expect(gateway.refreshBroadcasts(channel, ['video-1'])).rejects.toMatchObject({
+      code: 'YOUTUBE_API_ERROR',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    await expect(gateway.refreshBroadcasts(channel, ['video-1'])).rejects.toMatchObject({
+      code: 'YOUTUBE_QUOTA_DEFERRED',
+      details: { nextRetryAt: expect.any(String) },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('reserves one search unit for every pagination request', async () => {
+    const store = new MemoryStore();
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(json({ items: [], nextPageToken: 'page-2' }))
+      .mockResolvedValueOnce(json({ items: [] }));
+    vi.stubGlobal('fetch', fetchMock);
+    const gateway = new YouTubeDataGateway(
+      'key',
+      10_000,
+      store,
+      { now: () => new Date('2026-07-20T10:00:00Z') },
+      { info: () => undefined, error: () => undefined },
+      { ...quotaConfig, dailySearchBudget: 2, scheduledSearchReserve: 0, maxSearchPages: 2 },
+    );
+    await expect(
+      gateway.listUpcoming(
+        channel,
+        new Date('2026-07-20T00:00:00Z'),
+        new Date('2026-08-20T00:00:00Z'),
+      ),
+    ).resolves.toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await expect(
+      gateway.listUpcoming(
+        channel,
+        new Date('2026-07-20T00:00:00Z'),
+        new Date('2026-08-20T00:00:00Z'),
+      ),
+    ).rejects.toMatchObject({ code: 'YOUTUBE_QUOTA_DEFERRED' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('protects the scheduled reserve and starts a new budget after the quota date changes', async () => {
+    const store = new MemoryStore();
+    expect(
+      await store.reserveYouTubeQuota('2026-07-20', 'SEARCH', 8, 80, 72, 'MANUAL'),
+    ).toMatchObject({
+      granted: true,
+    });
+    expect(
+      await store.reserveYouTubeQuota('2026-07-20', 'SEARCH', 1, 80, 72, 'MANUAL'),
+    ).toMatchObject({
+      granted: false,
+    });
+    expect(
+      await store.reserveYouTubeQuota('2026-07-20', 'SEARCH', 1, 80, 72, 'SCHEDULED'),
+    ).toMatchObject({
+      granted: true,
+    });
+    expect(
+      await store.reserveYouTubeQuota('2026-07-21', 'SEARCH', 8, 80, 72, 'MANUAL'),
+    ).toMatchObject({
+      granted: true,
+    });
+  });
+
+  it('uses the configured Pacific quota date and computes the next reset across DST', () => {
+    const now = new Date('2026-11-01T07:30:00Z');
+    expect(quotaDateAt(now, 'America/Los_Angeles')).toBe('2026-11-01');
+    expect(quotaDateAt(nextQuotaResetAt(now, 'America/Los_Angeles'), 'America/Los_Angeles')).toBe(
+      '2026-11-02',
+    );
   });
 });

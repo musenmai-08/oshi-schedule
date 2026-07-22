@@ -8,7 +8,7 @@
 4. API は JWT 署名を Supabase JWKS で検証し、`iss`、`aud=authenticated`、`exp`、`sub`、email を検証する。招待外メールは拒否する。
 5. refresh token を AES-256-GCM で暗号化保存し、access token は短期利用後に破棄する。Supabase は Google provider token を更新しないため、worker は保存済み refresh token から更新する。
 
-暗号文形式は `v1.<keyId>.<iv>.<tag>.<ciphertext>` (base64url)。鍵は `TOKEN_ENCRYPTION_KEYS` に `keyId:base64(32 bytes)` の列として置き、先頭を暗号化、全鍵を復号候補にする。
+暗号文形式は `v1.<keyId>.<iv>.<tag>.<ciphertext>` (base64url)。鍵は `TOKEN_ENCRYPTION_KEYS` に `keyId:base64(32 bytes)` の列として置き、先頭を暗号化、全鍵を復号候補にする。real/productionはkey IDにかかわらず全ゼロ・単一byte反復などの低entropy鍵を拒否する。暗号化ごとに96-bit IVを生成し、GCM authentication tagを検証する。
 
 ## Cookie・CSRF
 
@@ -23,6 +23,10 @@ Supabase SSR cookie はブラウザーでの session refresh に使うため Htt
 
 ## 再認証・削除
 
-OAuth token endpoint の `invalid_grant` だけを恒久失効として `reauthRequired=true` にし、429/5xx/network error は指数的delay付き最大3回の一時障害再試行とする。定期 worker は再認証状態の User を対象外とし、再連携成功時に解除する。
+OAuth token endpoint の `invalid_grant` だけを恒久失効として `reauthRequired=true` にし、429/5xx/network/timeoutは `OAUTH_RETRY_BASE_DELAY_MS` を基準にexponential backoff+jitter、`Retry-After`を考慮し `OAUTH_RETRY_MAX_DELAY_MS` で上限を付けて最大3回再試行する。定期 worker は再認証状態の User を対象外とし、再連携成功時に解除する。
 
-ローカル User の暗黙作成は onboarding だけが行う。通常 API は既存の active User を要求し、`AccountDeletionRequest.supabaseUserId` の墓石がある主体を 410 で拒否する。削除は要求を先に永続化し、Calendar 削除→Google revoke→User 固有データ削除→Supabase Admin 削除→完了の各時刻を保存する。User FK は SetNull なのでローカル削除後も墓石が残り、同じ JWT による再実行は削除処理だけを継続できる。同時リクエストはsubject単位のDB leaseで直列化し、競合側は409を返す。404/410 の Calendar と既失効 token は冪等成功として扱い、外部呼び出し中は DB transaction を保持しない。
+ローカル User の暗黙作成は onboarding だけが行う。通常 API は既存の active User を要求し、`AccountDeletionRequest.supabaseUserId` の墓石がある主体を 410 で拒否する。削除は要求を先に永続化し、Calendar 削除→Google revoke→User 固有データ削除→Supabase Admin 削除→完了の各時刻を保存する。User FK はSetNullなのでローカル削除後も墓石が残り、同じJWTによる再実行は削除処理だけを継続できる。
+
+Calendar、OAuth revoke、Supabase Admin DELETEはすべて `EXTERNAL_API_TIMEOUT_MS` のAbortSignalでHTTP自体を中断する。timeoutは専用のretryable error codeを墓石へ保存し、response bodyやtokenは保存しない。404/410のCalendar、400の既失効token、404のSupabase userは冪等成功とする。
+
+同時削除はsubject単位のDB leaseで直列化する。leaseはowner、DB時刻による期限、単調増加versionを持つ。各外部呼出しの前後とstep書込み時にowner/version/有効期限を確認し、期限後に後継が取得した場合は古い実行主体のstep/FAILED書込みと解放を拒否する。外部呼出し中にDB transactionは保持しない。`ACCOUNT_DELETION_LEASE_MS` は外部timeoutより長くなければ起動設定検証に失敗する。

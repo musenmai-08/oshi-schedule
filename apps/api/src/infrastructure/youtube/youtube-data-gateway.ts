@@ -1,6 +1,19 @@
 import { AppError } from '../../domain/errors.js';
 import { calculateEndAt, type NormalizedBroadcast } from '../../domain/scheduling.js';
-import type { ChannelRecord, YouTubeGateway } from '../../application/models.js';
+import type {
+  AppLogger,
+  ChannelRecord,
+  Clock,
+  Store,
+  YouTubeGateway,
+  YouTubeRequestContext,
+} from '../../application/models.js';
+import {
+  nextQuotaResetAt,
+  quotaDateAt,
+  YOUTUBE_QUOTA_COSTS,
+  type YouTubeQuotaMethod,
+} from './youtube-quota.js';
 
 interface YouTubeList<T> {
   items?: T[];
@@ -38,25 +51,134 @@ export class YouTubeDataGateway implements YouTubeGateway {
   constructor(
     private readonly apiKey: string,
     private readonly timeoutMs = 10_000,
+    private readonly quotaStore?: Store,
+    private readonly clock: Clock = { now: () => new Date() },
+    private readonly logger: AppLogger = { info: () => undefined, error: () => undefined },
+    private readonly quotaConfig = {
+      dailyBudget: 8_000,
+      dailySearchBudget: 80,
+      scheduledReserve: 432,
+      scheduledSearchReserve: 72,
+      timeZone: 'America/Los_Angeles',
+      maxSearchPages: 1,
+      maxAttempts: 3,
+      retryBaseDelayMs: 1_000,
+      retryMaxDelayMs: 5_000,
+    },
+    private readonly sleep: (milliseconds: number) => Promise<void> = (milliseconds) =>
+      new Promise((resolve) => setTimeout(resolve, milliseconds)),
+    private readonly random: () => number = Math.random,
   ) {}
-  private async get<T>(path: string, params: URLSearchParams): Promise<T> {
-    params.set('key', this.apiKey);
-    let response: Response;
-    try {
-      response = await fetch(`https://www.googleapis.com/youtube/v3/${path}?${params}`, {
-        signal: AbortSignal.timeout(this.timeoutMs),
-      });
-    } catch {
-      throw new AppError('YOUTUBE_API_UNAVAILABLE', 'YouTube情報を取得できませんでした', 502, true);
+  private async reserve(method: YouTubeQuotaMethod, context: YouTubeRequestContext) {
+    if (!this.quotaStore) return null;
+    const now = this.clock.now();
+    const quotaDate = quotaDateAt(now, this.quotaConfig.timeZone);
+    const cost = YOUTUBE_QUOTA_COSTS[method];
+    const search = cost.bucket === 'SEARCH';
+    const reservation = await this.quotaStore.reserveYouTubeQuota(
+      quotaDate,
+      cost.bucket,
+      cost.units,
+      search ? this.quotaConfig.dailySearchBudget : this.quotaConfig.dailyBudget,
+      search ? this.quotaConfig.scheduledSearchReserve : this.quotaConfig.scheduledReserve,
+      context.mode,
+    );
+    this.logger.info(
+      {
+        event: 'youtube_quota_reservation',
+        method,
+        bucket: cost.bucket,
+        requestedUnits: cost.units,
+        unitsUsed: reservation.unitsUsed,
+        unitsReserved: reservation.unitsReserved,
+        remainingUnits: reservation.remaining,
+        granted: reservation.granted,
+        mode: context.mode,
+        runId: context.runId,
+      },
+      'YouTube quota reservation',
+    );
+    if (!reservation.granted) {
+      const nextRetryAt = nextQuotaResetAt(now, this.quotaConfig.timeZone).toISOString();
+      throw new AppError(
+        'YOUTUBE_QUOTA_DEFERRED',
+        'YouTube情報の更新を次回同期まで延期しました',
+        429,
+        true,
+        { nextRetryAt },
+      );
     }
-    if (!response.ok)
+    return { quotaDate, ...cost };
+  }
+  private async get<T>(
+    path: 'channels' | 'search' | 'videos',
+    params: URLSearchParams,
+    context: YouTubeRequestContext,
+  ): Promise<T> {
+    params.set('key', this.apiKey);
+    const method = `${path}.list` as YouTubeQuotaMethod;
+    for (let attempt = 0; attempt < this.quotaConfig.maxAttempts; attempt += 1) {
+      const reservation = await this.reserve(method, context);
+      let response: Response;
+      try {
+        response = await fetch(`https://www.googleapis.com/youtube/v3/${path}?${params}`, {
+          signal: AbortSignal.timeout(this.timeoutMs),
+        });
+      } catch (error) {
+        if (reservation)
+          await this.quotaStore?.consumeYouTubeQuota(
+            reservation.quotaDate,
+            reservation.bucket,
+            reservation.units,
+          );
+        if (attempt + 1 < this.quotaConfig.maxAttempts) {
+          await this.sleep(
+            Math.min(
+              this.quotaConfig.retryMaxDelayMs,
+              this.quotaConfig.retryBaseDelayMs * 2 ** attempt +
+                Math.floor(this.random() * this.quotaConfig.retryBaseDelayMs),
+            ),
+          );
+          continue;
+        }
+        const timedOut =
+          error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+        throw new AppError(
+          timedOut ? 'YOUTUBE_API_TIMEOUT' : 'YOUTUBE_API_UNAVAILABLE',
+          'YouTube情報を取得できませんでした',
+          502,
+          true,
+        );
+      }
+      if (reservation)
+        await this.quotaStore?.consumeYouTubeQuota(
+          reservation.quotaDate,
+          reservation.bucket,
+          reservation.units,
+        );
+      if (response.ok) return response.json() as Promise<T>;
+      const retryable = response.status >= 500 || response.status === 429;
+      if (retryable && attempt + 1 < this.quotaConfig.maxAttempts) {
+        const retryAfter = Number(response.headers.get('retry-after'));
+        const delay =
+          this.quotaConfig.retryBaseDelayMs * 2 ** attempt +
+          Math.floor(this.random() * this.quotaConfig.retryBaseDelayMs);
+        await this.sleep(
+          Math.min(
+            this.quotaConfig.retryMaxDelayMs,
+            Number.isFinite(retryAfter) ? Math.max(delay, retryAfter * 1_000) : delay,
+          ),
+        );
+        continue;
+      }
       throw new AppError(
         response.status === 403 ? 'YOUTUBE_QUOTA_OR_FORBIDDEN' : 'YOUTUBE_API_ERROR',
         'YouTube情報を取得できませんでした',
         response.status === 404 ? 404 : 502,
-        response.status >= 500 || response.status === 429,
+        retryable,
       );
-    return response.json() as Promise<T>;
+    }
+    throw new AppError('YOUTUBE_API_ERROR', 'YouTube情報を取得できませんでした', 502, true);
   }
   private normalize(item: VideoItem): NormalizedBroadcast | null {
     const liveDetails = item.liveStreamingDetails;
@@ -90,7 +212,7 @@ export class YouTubeDataGateway implements YouTubeGateway {
       actualEndAt: actualEnd,
     };
   }
-  private async videoDetails(ids: string[]) {
+  private async videoDetails(ids: string[], context: YouTubeRequestContext) {
     const items: VideoItem[] = [];
     for (let index = 0; index < ids.length; index += 50) {
       const chunk = ids.slice(index, index + 50);
@@ -101,15 +223,17 @@ export class YouTubeDataGateway implements YouTubeGateway {
           part: 'snippet,contentDetails,liveStreamingDetails,status',
           id: chunk.join(','),
         }),
+        context,
       );
       items.push(...(details.items ?? []));
     }
     return items;
   }
-  async resolveHandle(handle: string) {
+  async resolveHandle(handle: string, context: YouTubeRequestContext = { mode: 'MANUAL' }) {
     const response = await this.get<YouTubeList<ChannelItem>>(
       'channels',
       new URLSearchParams({ part: 'snippet', forHandle: handle }),
+      context,
     );
     const item = response.items?.[0];
     if (!item?.id || !item.snippet?.title)
@@ -127,9 +251,15 @@ export class YouTubeDataGateway implements YouTubeGateway {
       channelUrl: `https://www.youtube.com/channel/${item.id}`,
     };
   }
-  async listUpcoming(channel: ChannelRecord, from: Date, to: Date): Promise<NormalizedBroadcast[]> {
+  async listUpcoming(
+    channel: ChannelRecord,
+    from: Date,
+    to: Date,
+    context: YouTubeRequestContext = { mode: 'SCHEDULED' },
+  ): Promise<NormalizedBroadcast[]> {
     const ids: string[] = [];
     let pageToken: string | undefined;
+    let pages = 0;
     do {
       const params = new URLSearchParams({
         part: 'id',
@@ -139,16 +269,17 @@ export class YouTubeDataGateway implements YouTubeGateway {
         maxResults: '50',
       });
       if (pageToken) params.set('pageToken', pageToken);
-      const found = await this.get<YouTubeList<SearchItem>>('search', params);
+      const found = await this.get<YouTubeList<SearchItem>>('search', params, context);
+      pages += 1;
       ids.push(
         ...(found.items
           ?.map((item) => item.id?.videoId)
           .filter((id): id is string => Boolean(id)) ?? []),
       );
       pageToken = found.nextPageToken;
-    } while (pageToken && ids.length < 500);
+    } while (pageToken && pages < this.quotaConfig.maxSearchPages);
     if (!ids.length) return [];
-    return (await this.videoDetails(ids)).flatMap((item) => {
+    return (await this.videoDetails(ids, context)).flatMap((item) => {
       const normalized = this.normalize(item);
       if (!normalized) return [];
       const start = normalized.scheduledStartAt;
@@ -156,9 +287,13 @@ export class YouTubeDataGateway implements YouTubeGateway {
       return [normalized];
     });
   }
-  async refreshBroadcasts(_channel: ChannelRecord, youtubeVideoIds: string[]) {
+  async refreshBroadcasts(
+    _channel: ChannelRecord,
+    youtubeVideoIds: string[],
+    context: YouTubeRequestContext = { mode: 'SCHEDULED' },
+  ) {
     if (!youtubeVideoIds.length) return { items: [], unavailableVideoIds: [] };
-    const details = await this.videoDetails([...new Set(youtubeVideoIds)]);
+    const details = await this.videoDetails([...new Set(youtubeVideoIds)], context);
     const items = details.flatMap((item) => {
       const normalized = this.normalize(item);
       return normalized ? [normalized] : [];

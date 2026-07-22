@@ -59,6 +59,8 @@ pnpm db:seed
 
 APIとworkerは、各workspace packageをcwdとして起動した場合もproject rootの `.env` を読みます。real/productionでは `.env.example` の全ゼロ暗号鍵を拒否するため、必ず乱数鍵へ置換してください。
 
+外部HTTP timeoutとlease、YouTube quotaは `.env` で調整できます。`ACCOUNT_DELETION_LEASE_MS` と `SYNC_LEASE_MS` は `EXTERNAL_API_TIMEOUT_MS` より長くしてください。YouTubeは一般endpoint用 `YOUTUBE_DAILY_QUOTA_BUDGET=8000` と、独立したsearch bucket用 `YOUTUBE_DAILY_SEARCH_QUOTA_BUDGET=80` をDBで管理します。日付境界は `YOUTUBE_QUOTA_TIMEZONE=America/Los_Angeles`、予定検索は既定1ページです。自動同期用予約枠を手動同期が消費することはできません。
+
 Supabase の Google provider に Calendar API scope を許可し、Site URL/redirect URL に `http://localhost:3000/auth/callback` を登録してください。Google Cloud 側でも同じ Supabase callback URI、YouTube Data API v3、Google Calendar API、OAuth同意画面を設定します。
 
 ```bash
@@ -72,7 +74,7 @@ NEXT_PUBLIC_DEMO_MODE=false pnpm --filter @oshi-schedule/web dev
 APP_MODE=real pnpm sync:scheduled
 ```
 
-1時間ごとの実行はインフラのschedulerから `pnpm sync:scheduled` を呼びます。worker はHTTPサーバーを必要としません。
+1時間ごとの実行はインフラのschedulerから `pnpm sync:scheduled` を呼びます。worker はHTTPサーバーを必要としません。同じYouTubeチャンネルの取得はDB leaseで共有し、quota不足時は外部取得を次のPacific Time日付へ延期しながら保存済みデータのCalendar同期を続けます。
 
 ## 品質確認
 

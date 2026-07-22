@@ -38,12 +38,30 @@ export class SupabaseAuthAdmin implements AuthAdmin {
   constructor(
     private readonly url: string,
     private readonly serviceRoleKey: string,
+    private readonly timeoutMs = 10_000,
+    private readonly fetchImpl: typeof fetch = fetch,
   ) {}
   async deleteUser(subject: string) {
-    const response = await fetch(`${this.url}/auth/v1/admin/users/${encodeURIComponent(subject)}`, {
-      method: 'DELETE',
-      headers: { apikey: this.serviceRoleKey, authorization: `Bearer ${this.serviceRoleKey}` },
-    });
+    let response: Response;
+    try {
+      response = await this.fetchImpl(
+        `${this.url}/auth/v1/admin/users/${encodeURIComponent(subject)}`,
+        {
+          method: 'DELETE',
+          headers: { apikey: this.serviceRoleKey, authorization: `Bearer ${this.serviceRoleKey}` },
+          signal: AbortSignal.timeout(this.timeoutMs),
+        },
+      );
+    } catch (error) {
+      const timedOut =
+        error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+      throw new AppError(
+        timedOut ? 'AUTH_DELETE_TIMEOUT' : 'AUTH_DELETE_UNAVAILABLE',
+        timedOut ? '認証アカウントの削除がタイムアウトしました' : '認証サービスへ接続できません',
+        502,
+        true,
+      );
+    }
     if (!response.ok && response.status !== 404)
       throw new AppError(
         'AUTH_DELETE_FAILED',

@@ -23,7 +23,7 @@ export interface SubscriptionRecord {
   status: SubscriptionStatus;
   lastCalendarSyncAt: Date | null;
   lastManualSyncAt: Date | null;
-  lastSyncStatus: 'SUCCESS' | 'FAILED' | 'RUNNING' | null;
+  lastSyncStatus: 'SUCCESS' | 'FAILED' | 'RUNNING' | 'SKIPPED' | null;
   lastErrorMessage: string | null;
 }
 export interface BroadcastRecord extends NormalizedBroadcast {
@@ -40,7 +40,7 @@ export interface MappingRecord {
   managedFieldsHash: string;
 }
 export interface SyncResult {
-  status: 'RUNNING' | 'SUCCESS' | 'FAILED';
+  status: 'RUNNING' | 'SUCCESS' | 'FAILED' | 'SKIPPED';
   message: string | null;
   errorCode?: string | null;
 }
@@ -52,11 +52,31 @@ export interface AccountDeletionRecord {
   userId: string | null;
   calendarIdSnapshot: string | null;
   status: string;
+  lastErrorCode: string | null;
   calendarDeletedAt: Date | null;
   googleTokenRevokedAt: Date | null;
   userDataDeletedAt: Date | null;
   supabaseUserDeletedAt: Date | null;
   completedAt: Date | null;
+}
+
+export interface LeaseOwnership {
+  key: string;
+  ownerToken: string;
+  version: number;
+}
+
+export type YouTubeQuotaBucket = 'GENERAL' | 'SEARCH';
+export type YouTubeQuotaMode = 'MANUAL' | 'SCHEDULED';
+export interface YouTubeRequestContext {
+  mode: YouTubeQuotaMode;
+  runId?: string;
+}
+export interface YouTubeQuotaReservation {
+  granted: boolean;
+  unitsUsed: number;
+  unitsReserved: number;
+  remaining: number;
 }
 
 export interface Store {
@@ -65,8 +85,18 @@ export interface Store {
   ensureUser(identity: AuthIdentity): Promise<UserRecord>;
   findAccountDeletion(subject: string): Promise<AccountDeletionRecord | null>;
   beginAccountDeletion(user: UserRecord): Promise<AccountDeletionRecord>;
-  markAccountDeletionStep(id: string, step: DeletionStep, at: Date): Promise<void>;
-  markAccountDeletionFailed(id: string, errorCode: string): Promise<void>;
+  markAccountDeletionStep(
+    id: string,
+    step: DeletionStep,
+    at: Date,
+    lease: LeaseOwnership,
+  ): Promise<boolean>;
+  markAccountDeletionFailed(
+    id: string,
+    errorCode: string,
+    at: Date,
+    lease: LeaseOwnership,
+  ): Promise<boolean>;
   saveCredential(userId: string, encryptedToken: string, keyId: string): Promise<void>;
   completeOnboarding(
     userId: string,
@@ -82,6 +112,7 @@ export interface Store {
   ): Promise<Array<{ subscription: SubscriptionRecord; channel: ChannelRecord }>>;
   countSubscriptions(userId: string): Promise<number>;
   findChannelByYoutubeId(youtubeChannelId: string): Promise<ChannelRecord | null>;
+  findChannelById(id: string): Promise<ChannelRecord | null>;
   upsertChannel(channel: ChannelSummary): Promise<ChannelRecord>;
   createSubscriptionWithinLimit(
     userId: string,
@@ -128,9 +159,23 @@ export interface Store {
     at: Date,
     manual: boolean,
   ): Promise<void>;
-  acquireSyncLease(key: string, ownerToken: string, now: Date, expiresAt: Date): Promise<boolean>;
-  renewSyncLease(key: string, ownerToken: string, now: Date, expiresAt: Date): Promise<boolean>;
-  releaseSyncLease(key: string, ownerToken: string): Promise<void>;
+  acquireSyncLease(
+    key: string,
+    ownerToken: string,
+    now: Date,
+    ttlMs: number,
+  ): Promise<LeaseOwnership | null>;
+  renewSyncLease(lease: LeaseOwnership, now: Date, ttlMs: number): Promise<boolean>;
+  releaseSyncLease(lease: LeaseOwnership): Promise<boolean>;
+  reserveYouTubeQuota(
+    quotaDate: string,
+    bucket: YouTubeQuotaBucket,
+    units: number,
+    dailyBudget: number,
+    scheduledReserve: number,
+    mode: YouTubeQuotaMode,
+  ): Promise<YouTubeQuotaReservation>;
+  consumeYouTubeQuota(quotaDate: string, bucket: YouTubeQuotaBucket, units: number): Promise<void>;
   startSyncRun(
     type: 'MANUAL' | 'SCHEDULED',
     requestedById: string | null,
@@ -151,15 +196,26 @@ export interface Store {
     errorCode?: string,
   ): Promise<void>;
   maintainSyncRuns(staleBefore: Date, retainAfter: Date, at: Date): Promise<void>;
-  deleteUserData(requestId: string, userId: string): Promise<void>;
+  deleteUserData(
+    requestId: string,
+    userId: string,
+    at: Date,
+    lease: LeaseOwnership,
+  ): Promise<boolean>;
 }
 
 export interface YouTubeGateway {
-  resolveHandle(handle: string): Promise<ChannelSummary>;
-  listUpcoming(channel: ChannelRecord, from: Date, to: Date): Promise<NormalizedBroadcast[]>;
+  resolveHandle(handle: string, context?: YouTubeRequestContext): Promise<ChannelSummary>;
+  listUpcoming(
+    channel: ChannelRecord,
+    from: Date,
+    to: Date,
+    context?: YouTubeRequestContext,
+  ): Promise<NormalizedBroadcast[]>;
   refreshBroadcasts(
     channel: ChannelRecord,
     youtubeVideoIds: string[],
+    context?: YouTubeRequestContext,
   ): Promise<{ items: NormalizedBroadcast[]; unavailableVideoIds: string[] }>;
 }
 

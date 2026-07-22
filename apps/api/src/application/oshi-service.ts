@@ -21,6 +21,7 @@ export class OshiService {
     private readonly clock: Clock,
     private readonly authAdmin: AuthAdmin,
     readonly sync: SyncService,
+    private readonly accountDeletionLeaseMs = 60_000,
   ) {}
 
   private async requireActiveUser(identity: AuthIdentity) {
@@ -127,20 +128,22 @@ export class OshiService {
       leaseKey,
       ownerToken,
       leaseAt,
-      new Date(leaseAt.getTime() + 15 * 60_000),
+      this.accountDeletionLeaseMs,
     );
     if (!acquired)
       throw new AppError('ACCOUNT_DELETION_IN_PROGRESS', 'アカウント削除処理中です', 409, true);
     const renewLease = async () => {
       const at = this.clock.now();
-      if (
-        !(await this.store.renewSyncLease(
-          leaseKey,
-          ownerToken,
-          at,
-          new Date(at.getTime() + 15 * 60_000),
-        ))
-      )
+      if (!(await this.store.renewSyncLease(acquired, at, this.accountDeletionLeaseMs)))
+        throw new AppError(
+          'ACCOUNT_DELETION_LEASE_LOST',
+          '削除処理の排他権を失いました',
+          409,
+          true,
+        );
+    };
+    const markStep = async (step: Parameters<Store['markAccountDeletionStep']>[1], at: Date) => {
+      if (!(await this.store.markAccountDeletionStep(deletion.id, step, at, acquired)))
         throw new AppError(
           'ACCOUNT_DELETION_LEASE_LOST',
           '削除処理の排他権を失いました',
@@ -160,42 +163,55 @@ export class OshiService {
               throw error;
           }
         }
+        await renewLease();
         const at = now();
-        await this.store.markAccountDeletionStep(deletion.id, 'CALENDAR_DELETED', at);
+        await markStep('CALENDAR_DELETED', at);
         deletion.calendarDeletedAt = at;
       }
       if (!deletion.googleTokenRevokedAt) {
         await renewLease();
         if (user) await this.calendar.revokeAuthorization(user);
+        await renewLease();
         const at = now();
-        await this.store.markAccountDeletionStep(deletion.id, 'TOKEN_REVOKED', at);
+        await markStep('TOKEN_REVOKED', at);
         deletion.googleTokenRevokedAt = at;
       }
       if (!deletion.userDataDeletedAt) {
         await renewLease();
-        if (deletion.userId) await this.store.deleteUserData(deletion.id, deletion.userId);
         const at = now();
-        await this.store.markAccountDeletionStep(deletion.id, 'DATA_DELETED', at);
+        if (
+          deletion.userId &&
+          !(await this.store.deleteUserData(deletion.id, deletion.userId, at, acquired))
+        )
+          throw new AppError(
+            'ACCOUNT_DELETION_LEASE_LOST',
+            '削除処理の排他権を失いました',
+            409,
+            true,
+          );
+        if (!deletion.userId) await markStep('DATA_DELETED', at);
         deletion.userDataDeletedAt = at;
         user = null;
       }
       if (!deletion.supabaseUserDeletedAt) {
         await renewLease();
         await this.authAdmin.deleteUser(identity.subject);
+        await renewLease();
         const at = now();
-        await this.store.markAccountDeletionStep(deletion.id, 'AUTH_DELETED', at);
+        await markStep('AUTH_DELETED', at);
         deletion.supabaseUserDeletedAt = at;
       }
-      if (!deletion.completedAt)
-        await this.store.markAccountDeletionStep(deletion.id, 'COMPLETED', now());
+      if (!deletion.completedAt) await markStep('COMPLETED', now());
     } catch (error) {
       await this.store.markAccountDeletionFailed(
         deletion.id,
         error instanceof AppError ? error.code : 'ACCOUNT_DELETE_FAILED',
+        now(),
+        acquired,
       );
       throw error;
     } finally {
-      await this.store.releaseSyncLease(leaseKey, ownerToken);
+      await this.store.releaseSyncLease(acquired);
     }
   }
 }
