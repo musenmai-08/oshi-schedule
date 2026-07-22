@@ -20,7 +20,7 @@ describe('AesTokenCipher', () => {
     const second = cipher.encrypt('refresh-secret').ciphertext;
     expect(first.split('.')[2]).not.toBe(second.split('.')[2]);
     const parts = first.split('.');
-    parts[4] = `${parts[4]?.slice(0, -1)}${parts[4]?.endsWith('A') ? 'B' : 'A'}`;
+    parts[4] = `${parts[4]?.startsWith('A') ? 'B' : 'A'}${parts[4]?.slice(1)}`;
     expect(() => cipher.decrypt(parts.join('.'))).toThrow();
   });
 
@@ -30,6 +30,26 @@ describe('AesTokenCipher', () => {
     const oldCiphertext = new AesTokenCipher(`old:${oldKey}`).encrypt('refresh-secret').ciphertext;
     const rotating = new AesTokenCipher(`new:${newKey},old:${oldKey}`);
     expect(rotating.decrypt(oldCiphertext)).toBe('refresh-secret');
-    expect(rotating.encrypt('new-secret').keyId).toBe('new');
+    const reencrypted = rotating.encrypt(rotating.decrypt(oldCiphertext));
+    expect(reencrypted.keyId).toBe('new');
+    expect(rotating.decrypt(reencrypted.ciphertext)).toBe('refresh-secret');
+  });
+
+  it('fails safely for an unknown key version', () => {
+    const cipher = new AesTokenCipher(`v1:${Buffer.alloc(32, 7).toString('base64')}`);
+    const parts = cipher.encrypt('refresh-secret').ciphertext.split('.');
+    parts[1] = 'retired';
+    expect(() => cipher.decrypt(parts.join('.'))).toThrow(/保存済み認証情報/);
+  });
+
+  it('fails authentication when the key id exists but the key is wrong', () => {
+    const key = Buffer.alloc(32, 7).toString('base64');
+    const ciphertext = new AesTokenCipher(`v1:${key}`).encrypt('refresh-secret').ciphertext;
+    const wrong = new AesTokenCipher(`v1:${Buffer.alloc(32, 8).toString('base64')}`);
+    expect(() => wrong.decrypt(ciphertext)).toThrow();
+  });
+
+  it('rejects malformed base64 key material', () => {
+    expect(() => new AesTokenCipher(`v1:${'!'.repeat(44)}`)).toThrow(/base64/i);
   });
 });

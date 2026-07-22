@@ -7,7 +7,7 @@ Prisma の実体は [`prisma/schema.prisma`](../../prisma/schema.prisma) を正�
 | User                    | Supabase 主体、初回設定・再認証状態 | `supabaseUserId`, email index                     |
 | GoogleCredential        | 暗号化 refresh token                | `userId`, keyId                                   |
 | CalendarConnection      | 専用 calendar ID・状態              | `userId`, `googleCalendarId`                      |
-| YouTubeChannel          | 利用者間で共有するチャンネル        | `youtubeChannelId`, handle index                  |
+| YouTubeChannel          | 共有チャンネルと取得snapshot状態    | `youtubeChannelId`, fetch status/next index       |
 | UserChannelSubscription | 利用者別の有効/停止状態             | `(userId,channelId)`, user/status index           |
 | ScheduledBroadcast      | 共有する配信履歴                    | `youtubeVideoId`, `(channelId,scheduledStartAt)`  |
 | CalendarEventMapping    | 利用者別 Calendar event             | `(userId,broadcastId)`, event ID index            |
@@ -23,6 +23,8 @@ BroadcastKind は `LIVE/PREMIERE/UNKNOWN`、BroadcastStatus は `UPCOMING/LIVE/C
 
 YouTubeQuotaUsageはquota timezoneの日付文字列（`YYYY-MM-DD`）と `GENERAL/SEARCH` bucketを複合主キーにし、`unitsReserved` と `unitsUsed` を保持する。日付ラベルは `YOUTUBE_QUOTA_TIMEZONE`（既定America/Los_Angeles）で算出し、`createdAt/updatedAt` と他のDateTimeはUTCとして扱う。予約は `unitsUsed + unitsReserved + requestUnits <= effectiveBudget` の条件付きUPDATEで複数process間も上限を超えない。crashで残った予約は当日の安全側消費として扱い、翌日keyで新予算を開始する。
 
-SyncRun/SyncTargetResult は開始時にRUNNINGを保存し、正常・部分失敗・全失敗を完了時刻と安全なerror codeで確定する。定期同期の開始時に24時間超のRUNNINGをFAILEDへ回収し、完了から90日を過ぎた実行履歴を削除する。Broadcast履歴はこのretentionの対象にしない。
+YouTubeChannelは`fetchStartedAt/fetchCompletedAt/lastFetchSucceededAt/snapshotVersion/lastFetchStatus/nextFetchAt`を保持する。channel leaseをfenceしたtransactionだけがBroadcast群と成功snapshotVersionを同時確定する。既存`lastFetchedAt`行は追加migrationで成功version 1へ安全に移行する。
+
+SyncRun/SyncTargetResult は開始時にRUNNINGを保存し、SUCCESS/PARTIAL_SUCCESS/DEFERRED/部分失敗/全失敗を完了時刻と安全なerror codeで確定する。対象結果は`youtubeFetchStatus/databaseUpdateStatus/calendarSyncStatus`と使用snapshotVersionも保存する。定期同期の開始時に24時間超のRUNNINGをFAILEDへ回収し、完了から90日を過ぎた実行履歴を削除する。Broadcast履歴はこのretentionの対象にしない。
 
 履歴 Broadcast は物理保持し、将来 retention job を追加する。全 DateTime は MySQL `DATETIME(3)` で UTC として扱う。3件上限の作成はUser行を `FOR UPDATE` したserializable transaction内でcountとinsertを行い、重複は `(userId,channelId)` 制約でも防ぐ。

@@ -32,3 +32,9 @@
 ## Reaudit remediation（2026-07-20）
 
 [独立再監査](../reviews/critical-high-reaudit.md)で解消済みとされなかったCritical 1件・High 6件を[再監査修正台帳](../reviews/reaudit-remediation.md)で追跡し、全件を修正済みにした。追加migrationでSyncLease versionとYouTubeQuotaUsageを導入し、削除timeout/fencing、過去event作成防止、channel共有取得、quota延期、OAuth backoff、runId相関、低entropy鍵拒否を実装した。Node 22.23.1で通常69件、MySQL 6件、E2E 1件、型/lint/build/worker、clean install、既存/空DB migrationとschema diffを検証し、Phase 10を完了した。
+
+## Final audit remediation（2026-07-22）
+
+[最終独立監査](../reviews/final-critical-high-audit.md)の部分解消3件・新規High 4件を[最終修正台帳](../reviews/final-audit-remediation.md)で追跡する。channel取得snapshot lifecycleとphase別結果、追跡件数/期間上限とquota式、明示的Calendar作成policy、CSPRNG鍵運用、専用E2E port/health identityを追加migrationと回帰テストで実装した。最終的な品質ゲート・migration結果は台帳へ記録する。
+
+Node 22.23.1のclean install後、cacheなしtypecheck/lint/test/build、通常96件、MySQL 7件、3000番別アプリ稼働下E2Eと連続実行、worker、既存/空DBの全5 migrationとschema差分なしを完了した。最終台帳の8項目を修正済みとし、コード上の既知Critical/Highは0件である。

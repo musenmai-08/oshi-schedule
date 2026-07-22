@@ -12,6 +12,12 @@ const channel: ChannelRecord = {
   thumbnailUrl: '',
   channelUrl: '',
   lastFetchedAt: null,
+  fetchStartedAt: null,
+  fetchCompletedAt: null,
+  lastFetchSucceededAt: null,
+  snapshotVersion: 0,
+  lastFetchStatus: 'NEVER',
+  nextFetchAt: null,
 };
 
 const json = (body: unknown, status = 200) =>
@@ -191,6 +197,19 @@ describe('YouTubeDataGateway', () => {
       ),
     ).rejects.toMatchObject({ code: 'YOUTUBE_QUOTA_DEFERRED' });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('deduplicates tracked IDs and sends at most 50 IDs per videos.list request', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async () => json({ items: [] }));
+    vi.stubGlobal('fetch', fetchMock);
+    const ids = Array.from({ length: 100 }, (_, index) => `video-${index}`);
+    await new YouTubeDataGateway('key').refreshBroadcasts(channel, [...ids, 'video-0']);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const [url] of fetchMock.mock.calls) {
+      const values = new URL(String(url)).searchParams.get('id')?.split(',') ?? [];
+      expect(values).toHaveLength(50);
+      expect(new Set(values).size).toBe(50);
+    }
   });
 
   it('protects the scheduled reserve and starts a new budget after the quota date changes', async () => {

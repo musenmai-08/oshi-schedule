@@ -15,6 +15,12 @@ export interface UserRecord {
 }
 export interface ChannelRecord extends ChannelSummary {
   lastFetchedAt: Date | null;
+  fetchStartedAt: Date | null;
+  fetchCompletedAt: Date | null;
+  lastFetchSucceededAt: Date | null;
+  snapshotVersion: number;
+  lastFetchStatus: 'NEVER' | 'RUNNING' | 'SUCCESS' | 'DEFERRED' | 'FAILED';
+  nextFetchAt: Date | null;
 }
 export interface SubscriptionRecord {
   id: string;
@@ -23,7 +29,7 @@ export interface SubscriptionRecord {
   status: SubscriptionStatus;
   lastCalendarSyncAt: Date | null;
   lastManualSyncAt: Date | null;
-  lastSyncStatus: 'SUCCESS' | 'FAILED' | 'RUNNING' | 'SKIPPED' | null;
+  lastSyncStatus: 'SUCCESS' | 'FAILED' | 'RUNNING' | 'SKIPPED' | 'DEFERRED' | null;
   lastErrorMessage: string | null;
 }
 export interface BroadcastRecord extends NormalizedBroadcast {
@@ -40,10 +46,18 @@ export interface MappingRecord {
   managedFieldsHash: string;
 }
 export interface SyncResult {
-  status: 'RUNNING' | 'SUCCESS' | 'FAILED' | 'SKIPPED';
+  status: 'RUNNING' | 'SUCCESS' | 'FAILED' | 'SKIPPED' | 'DEFERRED';
   message: string | null;
   errorCode?: string | null;
+  phases?: {
+    youtubeFetch: SyncPhaseStatus;
+    databaseUpdate: SyncPhaseStatus;
+    calendarSync: SyncPhaseStatus;
+  };
+  snapshotVersion?: number | null;
 }
+export type SyncPhaseStatus = 'NOT_STARTED' | 'SUCCESS' | 'DEFERRED' | 'FAILED' | 'SKIPPED';
+export type ChannelFetchTerminalStatus = 'DEFERRED' | 'FAILED';
 export type DeletionStep =
   'CALENDAR_DELETED' | 'TOKEN_REVOKED' | 'DATA_DELETED' | 'AUTH_DELETED' | 'COMPLETED';
 export interface AccountDeletionRecord {
@@ -133,12 +147,32 @@ export interface Store {
     Array<{ subscription: SubscriptionRecord; channel: ChannelRecord; user: UserRecord }>
   >;
   updateChannelFetchedAt(channelId: string, at: Date): Promise<void>;
+  startChannelFetch(channelId: string, at: Date, lease: LeaseOwnership): Promise<boolean>;
+  commitChannelSnapshot(
+    channelId: string,
+    items: NormalizedBroadcast[],
+    unavailableVideoIds: string[],
+    completedAt: Date,
+    lease: LeaseOwnership,
+  ): Promise<number | null>;
+  finishChannelFetch(
+    channelId: string,
+    status: ChannelFetchTerminalStatus,
+    at: Date,
+    nextFetchAt: Date | null,
+    lease: LeaseOwnership,
+  ): Promise<boolean>;
   upsertBroadcasts(
     channelId: string,
     items: NormalizedBroadcast[],
     observedAt: Date,
   ): Promise<BroadcastRecord[]>;
-  listTrackableBroadcasts(channelId: string, now: Date): Promise<BroadcastRecord[]>;
+  listTrackableBroadcasts(
+    channelId: string,
+    now: Date,
+    limit: number,
+    windowDays: number,
+  ): Promise<BroadcastRecord[]>;
   markBroadcastsUnavailable(
     channelId: string,
     youtubeVideoIds: string[],
@@ -191,7 +225,7 @@ export interface Store {
   ): Promise<void>;
   finishSyncRun(
     runId: string,
-    status: 'SUCCESS' | 'PARTIAL_FAILED' | 'FAILED',
+    status: 'SUCCESS' | 'PARTIAL_SUCCESS' | 'PARTIAL_FAILED' | 'DEFERRED' | 'FAILED',
     at: Date,
     errorCode?: string,
   ): Promise<void>;

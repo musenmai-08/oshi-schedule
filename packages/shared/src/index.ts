@@ -38,7 +38,7 @@ export interface SubscriptionView extends ChannelSummary {
   status: SubscriptionStatus;
   lastFetchedAt: string | null;
   lastCalendarSyncAt: string | null;
-  lastSyncStatus: 'SUCCESS' | 'FAILED' | 'RUNNING' | 'SKIPPED' | null;
+  lastSyncStatus: 'SUCCESS' | 'FAILED' | 'RUNNING' | 'SKIPPED' | 'DEFERRED' | null;
   lastErrorMessage: string | null;
 }
 

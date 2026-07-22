@@ -37,6 +37,12 @@ const toChannel = (row: {
   thumbnailUrl: string;
   channelUrl: string;
   lastFetchedAt: Date | null;
+  fetchStartedAt: Date | null;
+  fetchCompletedAt: Date | null;
+  lastFetchSucceededAt: Date | null;
+  snapshotVersion: number;
+  lastFetchStatus: 'NEVER' | 'RUNNING' | 'SUCCESS' | 'DEFERRED' | 'FAILED';
+  nextFetchAt: Date | null;
 }) => ({ ...row });
 const toSubscription = (row: {
   id: string;
@@ -58,7 +64,8 @@ const toSubscription = (row: {
     row.lastSyncStatus === 'SUCCESS' ||
     row.lastSyncStatus === 'FAILED' ||
     row.lastSyncStatus === 'RUNNING' ||
-    row.lastSyncStatus === 'SKIPPED'
+    row.lastSyncStatus === 'SKIPPED' ||
+    row.lastSyncStatus === 'DEFERRED'
       ? row.lastSyncStatus
       : null,
   lastErrorMessage: row.lastErrorMessage,
@@ -333,7 +340,129 @@ export class PrismaStore implements Store {
   async updateChannelFetchedAt(channelId: string, at: Date) {
     await this.prisma.youTubeChannel.update({
       where: { id: channelId },
-      data: { lastFetchedAt: at },
+      data: {
+        lastFetchedAt: at,
+        fetchCompletedAt: at,
+        lastFetchSucceededAt: at,
+        lastFetchStatus: 'SUCCESS',
+        nextFetchAt: null,
+        snapshotVersion: { increment: 1 },
+      },
+    });
+  }
+  async startChannelFetch(channelId: string, at: Date, lease: LeaseOwnership) {
+    return this.prisma.$transaction(async (transaction) => {
+      const valid = await transaction.$queryRaw<Array<{ valid: number }>>`
+        SELECT 1 AS valid FROM SyncLease
+        WHERE SyncLease.key = ${lease.key}
+          AND ownerToken = ${lease.ownerToken}
+          AND version = ${lease.version}
+          AND expiresAt > UTC_TIMESTAMP(3)
+        FOR UPDATE`;
+      if (!valid.length) return false;
+      await transaction.youTubeChannel.update({
+        where: { id: channelId },
+        data: { fetchStartedAt: at, lastFetchStatus: 'RUNNING', nextFetchAt: null },
+      });
+      return true;
+    });
+  }
+  async commitChannelSnapshot(
+    channelId: string,
+    items: NormalizedBroadcast[],
+    unavailableVideoIds: string[],
+    completedAt: Date,
+    lease: LeaseOwnership,
+  ) {
+    return this.prisma.$transaction(async (transaction) => {
+      const valid = await transaction.$queryRaw<Array<{ valid: number }>>`
+        SELECT 1 AS valid FROM SyncLease
+        WHERE SyncLease.key = ${lease.key}
+          AND ownerToken = ${lease.ownerToken}
+          AND version = ${lease.version}
+          AND expiresAt > UTC_TIMESTAMP(3)
+        FOR UPDATE`;
+      if (!valid.length) return null;
+      for (const item of items) {
+        const existing = await transaction.scheduledBroadcast.findUnique({
+          where: { youtubeVideoId: item.youtubeVideoId },
+        });
+        const changed =
+          !existing ||
+          existing.title !== item.title ||
+          existing.kind !== item.kind ||
+          existing.status !== item.status ||
+          existing.youtubeUrl !== item.youtubeUrl ||
+          existing.thumbnailUrl !== item.thumbnailUrl ||
+          existing.scheduledStartAt.getTime() !== item.scheduledStartAt.getTime() ||
+          existing.endAt.getTime() !== item.endAt.getTime() ||
+          existing.endTimeProvisional !== item.endTimeProvisional ||
+          existing.actualStartAt?.getTime() !== item.actualStartAt?.getTime() ||
+          existing.actualEndAt?.getTime() !== item.actualEndAt?.getTime();
+        const data = {
+          title: item.title,
+          kind: item.kind,
+          status: item.status,
+          youtubeUrl: item.youtubeUrl,
+          thumbnailUrl: item.thumbnailUrl,
+          scheduledStartAt: item.scheduledStartAt,
+          endAt: item.endAt,
+          endTimeProvisional: item.endTimeProvisional,
+          actualStartAt: item.actualStartAt,
+          actualEndAt: item.actualEndAt,
+          missingCount: 0,
+          ...(changed ? { sourceUpdatedAt: completedAt } : {}),
+        };
+        if (existing)
+          await transaction.scheduledBroadcast.update({ where: { id: existing.id }, data });
+        else
+          await transaction.scheduledBroadcast.create({ data: { channelId, ...data, youtubeVideoId: item.youtubeVideoId } });
+      }
+      if (unavailableVideoIds.length)
+        await transaction.scheduledBroadcast.updateMany({
+          where: {
+            channelId,
+            youtubeVideoId: { in: unavailableVideoIds },
+            status: { not: 'UNAVAILABLE' },
+          },
+          data: { status: 'UNAVAILABLE', sourceUpdatedAt: completedAt },
+        });
+      const channel = await transaction.youTubeChannel.update({
+        where: { id: channelId },
+        data: {
+          lastFetchedAt: completedAt,
+          fetchCompletedAt: completedAt,
+          lastFetchSucceededAt: completedAt,
+          snapshotVersion: { increment: 1 },
+          lastFetchStatus: 'SUCCESS',
+          nextFetchAt: null,
+        },
+        select: { snapshotVersion: true },
+      });
+      return channel.snapshotVersion;
+    });
+  }
+  async finishChannelFetch(
+    channelId: string,
+    status: 'DEFERRED' | 'FAILED',
+    at: Date,
+    nextFetchAt: Date | null,
+    lease: LeaseOwnership,
+  ) {
+    return this.prisma.$transaction(async (transaction) => {
+      const valid = await transaction.$queryRaw<Array<{ valid: number }>>`
+        SELECT 1 AS valid FROM SyncLease
+        WHERE SyncLease.key = ${lease.key}
+          AND ownerToken = ${lease.ownerToken}
+          AND version = ${lease.version}
+          AND expiresAt > UTC_TIMESTAMP(3)
+        FOR UPDATE`;
+      if (!valid.length) return false;
+      await transaction.youTubeChannel.update({
+        where: { id: channelId },
+        data: { fetchCompletedAt: at, lastFetchStatus: status, nextFetchAt },
+      });
+      return true;
     });
   }
   async upsertBroadcasts(channelId: string, items: NormalizedBroadcast[], observedAt: Date) {
@@ -385,13 +514,15 @@ export class PrismaStore implements Store {
       status: row.status === 'UNKNOWN' ? 'UNAVAILABLE' : row.status,
     }));
   }
-  async listTrackableBroadcasts(channelId: string, now: Date) {
+  async listTrackableBroadcasts(channelId: string, now: Date, limit: number, windowDays: number) {
     const rows = await this.prisma.scheduledBroadcast.findMany({
       where: {
         channelId,
-        scheduledStartAt: { gte: new Date(now.getTime() - 30 * 86_400_000) },
+        scheduledStartAt: { gte: new Date(now.getTime() - windowDays * 86_400_000) },
         status: { notIn: ['COMPLETED', 'CANCELLED'] },
       },
+      orderBy: { scheduledStartAt: 'desc' },
+      take: limit,
     });
     return rows.map((row) => ({
       ...row,
@@ -471,7 +602,9 @@ export class PrismaStore implements Store {
         lastSyncStatus: result.status,
         lastErrorCode: result.errorCode ?? null,
         lastErrorMessage: result.message,
-        ...(['SUCCESS', 'SKIPPED'].includes(result.status) ? { lastCalendarSyncAt: at } : {}),
+        ...(['SUCCESS', 'SKIPPED', 'DEFERRED'].includes(result.status)
+          ? { lastCalendarSyncAt: at }
+          : {}),
         ...(manual && result.status === 'RUNNING' ? { lastManualSyncAt: at } : {}),
       },
     });
@@ -597,12 +730,22 @@ export class PrismaStore implements Store {
         errorCode: result.errorCode ?? null,
         errorMessage: result.message,
         completedAt: at,
+        ...(result.phases
+          ? {
+              youtubeFetchStatus: result.phases.youtubeFetch,
+              databaseUpdateStatus: result.phases.databaseUpdate,
+              calendarSyncStatus: result.phases.calendarSync,
+            }
+          : {}),
+        ...(result.snapshotVersion !== undefined
+          ? { snapshotVersion: result.snapshotVersion }
+          : {}),
       },
     });
   }
   async finishSyncRun(
     runId: string,
-    status: 'SUCCESS' | 'PARTIAL_FAILED' | 'FAILED',
+    status: 'SUCCESS' | 'PARTIAL_SUCCESS' | 'PARTIAL_FAILED' | 'DEFERRED' | 'FAILED',
     at: Date,
     errorCode?: string,
   ) {

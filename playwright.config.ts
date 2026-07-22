@@ -1,29 +1,35 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const webPort = Number(process.env.E2E_WEB_PORT ?? 3310);
+const apiPort = Number(process.env.E2E_API_PORT ?? 4310);
+const webOrigin = `http://127.0.0.1:${webPort}`;
+const apiOrigin = `http://127.0.0.1:${apiPort}`;
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
   retries: process.env.CI ? 2 : 0,
   reporter: 'html',
-  use: { baseURL: 'http://127.0.0.1:3000', trace: 'on-first-retry' },
+  use: { baseURL: webOrigin, trace: 'on-first-retry' },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: [
     {
-      command: 'pnpm --filter @oshi-schedule/api dev',
-      url: 'http://127.0.0.1:4000/health',
-      reuseExistingServer: !process.env.CI,
+      command: 'pnpm --filter @oshi-schedule/api exec tsx src/server.ts',
+      url: `${apiOrigin}/health`,
+      reuseExistingServer: false,
       env: {
         APP_MODE: 'fake',
         NODE_ENV: 'test',
+        PORT: String(apiPort),
         ALLOWED_EMAILS: 'developer@example.com',
-        WEB_ORIGIN: 'http://127.0.0.1:3000',
+        WEB_ORIGIN: webOrigin,
       },
     },
     {
-      command: 'pnpm --filter @oshi-schedule/web dev',
-      url: 'http://127.0.0.1:3000',
-      reuseExistingServer: !process.env.CI,
-      env: { NEXT_PUBLIC_DEMO_MODE: 'true', NEXT_PUBLIC_API_URL: 'http://127.0.0.1:4000' },
+      command: `pnpm --filter @oshi-schedule/web exec next dev -p ${webPort}`,
+      url: webOrigin,
+      reuseExistingServer: false,
+      env: { NEXT_PUBLIC_DEMO_MODE: 'true', NEXT_PUBLIC_API_URL: apiOrigin },
     },
   ],
 });

@@ -2,6 +2,28 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { AppError } from '../../domain/errors.js';
 import type { TokenCipher } from '../../application/models.js';
 
+const BASE64_32_BYTES = /^(?:[A-Za-z0-9+/]{4}){10}[A-Za-z0-9+/]{3}=$/;
+
+export function decodeEncryptionKey(value: string) {
+  if (!BASE64_32_BYTES.test(value))
+    throw new Error('TOKEN_ENCRYPTION_KEYS must contain valid 32-byte base64 keys');
+  const key = Buffer.from(value, 'base64');
+  if (key.length !== 32 || key.toString('base64') !== value)
+    throw new Error('TOKEN_ENCRYPTION_KEYS must contain valid 32-byte base64 keys');
+  return key;
+}
+
+export function isPredictableEncryptionKey(key: Buffer) {
+  if (new Set(key).size < 16) return true;
+  for (let period = 1; period <= 16; period += 1) {
+    if (32 % period === 0 && key.every((byte, index) => byte === key[index % period])) return true;
+  }
+  const difference = (key[1]! - key[0]! + 256) % 256;
+  if (key.every((byte, index) => index === 0 || (byte - key[index - 1]! + 256) % 256 === difference))
+    return true;
+  return false;
+}
+
 export class AesTokenCipher implements TokenCipher {
   private readonly keys: Map<string, Buffer>;
   private readonly primaryId: string;
@@ -10,8 +32,8 @@ export class AesTokenCipher implements TokenCipher {
     const entries = value.split(',').map((item) => {
       const separator = item.indexOf(':');
       const id = item.slice(0, separator);
-      const key = Buffer.from(item.slice(separator + 1), 'base64');
-      if (!id || key.length !== 32)
+      const key = decodeEncryptionKey(item.slice(separator + 1));
+      if (!id)
         throw new Error('TOKEN_ENCRYPTION_KEYS must contain 32-byte base64 keys');
       if (seen.has(id)) throw new Error('TOKEN_ENCRYPTION_KEYS contains a duplicate key identifier');
       seen.add(id);

@@ -9,6 +9,33 @@ export const YOUTUBE_QUOTA_COSTS = {
 
 export type YouTubeQuotaMethod = keyof typeof YOUTUBE_QUOTA_COSTS;
 
+export const YOUTUBE_VIDEOS_LIST_BATCH_SIZE = 50;
+export const MVP_CHANNELS_PER_USER = 3;
+export const SCHEDULED_RUNS_PER_DAY = 24;
+
+export function calculateYouTubeDailyQuotaBounds(input: {
+  maxSearchPages: number;
+  maxTrackedBroadcastsPerChannel: number;
+  maxAttempts: number;
+}) {
+  const trackedBatches = Math.ceil(
+    input.maxTrackedBroadcastsPerChannel / YOUTUBE_VIDEOS_LIST_BATCH_SIZE,
+  );
+  const channelRuns = MVP_CHANNELS_PER_USER * SCHEDULED_RUNS_PER_DAY;
+  const generalPerChannelRun = input.maxSearchPages + trackedBatches;
+  const scheduledSearchWithoutRetries = channelRuns * input.maxSearchPages;
+  const scheduledGeneralWithoutRetries = channelRuns * generalPerChannelRun;
+  return {
+    trackedBatches,
+    channelRuns,
+    generalPerChannelRun,
+    scheduledSearchWithoutRetries,
+    scheduledGeneralWithoutRetries,
+    scheduledSearchWithRetries: scheduledSearchWithoutRetries * input.maxAttempts,
+    scheduledGeneralWithRetries: scheduledGeneralWithoutRetries * input.maxAttempts,
+  };
+}
+
 export function quotaDateAt(now: Date, timeZone: string) {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone,

@@ -21,7 +21,10 @@ export function createApp(env: Env, container: Container): Express {
   );
   app.use(express.json({ limit: '32kb' }));
   app.get('/health', (_request, response) =>
-    response.json({ data: { status: 'ok' }, requestId: response.locals.requestId }),
+    response.json({
+      data: { status: 'ok', service: 'oshi-schedule-api' },
+      requestId: response.locals.requestId,
+    }),
   );
   app.use(
     '/api/v1',

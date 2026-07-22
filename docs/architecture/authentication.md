@@ -8,7 +8,7 @@
 4. API は JWT 署名を Supabase JWKS で検証し、`iss`、`aud=authenticated`、`exp`、`sub`、email を検証する。招待外メールは拒否する。
 5. refresh token を AES-256-GCM で暗号化保存し、access token は短期利用後に破棄する。Supabase は Google provider token を更新しないため、worker は保存済み refresh token から更新する。
 
-暗号文形式は `v1.<keyId>.<iv>.<tag>.<ciphertext>` (base64url)。鍵は `TOKEN_ENCRYPTION_KEYS` に `keyId:base64(32 bytes)` の列として置き、先頭を暗号化、全鍵を復号候補にする。real/productionはkey IDにかかわらず全ゼロ・単一byte反復などの低entropy鍵を拒否する。暗号化ごとに96-bit IVを生成し、GCM authentication tagを検証する。
+暗号文形式は `v1.<keyId>.<iv>.<tag>.<ciphertext>` (base64url)。鍵は `TOKEN_ENCRYPTION_KEYS` に `keyId:base64(32 bytes)` の列として置き、先頭を暗号化、全鍵を復号候補にする。real/productionは厳密なbase64・復号後32 byteを要求し、開発sample、全ゼロ、単一byte、短周期、連番など予測可能な鍵を拒否する。この拒否規則自体をentropy保証とはせず、鍵は`openssl rand -base64 32`等のOS CSPRNGで生成してSecret Managerから注入する。暗号化ごとに96-bit IVを生成し、GCM authentication tagを検証する。ローテーションは新鍵を先頭、旧鍵を復号候補として併存させ、復号後に新鍵で再暗号化してから旧鍵を廃止する。不明key IDや誤ったtagは平文・鍵をログせず固定エラーで失敗する。
 
 ## Cookie・CSRF
 

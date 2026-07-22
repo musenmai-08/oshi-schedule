@@ -41,6 +41,10 @@ export class MemoryStore implements Store {
     status: string;
     startedAt: Date;
     completedAt: Date | null;
+    youtubeFetchStatus: string;
+    databaseUpdateStatus: string;
+    calendarSyncStatus: string;
+    snapshotVersion: number | null;
   }> = [];
 
   constructor(private readonly seedDemoUser = false) {
@@ -199,7 +203,16 @@ export class MemoryStore implements Store {
       Object.assign(found, input);
       return found;
     }
-    const channel: ChannelRecord = { ...input, lastFetchedAt: null };
+    const channel: ChannelRecord = {
+      ...input,
+      lastFetchedAt: null,
+      fetchStartedAt: null,
+      fetchCompletedAt: null,
+      lastFetchSucceededAt: null,
+      snapshotVersion: 0,
+      lastFetchStatus: 'NEVER',
+      nextFetchAt: null,
+    };
     this.channels.push(channel);
     return channel;
   }
@@ -251,7 +264,58 @@ export class MemoryStore implements Store {
   }
   async updateChannelFetchedAt(channelId: string, at: Date) {
     const channel = this.channels.find((item) => item.id === channelId);
-    if (channel) channel.lastFetchedAt = at;
+    if (channel)
+      Object.assign(channel, {
+        lastFetchedAt: at,
+        fetchCompletedAt: at,
+        lastFetchSucceededAt: at,
+        lastFetchStatus: 'SUCCESS' as const,
+        nextFetchAt: null,
+        snapshotVersion: channel.snapshotVersion + 1,
+      });
+  }
+  async startChannelFetch(channelId: string, at: Date, lease: LeaseOwnership) {
+    if (!this.ownsLease(lease, at)) return false;
+    const channel = this.channels.find((item) => item.id === channelId);
+    if (!channel) return false;
+    Object.assign(channel, { fetchStartedAt: at, lastFetchStatus: 'RUNNING' as const, nextFetchAt: null });
+    return true;
+  }
+  async commitChannelSnapshot(
+    channelId: string,
+    items: NormalizedBroadcast[],
+    unavailableVideoIds: string[],
+    completedAt: Date,
+    lease: LeaseOwnership,
+  ) {
+    if (!this.ownsLease(lease, completedAt)) return null;
+    await this.upsertBroadcasts(channelId, items, completedAt);
+    await this.markBroadcastsUnavailable(channelId, unavailableVideoIds, completedAt);
+    const channel = this.channels.find((item) => item.id === channelId);
+    if (!channel) return null;
+    const version = channel.snapshotVersion + 1;
+    Object.assign(channel, {
+      lastFetchedAt: completedAt,
+      fetchCompletedAt: completedAt,
+      lastFetchSucceededAt: completedAt,
+      snapshotVersion: version,
+      lastFetchStatus: 'SUCCESS' as const,
+      nextFetchAt: null,
+    });
+    return version;
+  }
+  async finishChannelFetch(
+    channelId: string,
+    status: 'DEFERRED' | 'FAILED',
+    at: Date,
+    nextFetchAt: Date | null,
+    lease: LeaseOwnership,
+  ) {
+    if (!this.ownsLease(lease, at)) return false;
+    const channel = this.channels.find((item) => item.id === channelId);
+    if (!channel) return false;
+    Object.assign(channel, { fetchCompletedAt: at, lastFetchStatus: status, nextFetchAt });
+    return true;
   }
   async upsertBroadcasts(channelId: string, inputs: NormalizedBroadcast[], observedAt: Date) {
     return inputs.map((input) => {
@@ -285,13 +349,16 @@ export class MemoryStore implements Store {
       return item;
     });
   }
-  async listTrackableBroadcasts(channelId: string, now: Date) {
-    return this.broadcasts.filter(
-      (item) =>
-        item.channelId === channelId &&
-        item.scheduledStartAt >= new Date(now.getTime() - 30 * 86_400_000) &&
-        !['COMPLETED', 'CANCELLED'].includes(item.status),
-    );
+  async listTrackableBroadcasts(channelId: string, now: Date, limit: number, windowDays: number) {
+    return this.broadcasts
+      .filter(
+        (item) =>
+          item.channelId === channelId &&
+          item.scheduledStartAt >= new Date(now.getTime() - windowDays * 86_400_000) &&
+          !['COMPLETED', 'CANCELLED'].includes(item.status),
+      )
+      .sort((left, right) => right.scheduledStartAt.getTime() - left.scheduledStartAt.getTime())
+      .slice(0, limit);
   }
   async markBroadcastsUnavailable(channelId: string, ids: string[], observedAt: Date) {
     this.broadcasts
@@ -346,7 +413,7 @@ export class MemoryStore implements Store {
     if (!item) return;
     item.lastSyncStatus = result.status;
     item.lastErrorMessage = result.message;
-    if (result.status === 'SUCCESS' || result.status === 'SKIPPED') item.lastCalendarSyncAt = at;
+    if (['SUCCESS', 'SKIPPED', 'DEFERRED'].includes(result.status)) item.lastCalendarSyncAt = at;
     if (manual && result.status === 'RUNNING') item.lastManualSyncAt = at;
   }
   async acquireSyncLease(key: string, ownerToken: string, now: Date, ttlMs: number) {
@@ -411,6 +478,10 @@ export class MemoryStore implements Store {
       status: 'RUNNING',
       startedAt: at,
       completedAt: null,
+      youtubeFetchStatus: 'NOT_STARTED',
+      databaseUpdateStatus: 'NOT_STARTED',
+      calendarSyncStatus: 'NOT_STARTED',
+      snapshotVersion: null,
     });
   }
   async finishSyncTarget(runId: string, subscriptionId: string, result: SyncResult, at: Date) {
@@ -420,9 +491,17 @@ export class MemoryStore implements Store {
     if (target) {
       target.status = result.status;
       target.completedAt = at;
+      target.youtubeFetchStatus = result.phases?.youtubeFetch ?? target.youtubeFetchStatus;
+      target.databaseUpdateStatus = result.phases?.databaseUpdate ?? target.databaseUpdateStatus;
+      target.calendarSyncStatus = result.phases?.calendarSync ?? target.calendarSyncStatus;
+      target.snapshotVersion = result.snapshotVersion ?? target.snapshotVersion;
     }
   }
-  async finishSyncRun(runId: string, status: 'SUCCESS' | 'PARTIAL_FAILED' | 'FAILED', at: Date) {
+  async finishSyncRun(
+    runId: string,
+    status: 'SUCCESS' | 'PARTIAL_SUCCESS' | 'PARTIAL_FAILED' | 'DEFERRED' | 'FAILED',
+    at: Date,
+  ) {
     const run = this.syncRuns.find((item) => item.id === runId);
     if (run) {
       run.status = status;

@@ -5,7 +5,7 @@ export interface NormalizedBroadcast {
   youtubeVideoId: string;
   title: string;
   kind: BroadcastKind;
-  status: BroadcastStatus;
+  status: BroadcastStatus | 'UNKNOWN';
   youtubeUrl: string;
   thumbnailUrl: string;
   scheduledStartAt: Date;
@@ -66,6 +66,22 @@ export function buildCalendarEvent(
 
 export function managedFieldsHash(event: CalendarEventInput) {
   return createHash('sha256').update(JSON.stringify(event)).digest('hex');
+}
+
+/** Decides whether this user may receive a Calendar event for a broadcast snapshot. */
+export function shouldSyncCalendarEvent(
+  broadcast: NormalizedBroadcast,
+  hasMapping: boolean,
+  now: Date,
+) {
+  // Existing managed events remain updateable, including completion/unavailability history.
+  if (hasMapping) return true;
+  // A confirmed end is authoritative even if a stale source status still says UPCOMING/LIVE.
+  if (broadcast.actualEndAt) return false;
+  if (broadcast.status === 'LIVE') return true;
+  if (broadcast.status !== 'UPCOMING') return false;
+  // A provisional end does not end LIVE, but an unmapped scheduled item must still be future.
+  return broadcast.scheduledStartAt.getTime() > now.getTime();
 }
 
 export const isFuture = (value: Date, now: Date) => value.getTime() >= now.getTime();

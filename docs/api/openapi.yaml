@@ -58,10 +58,18 @@ components:
       properties: { confirmation: { type: string, const: DELETE } }
     SyncAccepted:
       type: object
-      required: [status, broadcasts]
+      required: [status, broadcasts, snapshotVersion, phases]
       properties:
         status: { type: string, enum: [SUCCESS, DEFERRED] }
         broadcasts: { type: integer, minimum: 0 }
+        snapshotVersion: { type: integer, minimum: 0 }
+        phases:
+          type: object
+          required: [youtubeFetch, databaseUpdate, calendarSync]
+          properties:
+            youtubeFetch: { type: string, enum: [SUCCESS, DEFERRED, FAILED, SKIPPED] }
+            databaseUpdate: { type: string, enum: [SUCCESS, DEFERRED, FAILED, SKIPPED] }
+            calendarSync: { type: string, enum: [SUCCESS, DEFERRED, FAILED, SKIPPED] }
         nextRetryAt: { type: string, format: date-time }
   responses:
     BadRequest:
@@ -81,7 +89,20 @@ paths:
   /health:
     get:
       security: []
-      responses: { '200': { description: healthy } }
+      responses:
+        '200':
+          description: healthy oshi-schedule API instance
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    required: [status, service]
+                    properties:
+                      status: { type: string, const: ok }
+                      service: { type: string, const: oshi-schedule-api }
   /api/v1/me:
     get:
       responses:

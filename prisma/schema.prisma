@@ -42,7 +42,25 @@ enum SyncRunType {
 enum SyncStatus {
   RUNNING
   SUCCESS
+  PARTIAL_SUCCESS
   PARTIAL_FAILED
+  DEFERRED
+  FAILED
+  SKIPPED
+}
+
+enum ChannelFetchStatus {
+  NEVER
+  RUNNING
+  SUCCESS
+  DEFERRED
+  FAILED
+}
+
+enum SyncPhaseStatus {
+  NOT_STARTED
+  SUCCESS
+  DEFERRED
   FAILED
   SKIPPED
 }
@@ -121,6 +139,12 @@ model YouTubeChannel {
   thumbnailUrl     String                    @db.Text
   channelUrl       String                    @db.Text
   lastFetchedAt    DateTime?                 @db.DateTime(3)
+  fetchStartedAt   DateTime?                 @db.DateTime(3)
+  fetchCompletedAt DateTime?                 @db.DateTime(3)
+  lastFetchSucceededAt DateTime?             @db.DateTime(3)
+  snapshotVersion Int                        @default(0)
+  lastFetchStatus  ChannelFetchStatus         @default(NEVER)
+  nextFetchAt      DateTime?                  @db.DateTime(3)
   etag             String?                   @db.VarChar(255)
   createdAt        DateTime                  @default(now()) @db.DateTime(3)
   updatedAt        DateTime                  @updatedAt @db.DateTime(3)
@@ -129,6 +153,7 @@ model YouTubeChannel {
 
   @@index([handle])
   @@index([lastFetchedAt])
+  @@index([lastFetchStatus, nextFetchAt])
 }
 
 /// 利用者ごとの登録・一時停止・表示用同期結果。
@@ -224,6 +249,10 @@ model SyncTargetResult {
   errorMessage String?    @db.VarChar(255)
   startedAt    DateTime   @default(now()) @db.DateTime(3)
   completedAt  DateTime?  @db.DateTime(3)
+  youtubeFetchStatus SyncPhaseStatus @default(NOT_STARTED)
+  databaseUpdateStatus SyncPhaseStatus @default(NOT_STARTED)
+  calendarSyncStatus SyncPhaseStatus @default(NOT_STARTED)
+  snapshotVersion Int?
   syncRun      SyncRun    @relation(fields: [syncRunId], references: [id], onDelete: Cascade)
 
   @@unique([syncRunId, targetType, targetId])

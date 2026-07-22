@@ -33,7 +33,9 @@ describe('API', () => {
       .send({ providerRefreshToken: 'fake-refresh-token' });
   });
   it('serves health and rejects missing authentication', async () => {
-    expect((await request(app).get('/health')).status).toBe(200);
+    const health = await request(app).get('/health');
+    expect(health.status).toBe(200);
+    expect(health.body.data).toEqual({ status: 'ok', service: 'oshi-schedule-api' });
     expect((await request(app).get('/api/v1/me')).status).toBe(401);
   });
   it('rejects a non invited email', async () => {

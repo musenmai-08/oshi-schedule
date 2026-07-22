@@ -55,11 +55,11 @@ pnpm db:seed
 - Supabase URL、publishable key、service role key
 - Google OAuth client ID / secret
 - YouTube Data API key
-- `TOKEN_ENCRYPTION_KEYS`（32 byte乱数のbase64。例: `openssl rand -base64 32`）
+- `TOKEN_ENCRYPTION_KEYS`（CSPRNGで生成した32 byte乱数のbase64。例: `openssl rand -base64 32`。Secret Managerへ保存）
 
-APIとworkerは、各workspace packageをcwdとして起動した場合もproject rootの `.env` を読みます。real/productionでは `.env.example` の全ゼロ暗号鍵を拒否するため、必ず乱数鍵へ置換してください。
+APIとworkerは、各workspace packageをcwdとして起動した場合もproject rootの `.env` を読みます。real/productionでは `.env.example` の全ゼロ鍵、既知sample、反復、連番など予測可能な鍵を拒否します。独自の強度推定を安全性の根拠にはせず、必ずOSのCSPRNGで生成し、ログやGitへ出さないでください。ローテーション時は `v2:<new>,v1:<old>` のように新鍵を先頭へ追加し、旧暗号文を復号して新鍵で再暗号化した後に旧鍵を外します。暗号文自身にもkey IDが保存されます。
 
-外部HTTP timeoutとlease、YouTube quotaは `.env` で調整できます。`ACCOUNT_DELETION_LEASE_MS` と `SYNC_LEASE_MS` は `EXTERNAL_API_TIMEOUT_MS` より長くしてください。YouTubeは一般endpoint用 `YOUTUBE_DAILY_QUOTA_BUDGET=8000` と、独立したsearch bucket用 `YOUTUBE_DAILY_SEARCH_QUOTA_BUDGET=80` をDBで管理します。日付境界は `YOUTUBE_QUOTA_TIMEZONE=America/Los_Angeles`、予定検索は既定1ページです。自動同期用予約枠を手動同期が消費することはできません。
+外部HTTP timeoutとlease、YouTube quotaは `.env` で調整できます。`ACCOUNT_DELETION_LEASE_MS` と `SYNC_LEASE_MS` は `EXTERNAL_API_TIMEOUT_MS` より長くしてください。YouTubeは一般endpoint用 `YOUTUBE_DAILY_QUOTA_BUDGET=8000` と、独立したsearch bucket用 `YOUTUBE_DAILY_SEARCH_QUOTA_BUDGET=80` をDBで管理します。日付境界は `YOUTUBE_QUOTA_TIMEZONE=America/Los_Angeles`、予定検索は既定1ページ、追跡は1チャンネル50件・30日です。既定値では通常最大がSEARCH 72/日・GENERAL 144/日、3 attemptを含むGENERAL上限が432/日です。設定から再計算した上限をreserveが満たさなければ起動時に失敗します。自動同期用予約枠を手動同期が消費することはできません。API呼出し直前に予約し、応答成否にかかわらず実績へ移します。process crash時の未使用予約は二重消費防止を優先して当日中は解放せず、Pacific Timeの日次行で自然に分離します。
 
 Supabase の Google provider に Calendar API scope を許可し、Site URL/redirect URL に `http://localhost:3000/auth/callback` を登録してください。Google Cloud 側でも同じ Supabase callback URI、YouTube Data API v3、Google Calendar API、OAuth同意画面を設定します。
 
@@ -74,7 +74,7 @@ NEXT_PUBLIC_DEMO_MODE=false pnpm --filter @oshi-schedule/web dev
 APP_MODE=real pnpm sync:scheduled
 ```
 
-1時間ごとの実行はインフラのschedulerから `pnpm sync:scheduled` を呼びます。worker はHTTPサーバーを必要としません。同じYouTubeチャンネルの取得はDB leaseで共有し、quota不足時は外部取得を次のPacific Time日付へ延期しながら保存済みデータのCalendar同期を続けます。
+1時間ごとの実行はインフラのschedulerから `pnpm sync:scheduled` を呼びます。worker はHTTPサーバーを必要としません。同じYouTubeチャンネルの取得はDB leaseとversion付きsnapshotで共有し、取得完了後は各subscriptionが自分のCalendarへ必ず展開します。完了snapshotがない後続workerやquota不足は`SUCCESS`にせず`DEFERRED`とし、保存済みデータのCalendar同期だけを続けます。
 
 ## 品質確認
 
@@ -86,6 +86,8 @@ pnpm build
 pnpm exec playwright install chromium  # 初回のみ
 pnpm test:e2e
 ```
+
+E2Eは既定でWeb `3310`、API `4310`を専用利用し、既存serverを再利用しません。並列CIでは`E2E_WEB_PORT`と`E2E_API_PORT`をjobごとに割り当てられます。APIの`/health`は`service: oshi-schedule-api`を返し、シナリオ開始時に対象アプリを識別します。
 
 MySQLを含むAPI結合テストは、migration適用済みの分離DBを `TEST_DATABASE_URL` で指定して実行します。
 

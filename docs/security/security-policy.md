@@ -2,7 +2,7 @@
 
 - 認証: Supabase JWKS で署名・algorithm・issuer・audience・expiry を検証。`sub` のみを主体 ID とする。Fake auth は `NODE_ENV=production` で禁止。
 - 認可: repository query に user ID を必須化し IDOR を防ぐ。subscription path は CUID として検証する。削除は確認文字 `DELETE` と永続墓石を要求し、削除中・削除済み主体の通常 API 利用を拒否する。
-- token: Google refresh token は AES-256-GCM、鍵は環境変数/本番 Secret Manager。鍵 ID 付き ciphertext によりローテーションする。real/production はkey IDに関係なく全ゼロ・反復byte等の低entropy鍵を拒否し、重複key IDも起動時拒否する。96-bit IVは暗号化ごとに生成しauthentication tagを必ず検証する。tokenはログ・応答へ出さない。
+- token: Google refresh token は AES-256-GCM、鍵はOS CSPRNGで32 byte生成し本番Secret Managerから注入する。鍵 ID 付き ciphertext と新旧鍵併存により再暗号化rotationする。real/production は厳密なbase64/長さ、既知sample、短周期、連番、極端に少ないbyte種類、重複key IDを起動時拒否するが、独自entropy推定を強度保証にはしない。96-bit IVは暗号化ごとに生成しauthentication tagを必ず検証する。不明version/誤鍵は安全に失敗し、token・鍵はログ/応答へ出さない。
 - HTTP: Helmet、origin allowlist CORS、32 KiB JSON、request ID、認証 API 100 req/15min、手動同期 1 req/5min。Bearer 認証で cookie CSRF を避ける。
 - 外部通信: HTTPS、`EXTERNAL_API_TIMEOUT_MS` のAbortSignalで実HTTPを中断し、timeoutを通常API errorと別codeにする。本文をログしない。redirect は相対パス allowlist。Google OAuth state/PKCE を必須とする。
 - データ: Prisma parameterization で SQL injection を防ぎ、React escape でXSSを低減する。APIはJSON専用でCSPを無効化しているため、Web側CSPは本番公開前の別途hardening項目とする。メールはログに含めない。

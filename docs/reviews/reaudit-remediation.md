@@ -71,3 +71,7 @@ Node.js 22.23.1、pnpm 9.15.9、Docker MySQL 8.4を使用した。
 - 実projectのquota割当はCloud Consoleを正とし、`YOUTUBE_*_DAILY_BUDGET`とreserveを配備先の割当に合わせて確定する。
 
 コード変更のgit commitは作成していない。
+
+## 最終独立監査後の追補（2026-07-22）
+
+最終監査でREAUDIT-005〜007に残存条件が確認されたため、旧「修正済み」の根拠を補強した。暗号鍵は周期/連番/不正base64も拒否しCSPRNG運用へ変更、過去UPCOMINGを明示policyで除外、YouTube追跡を件数/期間で有限化した。共有channelは完了snapshotVersionを後続workerが待ち、各subscriptionのCalendarへfan-outし、待てない場合はDEFERREDとする。詳細・最終検証は[最終監査修正台帳](./final-audit-remediation.md)を正とする。

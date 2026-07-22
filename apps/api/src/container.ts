@@ -98,7 +98,12 @@ export function createContainer(env: Env, overrides: ContainerOverrides = {}): C
           env.SUPABASE_SERVICE_ROLE_KEY ?? '',
           env.EXTERNAL_API_TIMEOUT_MS,
         ));
-  const sync = new SyncService(store, youtube, calendar, clock, logger, env.SYNC_LEASE_MS);
+  const sync = new SyncService(store, youtube, calendar, clock, logger, env.SYNC_LEASE_MS, {
+    maxTrackedBroadcastsPerChannel: env.YOUTUBE_MAX_TRACKED_BROADCASTS_PER_CHANNEL,
+    trackingWindowDays: env.YOUTUBE_TRACKING_WINDOW_DAYS,
+    snapshotWaitMs: Math.min(env.SYNC_LEASE_MS, 30_000),
+    snapshotPollMs: 250,
+  });
   const service = new OshiService(
     store,
     youtube,

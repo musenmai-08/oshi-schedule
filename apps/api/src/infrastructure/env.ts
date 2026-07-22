@@ -1,6 +1,11 @@
 import { config as loadDotenv } from 'dotenv';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
+import {
+  decodeEncryptionKey,
+  isPredictableEncryptionKey,
+} from './encryption/aes-token-cipher.js';
+import { calculateYouTubeDailyQuotaBounds } from './youtube/youtube-quota.js';
 
 export const ROOT_ENV_PATH = fileURLToPath(new URL('../../../../.env', import.meta.url));
 loadDotenv({ path: ROOT_ENV_PATH, quiet: true });
@@ -46,11 +51,18 @@ const schema = z
     YOUTUBE_SCHEDULED_SEARCH_QUOTA_RESERVE: z.coerce.number().int().nonnegative().default(72),
     YOUTUBE_QUOTA_TIMEZONE: timeZone.default('America/Los_Angeles'),
     YOUTUBE_MAX_SEARCH_PAGES: z.coerce.number().int().min(1).max(10).default(1),
+    YOUTUBE_MAX_TRACKED_BROADCASTS_PER_CHANNEL: z.coerce.number().int().min(1).max(250).default(50),
+    YOUTUBE_TRACKING_WINDOW_DAYS: z.coerce.number().int().min(1).max(90).default(30),
     YOUTUBE_API_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(3).default(3),
     YOUTUBE_RETRY_BASE_DELAY_MS: z.coerce.number().int().min(1).default(1_000),
     YOUTUBE_RETRY_MAX_DELAY_MS: z.coerce.number().int().min(1).default(5_000),
   })
   .superRefine((env, context) => {
+    const quota = calculateYouTubeDailyQuotaBounds({
+      maxSearchPages: env.YOUTUBE_MAX_SEARCH_PAGES,
+      maxTrackedBroadcastsPerChannel: env.YOUTUBE_MAX_TRACKED_BROADCASTS_PER_CHANNEL,
+      maxAttempts: env.YOUTUBE_API_MAX_ATTEMPTS,
+    });
     const maximumCalendarDeletionMs =
       env.EXTERNAL_API_TIMEOUT_MS * 4 + env.OAUTH_RETRY_MAX_DELAY_MS * 2;
     if (env.ACCOUNT_DELETION_LEASE_MS <= maximumCalendarDeletionMs)
@@ -77,6 +89,18 @@ const schema = z
         path: ['YOUTUBE_SCHEDULED_SEARCH_QUOTA_RESERVE'],
         message: 'scheduled search reserve must not exceed daily search budget',
       });
+    if (env.YOUTUBE_SCHEDULED_QUOTA_RESERVE < quota.scheduledGeneralWithRetries)
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['YOUTUBE_SCHEDULED_QUOTA_RESERVE'],
+        message: `scheduled quota reserve must be at least ${quota.scheduledGeneralWithRetries}`,
+      });
+    if (env.YOUTUBE_SCHEDULED_SEARCH_QUOTA_RESERVE < quota.scheduledSearchWithoutRetries)
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['YOUTUBE_SCHEDULED_SEARCH_QUOTA_RESERVE'],
+        message: `scheduled search reserve must be at least ${quota.scheduledSearchWithoutRetries}`,
+      });
   });
 export type Env = z.infer<typeof schema>;
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
@@ -95,10 +119,12 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     if (env.APP_MODE === 'fake') throw new Error('Fake mode is forbidden in production');
     for (const entry of env.TOKEN_ENCRYPTION_KEYS.split(',')) {
       const separator = entry.indexOf(':');
-      const key = Buffer.from(entry.slice(separator + 1), 'base64');
-      const uniqueBytes = new Set(key).size;
-      if (key.length !== 32 || uniqueBytes < 8)
-        throw new Error('TOKEN_ENCRYPTION_KEYS must not use a known or low-entropy key');
+      if (separator <= 0) throw new Error('TOKEN_ENCRYPTION_KEYS must contain a key identifier');
+      const key = decodeEncryptionKey(entry.slice(separator + 1));
+      if (isPredictableEncryptionKey(key))
+        throw new Error(
+          'TOKEN_ENCRYPTION_KEYS must not use a known, predictable, low-entropy, or unsafe key',
+        );
     }
   }
   return env;

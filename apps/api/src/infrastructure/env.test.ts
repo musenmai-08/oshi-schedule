@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,13 +22,31 @@ describe('loadEnv production encryption keys', () => {
   });
 
   it('accepts a non-default 32-byte key', () => {
-    const key = Buffer.from(Array.from({ length: 32 }, (_, index) => index)).toString('base64');
+    const key = randomBytes(32).toString('base64');
     expect(
       loadEnv({
         ...realEnv,
         TOKEN_ENCRYPTION_KEYS: `v2:${key}`,
       }).APP_MODE,
     ).toBe('real');
+  });
+
+  it.each([
+    ['short-period', Buffer.from(Array.from({ length: 32 }, (_, index) => index % 8))],
+    ['sequential', Buffer.from(Array.from({ length: 32 }, (_, index) => index))],
+  ])('rejects a predictable %s key', (_name, bytes) => {
+    expect(() =>
+      loadEnv({
+        ...realEnv,
+        TOKEN_ENCRYPTION_KEYS: `v2:${bytes.toString('base64')}`,
+      }),
+    ).toThrow(/predictable|unsafe|low-entropy/);
+  });
+
+  it('rejects malformed base64 instead of accepting a lenient decode', () => {
+    expect(() =>
+      loadEnv({ ...realEnv, TOKEN_ENCRYPTION_KEYS: `v2:${'!'.repeat(44)}` }),
+    ).toThrow(/base64/i);
   });
 
   it('rejects all-zero and low-entropy keys even when the key identifier changes', () => {
@@ -49,11 +68,28 @@ describe('loadEnv production encryption keys', () => {
     expect(() =>
       loadEnv({
         ...realEnv,
-        TOKEN_ENCRYPTION_KEYS: `v1:${Buffer.from(Array.from({ length: 32 }, (_, index) => index)).toString('base64')}`,
+        TOKEN_ENCRYPTION_KEYS: `v1:${randomBytes(32).toString('base64')}`,
         EXTERNAL_API_TIMEOUT_MS: '10000',
         ACCOUNT_DELETION_LEASE_MS: '10000',
       }),
     ).toThrow(/ACCOUNT_DELETION_LEASE_MS/);
+  });
+
+  it('rejects production quota settings whose reserve cannot cover bounded retries', () => {
+    expect(() =>
+      loadEnv({
+        ...realEnv,
+        TOKEN_ENCRYPTION_KEYS: `v2:${randomBytes(32).toString('base64')}`,
+        YOUTUBE_MAX_TRACKED_BROADCASTS_PER_CHANNEL: '51',
+        YOUTUBE_SCHEDULED_QUOTA_RESERVE: '432',
+      }),
+    ).toThrow(/reserve must be at least 648/);
+  });
+
+  it('allows the documented development key only outside production/real mode', () => {
+    expect(loadEnv({ NODE_ENV: 'test', APP_MODE: 'fake' }).TOKEN_ENCRYPTION_KEYS).toBe(
+      'v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+    );
   });
 
   it('loads dotenv from the repository root independently of the working directory', () => {

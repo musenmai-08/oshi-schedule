@@ -6,7 +6,7 @@ OpenAPI の機械可読定義は [`openapi.yaml`](./openapi.yaml)。subscription
 
 | Method | Path                                     | 認証 | 成功    | 用途                                                   |
 | ------ | ---------------------------------------- | ---- | ------- | ------------------------------------------------------ |
-| GET    | `/health`                                | 不要 | 200     | liveness                                               |
+| GET    | `/health`                                | 不要 | 200     | liveness・`service=oshi-schedule-api`識別               |
 | GET    | `/api/v1/me`                             | 必須 | 200     | 利用者・連携状態                                       |
 | POST   | `/api/v1/onboarding`                     | 必須 | 200/201 | provider token 保存・Calendar 作成                     |
 | GET    | `/api/v1/channels`                       | 必須 | 200     | 登録一覧                                               |
@@ -23,4 +23,4 @@ OpenAPI の機械可読定義は [`openapi.yaml`](./openapi.yaml)。subscription
 
 通常APIは既存active Userだけを受け付ける。onboardingだけがローカルUserを作成でき、削除墓石があるsubjectは410を返す。削除APIは途中の外部障害を502で返すが進捗を保持し、同じJWTから再実行できる。同じsubjectの削除が実行中なら409を返す。完了後も墓石は残るため、旧JWTからUserを再作成しない。
 
-手動同期でアプリ内YouTube quotaが不足した場合、YouTubeへrequestせず保存済みDBデータのCalendar同期を行い、202で `status=DEFERRED` と安全な `nextRetryAt` だけを返す。内部unit数・API keyは返さない。`sync-status` のsubscription状態は `SKIPPED` と延期メッセージになる。handle解決時に予算不足ならCalendar同期対象がないため429 `YOUTUBE_QUOTA_DEFERRED` を返す。
+手動同期でアプリ内YouTube quotaが不足した場合、YouTubeへrequestせず保存済みDBデータのCalendar同期を行い、202で `status=DEFERRED` と安全な `nextRetryAt` を返す。channel leaseの後続workerも、完了snapshotを待てなければ同じく`DEFERRED`であり、event未作成のまま`SUCCESS`にはしない。応答は`snapshotVersion`と`phases.youtubeFetch/databaseUpdate/calendarSync`を含む。内部unit数・API keyは返さない。`sync-status` のsubscription状態も `DEFERRED` と延期メッセージになる。handle解決時に予算不足ならCalendar同期対象がないため429 `YOUTUBE_QUOTA_DEFERRED` を返す。

@@ -12,6 +12,7 @@ import {
   nextQuotaResetAt,
   quotaDateAt,
   YOUTUBE_QUOTA_COSTS,
+  YOUTUBE_VIDEOS_LIST_BATCH_SIZE,
   type YouTubeQuotaMethod,
 } from './youtube-quota.js';
 
@@ -214,8 +215,8 @@ export class YouTubeDataGateway implements YouTubeGateway {
   }
   private async videoDetails(ids: string[], context: YouTubeRequestContext) {
     const items: VideoItem[] = [];
-    for (let index = 0; index < ids.length; index += 50) {
-      const chunk = ids.slice(index, index + 50);
+    for (let index = 0; index < ids.length; index += YOUTUBE_VIDEOS_LIST_BATCH_SIZE) {
+      const chunk = ids.slice(index, index + YOUTUBE_VIDEOS_LIST_BATCH_SIZE);
       if (!chunk.length) continue;
       const details = await this.get<YouTubeList<VideoItem>>(
         'videos',

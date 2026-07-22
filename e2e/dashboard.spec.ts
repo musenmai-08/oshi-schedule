@@ -1,6 +1,12 @@
 import { expect, test } from '@playwright/test';
 
-test('チャンネルの登録から同期・停止・削除まで操作できる', async ({ page }) => {
+test('チャンネルの登録から同期・停止・削除まで操作できる', async ({ page, request }) => {
+  const apiPort = Number(process.env.E2E_API_PORT ?? 4310);
+  const health = await request.get(`http://127.0.0.1:${apiPort}/health`);
+  expect(health.ok()).toBe(true);
+  expect(await health.json()).toMatchObject({
+    data: { status: 'ok', service: 'oshi-schedule-api' },
+  });
   await page.goto('/dashboard');
   await expect(page.getByRole('heading', { name: 'おかえりなさい' })).toBeVisible();
   await page.getByRole('button', { name: 'チャンネルを追加' }).first().click();

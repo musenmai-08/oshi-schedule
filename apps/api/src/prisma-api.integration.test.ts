@@ -7,6 +7,10 @@ import { loadEnv } from './infrastructure/env.js';
 import { PrismaStore } from './infrastructure/database/prisma-store.js';
 import { AppError } from './domain/errors.js';
 import type { AuthAdmin } from './application/models.js';
+import type { AppLogger, YouTubeGateway } from './application/models.js';
+import type { NormalizedBroadcast } from './domain/scheduling.js';
+import { SyncService } from './application/sync-service.js';
+import { FakeCalendarGateway } from './infrastructure/google-calendar/fake-calendar-gateway.js';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const prisma = new PrismaClient(databaseUrl ? { datasourceUrl: databaseUrl } : undefined);
@@ -27,6 +31,7 @@ const env = loadEnv({
 const app = createApp(env, createContainer(env, { store, authAdmin }));
 const ownerAuth = { authorization: 'Bearer test:prisma-owner:developer@example.com' };
 const otherAuth = { authorization: 'Bearer test:prisma-other:second@example.com' };
+const quietLogger: AppLogger = { info: () => undefined, error: () => undefined };
 
 async function clean() {
   await prisma.syncLease.deleteMany({
@@ -237,5 +242,88 @@ describe.runIf(Boolean(databaseUrl))('API with Prisma/MySQL IDs and constraints'
       status: 'CALENDAR_DELETED',
     });
     await store.releaseSyncLease(successor);
+  });
+
+  it('shares one MySQL channel snapshot across two concurrent workers and both users', async () => {
+    const owner = await store.findUserBySubject('prisma-owner');
+    const other = await store.findUserBySubject('prisma-other');
+    const channel = await store.upsertChannel({
+      id: 'external',
+      youtubeChannelId: 'UCprismaParallelSnapshot',
+      title: 'parallel',
+      handle: '@parallel',
+      thumbnailUrl: '',
+      channelUrl: '',
+    });
+    const firstSubscription = await store.createSubscriptionWithinLimit(owner!.id, channel.id, 3);
+    const secondSubscription = await store.createSubscriptionWithinLimit(other!.id, channel.id, 3);
+    let release!: () => void;
+    const pause = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let calls = 0;
+    const item: NormalizedBroadcast = {
+      youtubeVideoId: 'mysql-parallel-video',
+      title: 'parallel event',
+      kind: 'UNKNOWN',
+      status: 'UPCOMING',
+      youtubeUrl: 'https://youtube.example/mysql-parallel-video',
+      thumbnailUrl: '',
+      scheduledStartAt: new Date(Date.now() + 86_400_000),
+      endAt: new Date(Date.now() + 90_000_000),
+      endTimeProvisional: true,
+      actualStartAt: null,
+      actualEndAt: null,
+    };
+    const youtube: YouTubeGateway = {
+      async resolveHandle() {
+        return channel;
+      },
+      async listUpcoming() {
+        calls += 1;
+        await pause;
+        return [item];
+      },
+      async refreshBroadcasts() {
+        return { items: [], unavailableVideoIds: [] };
+      },
+    };
+    const secondPrisma = new PrismaClient({ datasourceUrl: databaseUrl! });
+    const calendar = new FakeCalendarGateway();
+    const clock = { now: () => new Date() };
+    try {
+      const firstWorker = new SyncService(store, youtube, calendar, clock, quietLogger);
+      const secondWorker = new SyncService(
+        new PrismaStore(secondPrisma),
+        youtube,
+        calendar,
+        clock,
+        quietLogger,
+      );
+      const first = firstWorker.syncSubscription(owner!.id, firstSubscription.id, false);
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      const second = secondWorker.syncSubscription(other!.id, secondSubscription.id, false);
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      release();
+      const results = await Promise.all([first, second]);
+      expect(results.map((result) => result.status)).toEqual(['SUCCESS', 'SUCCESS']);
+      expect(results.map((result) => result.snapshotVersion)).toEqual([1, 1]);
+      expect(calls).toBe(1);
+      expect(calendar.events.size).toBe(2);
+      expect(
+        await prisma.syncTargetResult.findMany({
+          where: { targetId: { in: [firstSubscription.id, secondSubscription.id] } },
+          select: { status: true, calendarSyncStatus: true, snapshotVersion: true },
+        }),
+      ).toEqual(
+        expect.arrayContaining([
+          { status: 'SUCCESS', calendarSyncStatus: 'SUCCESS', snapshotVersion: 1 },
+          { status: 'SUCCESS', calendarSyncStatus: 'SUCCESS', snapshotVersion: 1 },
+        ]),
+      );
+    } finally {
+      release();
+      await secondPrisma.$disconnect();
+    }
   });
 });
