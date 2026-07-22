@@ -1,0 +1,20 @@
+docs/reviews/final-critical-high-audit.md
+  s_3a50bad78ea1cd::t_03954f6ed81f5e 39-59,63-71
+  s_3a50bad78ea1cd::t_41fd0175d59d56 1-38,60-62,72-224
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "510b7ed4d96a2011fc91252d3227775281264637",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
