@@ -18,26 +18,39 @@ describe('scheduling', () => {
   it('uses 30 minutes provisional end for premiere', () => {
     expect(calculateEndAt('PREMIERE', start).endAt.toISOString()).toBe('2026-07-20T10:30:00.000Z');
   });
-  it('builds a stable managed event', () => {
-    const event = buildCalendarEvent(
-      {
-        youtubeVideoId: 'v1',
-        title: '配信',
-        kind: 'LIVE',
-        status: 'UPCOMING',
-        youtubeUrl: 'https://youtu.be/v1',
-        thumbnailUrl: 'https://i.ytimg.com/v1.jpg',
-        scheduledStartAt: start,
-        endAt: new Date('2026-07-20T11:00:00Z'),
-        endTimeProvisional: true,
-        actualStartAt: null,
-        actualEndAt: null,
-      },
-      '推し',
-    );
-    expect(event.summary).toBe('【YouTube Live】配信');
-    expect(managedFieldsHash(event)).toHaveLength(64);
-  });
+  it.each([
+    ['LIVE', 'UPCOMING', 'YouTube Live', 'confirmed'],
+    ['PREMIERE', 'UPCOMING', 'プレミア公開', 'confirmed'],
+    ['UNKNOWN', 'UPCOMING', '配信（種別未確定）', 'confirmed'],
+    ['LIVE', 'CANCELLED', 'YouTube Live', 'cancelled'],
+  ] as const)(
+    'builds a title-only %s/%s managed event without the thumbnail in its description',
+    (kind, status, kindLabel, calendarStatus) => {
+      const event = buildCalendarEvent(
+        {
+          youtubeVideoId: 'v1',
+          title: '配信',
+          kind,
+          status,
+          youtubeUrl: 'https://youtu.be/v1',
+          thumbnailUrl: 'https://i.ytimg.com/v1.jpg',
+          scheduledStartAt: start,
+          endAt: new Date('2026-07-20T11:00:00Z'),
+          endTimeProvisional: true,
+          actualStartAt: null,
+          actualEndAt: null,
+        },
+        '推し',
+      );
+      expect(event).toMatchObject({
+        summary: '配信',
+        description: `チャンネル: 推し\n種別: ${kindLabel}\nURL: https://youtu.be/v1`,
+        status: calendarStatus,
+      });
+      expect(event.description).not.toContain('サムネイル');
+      expect(managedFieldsHash(event)).toHaveLength(64);
+    },
+  );
 
   it.each([
     ['future scheduled without mapping', { status: 'UPCOMING', scheduledStartAt: new Date('2026-07-21T00:00:00Z') }, false, true],

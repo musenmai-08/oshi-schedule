@@ -34,13 +34,6 @@ export function buildCalendarEvent(
   broadcast: NormalizedBroadcast,
   channelTitle: string,
 ): CalendarEventInput {
-  const prefix =
-    broadcast.kind === 'PREMIERE'
-      ? '【プレミア公開】'
-      : broadcast.kind === 'LIVE'
-        ? '【YouTube Live】'
-        : '【YouTube配信】';
-  const cancelled = broadcast.status === 'CANCELLED' ? '【中止】' : '';
   const kindLabel =
     broadcast.kind === 'PREMIERE'
       ? 'プレミア公開'
@@ -48,12 +41,11 @@ export function buildCalendarEvent(
         ? 'YouTube Live'
         : '配信（種別未確定）';
   return {
-    summary: `${cancelled}${prefix}${broadcast.title}`,
+    summary: broadcast.title,
     description: [
       `チャンネル: ${channelTitle}`,
       `種別: ${kindLabel}`,
       `URL: ${broadcast.youtubeUrl}`,
-      `サムネイル: ${broadcast.thumbnailUrl}`,
     ].join('\n'),
     start: broadcast.scheduledStartAt.toISOString(),
     end: broadcast.endAt.toISOString(),

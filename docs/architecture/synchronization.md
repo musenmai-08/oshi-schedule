@@ -44,11 +44,12 @@ quota不足は `YOUTUBE_QUOTA_DEFERRED` と次回reset時刻へ変換する。Yo
 
 - Broadcast は YouTube video ID、Mapping は `(userId,broadcastId)` が一意。
 - Calendar の `extendedProperties.private` に `managedBy=oshi-schedule` と `youtubeVideoId` を入れる。
+- Calendar event の `summary` はYouTubeの配信タイトルそのものとする。`description` は `チャンネル`・`種別`・`URL` の3行だけとし、サムネイルURLを含めない。配信種別とサムネイルURLはBroadcastに保持する。
 - Mapping の event ID は hash 一致時も存在確認し、404/410 なら新 event を作成して mapping を更新する。Calendar 自体が 404/410 なら再作成し、各 mapping を新 Calendar 上で reconcile する。
-- summary/description/start/end/status/extendedProperties の hash が同じで event も存在する場合だけ更新しない。patch で管理項目だけ変更する。
+- summary/description/start/end/status/extendedProperties の hash が同じで event も存在する場合だけ更新しない。patch で管理項目だけ変更する。表示内容の変更もhash差分となるため、同期対象の既存eventは次回同期でpatchする。
 - 新規 event は `(userId,youtubeVideoId)` から Google 仕様に適合する決定的 ID を作る。POST 成功後に mapping 保存が失敗しても再試行時の 409 を PATCH へ収束させる。削除済み既存 event は新しい ID で作り mapping を差し替える。
 - 終了不明は Live +60 分、Premiere +30 分で `endTimeProvisional=true`。実績終了取得後に解除して patch。
-- 明示的 `rejected` 等はタイトルへ `【中止】` を付ける。検索欠落だけでは削除・中止にせず既存データを保持する。`missingCount` は将来の複数回欠落判定用に予約しており、明確な判定根拠を追加するまでは自動削除に使わない。
+- 明示的 `rejected` 等はCalendar eventの `status=cancelled` へ反映し、タイトル自体は変更しない。検索欠落だけでは削除・中止にせず既存データを保持する。`missingCount` は将来の複数回欠落判定用に予約しており、明確な判定根拠を追加するまでは自動削除に使わない。
 - mappingのないCalendar新規作成は、予定開始が未来のUPCOMINGまたはactualEndAtのないLIVEだけに限定する。過去UPCOMING、COMPLETED/UNAVAILABLE/CANCELLED/UNKNOWN、実終了確定済みは作成せず、既存mappingがある場合だけ状態・実終了時刻をpatchする。仮終了時刻を過ぎてもstatusがLIVEなら新規作成・更新対象である。
 - YouTube payloadに実質差分がない場合は `sourceUpdatedAt` を進めず、Calendar存在確認のfan-outを抑える。
 

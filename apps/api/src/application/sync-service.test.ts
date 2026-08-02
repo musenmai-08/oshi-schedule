@@ -182,6 +182,69 @@ describe('SyncService', () => {
     expect(store.syncRuns.map((run) => run.status)).toEqual(['FAILED', 'SUCCESS']);
   });
 
+  it('creates and updates an event with a title-only summary and no thumbnail description', async () => {
+    const store = new MemoryStore();
+    const { user, channel, subscription } = await setup(store);
+    const now = new Date('2026-07-20T10:00:00Z');
+    await store.updateChannelFetchedAt(channel.id, now);
+    const [stored] = await store.upsertBroadcasts(
+      channel.id,
+      [
+        broadcast({
+          youtubeVideoId: 'display-contract',
+          title: '新作ゲームをプレイします',
+          kind: 'PREMIERE',
+          youtubeUrl: 'https://youtu.be/display-contract',
+          thumbnailUrl: 'https://i.ytimg.com/display-contract.jpg',
+          scheduledStartAt: new Date('2026-07-21T09:00:00Z'),
+          endAt: new Date('2026-07-21T09:30:00Z'),
+        }),
+      ],
+      now,
+    );
+    const calendar = new CountingCalendar();
+    const service = new SyncService(
+      store,
+      new MutableYouTube(),
+      calendar,
+      { now: () => now },
+      logger,
+    );
+    const expected = {
+      summary: '新作ゲームをプレイします',
+      description:
+        'チャンネル: sync channel\n種別: プレミア公開\nURL: https://youtu.be/display-contract',
+    };
+
+    await service.syncSubscription(user.id, subscription.id, false);
+    expect(calendar.upserts).toBe(1);
+    const [eventId] = calendar.events.keys();
+    expect(calendar.events.get(eventId!)).toMatchObject(expected);
+
+    const mapping = await store.getMapping(user.id, stored!.id);
+    expect(mapping?.eventId).toBe(eventId);
+    calendar.events.set(eventId!, {
+      ...calendar.events.get(eventId!)!,
+      summary: '【プレミア公開】新作ゲームをプレイします',
+      description: `${expected.description}\nサムネイル: https://i.ytimg.com/display-contract.jpg`,
+    });
+    await store.saveMapping({
+      userId: user.id,
+      broadcastId: stored!.id,
+      eventId: eventId!,
+      managedFieldsHash: 'legacy-display-format',
+    });
+    calendar.upserts = 0;
+
+    await service.syncSubscription(user.id, subscription.id, false);
+    expect(calendar.upserts).toBe(1);
+    expect(calendar.events.get(eventId!)).toMatchObject(expected);
+    expect(calendar.events.get(eventId!)?.description).not.toContain('サムネイル');
+    expect((await store.getMapping(user.id, stored!.id))?.managedFieldsHash).not.toBe(
+      'legacy-display-format',
+    );
+  });
+
   it('rejects a concurrent manual sync while a scheduled sync holds the shared lease', async () => {
     const store = new MemoryStore();
     const { user, subscription } = await setup(store);
