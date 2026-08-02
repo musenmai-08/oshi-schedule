@@ -1,0 +1,26 @@
+apps/web/src/components/account-settings.tsx
+  s_3a50bad78ea1cd::t_5f76ad64853a93 3,24,27,72-79
+e2e/dashboard.spec.ts
+  s_3a50bad78ea1cd::t_5f76ad64853a93 145-153
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "129d87dbda2b642b5cee2adf90536d87b1d7a941",
+  "prompts": {},
+  "humans": {
+    "h_ae5b095b1dd8a4": {
+      "author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
