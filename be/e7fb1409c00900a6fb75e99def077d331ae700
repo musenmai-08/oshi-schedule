@@ -1,0 +1,35 @@
+apps/web/src/app/privacy/page.tsx
+  s_3a50bad78ea1cd::t_44057003668fb2 1-65
+apps/web/src/app/page.tsx
+  s_3a50bad78ea1cd::t_44057003668fb2 5,7,113,116
+apps/web/src/components/legal-document.tsx
+  s_3a50bad78ea1cd::t_44057003668fb2 1-59
+e2e/dashboard.spec.ts
+  s_3a50bad78ea1cd::t_b684688c783463 140-142
+  s_3a50bad78ea1cd::t_44057003668fb2 126-139,143-144
+apps/web/src/app/terms/page.tsx
+  s_3a50bad78ea1cd::t_44057003668fb2 1-55
+README.md
+  s_3a50bad78ea1cd::t_44057003668fb2 124
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "bee7fb1409c00900a6fb75e99def077d331ae700",
+  "prompts": {},
+  "humans": {
+    "h_ae5b095b1dd8a4": {
+      "author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
