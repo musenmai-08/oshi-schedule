@@ -38,6 +38,30 @@ const formatDate = (value: string | null) =>
       )
     : 'まだありません';
 
+const channelDialogErrorMessage = (caught: unknown, action: 'resolve' | 'register') => {
+  if (caught instanceof ApiClientError) {
+    switch (caught.code) {
+      case 'CHANNEL_NOT_FOUND':
+        return '該当するYouTubeチャンネルが見つかりません。ハンドルを確認してください。';
+      case 'DUPLICATE_CHANNEL':
+        return 'このチャンネルはすでに登録されています。';
+      case 'CHANNEL_LIMIT_REACHED':
+        return '登録できるチャンネルは3件までです。';
+      case 'VALIDATION_ERROR':
+        return '@から始まる3〜30文字のハンドルを入力してください。';
+      case 'YOUTUBE_QUOTA_DEFERRED':
+      case 'YOUTUBE_QUOTA_OR_FORBIDDEN':
+      case 'YOUTUBE_API_TIMEOUT':
+      case 'YOUTUBE_API_UNAVAILABLE':
+      case 'YOUTUBE_API_ERROR':
+        return 'YouTubeからチャンネル情報を取得できませんでした。時間を置いて再試行してください。';
+    }
+  }
+  return action === 'resolve'
+    ? 'チャンネルを検索できませんでした。もう一度お試しください。'
+    : 'チャンネルを登録できませんでした。もう一度お試しください。';
+};
+
 export function Dashboard() {
   const [channels, setChannels] = useState<SubscriptionView[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,6 +70,7 @@ export function Dashboard() {
   const [preview, setPreview] = useState<ChannelSummary | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [dialogError, setDialogError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -74,29 +99,47 @@ export function Dashboard() {
     }
   };
   const resolve = async () => {
+    setDialogError(null);
     const result = channelHandleSchema.safeParse(handle);
     if (!result.success) {
-      setError(result.error.issues[0]?.message ?? '入力を確認してください');
+      setDialogError(result.error.issues[0]?.message ?? '入力を確認してください');
       return;
     }
-    await act(
-      'resolve',
-      async () => setPreview(await apiClient.resolve(result.data)),
-      'チャンネルが見つかりました',
-    );
+    setBusy('resolve');
+    try {
+      setPreview(await apiClient.resolve(result.data));
+    } catch (caught) {
+      setDialogError(channelDialogErrorMessage(caught, 'resolve'));
+    } finally {
+      setBusy(null);
+    }
   };
   const register = async () => {
     if (!preview) return;
-    await act(
-      'register',
-      async () => {
-        await apiClient.register(preview.youtubeChannelId);
-        setDialogOpen(false);
-        setPreview(null);
-        setHandle('');
-      },
-      'チャンネルを登録しました',
-    );
+    setBusy('register');
+    setDialogError(null);
+    try {
+      await apiClient.register(preview.youtubeChannelId);
+      setDialogOpen(false);
+      setPreview(null);
+      setHandle('');
+      setNotice('チャンネルを登録しました');
+      await load();
+    } catch (caught) {
+      setDialogError(channelDialogErrorMessage(caught, 'register'));
+    } finally {
+      setBusy(null);
+    }
+  };
+  const openDialog = () => {
+    setDialogError(null);
+    setDialogOpen(true);
+  };
+  const closeDialog = () => {
+    setDialogOpen(false);
+    setDialogError(null);
+    setPreview(null);
+    setHandle('');
   };
 
   return (
@@ -118,7 +161,7 @@ export function Dashboard() {
         <Button
           variant="contained"
           startIcon={<AddRoundedIcon />}
-          onClick={() => setDialogOpen(true)}
+          onClick={openDialog}
           disabled={channels.length >= MAX_CHANNELS_PER_USER}
         >
           チャンネルを追加
@@ -163,7 +206,7 @@ export function Dashboard() {
             <Typography color="text.secondary" mt={1} mb={3}>
               YouTubeの @handle だけで始められます。
             </Typography>
-            <Button variant="outlined" onClick={() => setDialogOpen(true)}>
+            <Button variant="outlined" onClick={openDialog}>
               チャンネルを追加
             </Button>
           </CardContent>
@@ -314,13 +357,23 @@ export function Dashboard() {
       </Button>
       <Dialog
         open={dialogOpen}
-        onClose={() => !busy && setDialogOpen(false)}
+        onClose={() => !busy && closeDialog()}
         fullWidth
         maxWidth="sm"
       >
         <DialogTitle>チャンネルを追加</DialogTitle>
         <DialogContent>
           <Stack spacing={3} pt={1}>
+            {dialogError && (
+              <Alert
+                id="channel-dialog-error"
+                severity="error"
+                role="alert"
+                aria-live="assertive"
+              >
+                {dialogError}
+              </Alert>
+            )}
             <TextField
               autoFocus
               label="YouTube @handle"
@@ -331,7 +384,10 @@ export function Dashboard() {
                 setPreview(null);
               }}
               helperText="チャンネルURLではなく、@から始まるハンドルを入力してください"
-              inputProps={{ 'aria-label': 'YouTube @handle' }}
+              inputProps={{
+                'aria-label': 'YouTube @handle',
+                'aria-describedby': dialogError ? 'channel-dialog-error' : undefined,
+              }}
             />
             {preview && (
               <Card variant="outlined">
@@ -359,7 +415,7 @@ export function Dashboard() {
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDialogOpen(false)}>キャンセル</Button>
+          <Button onClick={closeDialog}>キャンセル</Button>
           {preview ? (
             <Button variant="contained" onClick={() => void register()} disabled={busy !== null}>
               {busy === 'register' ? (
