@@ -1,0 +1,34 @@
+apps/api/src/infrastructure/env.ts
+  s_3a50bad78ea1cd::t_f95333b2e788c6 29
+README.md
+  s_3a50bad78ea1cd::t_f95333b2e788c6 34,64
+apps/api/src/prisma-api.integration.test.ts
+  s_3a50bad78ea1cd::t_f95333b2e788c6 29
+.env.example
+  s_3a50bad78ea1cd::t_f95333b2e788c6 4
+apps/web/package.json
+  s_3a50bad78ea1cd::t_f95333b2e788c6 6,8
+apps/api/src/app.test.ts
+  s_3a50bad78ea1cd::t_f95333b2e788c6 12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.19",
+  "base_commit_sha": "755378ed7140b41904c66fe4a5a250b462f40a2b",
+  "prompts": {},
+  "humans": {
+    "h_ae5b095b1dd8a4": {
+      "author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
