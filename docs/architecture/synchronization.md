@@ -2,6 +2,8 @@
 
 ## パイプライン
 
+チャンネル登録は Subscription のDB確定とトランザクション終了後、この同じパイプラインを1回呼ぶ。登録中に外部API呼出しを行わず、同期失敗時も Subscription は保持する。
+
 ```mermaid
 sequenceDiagram
   participant S as Sync orchestrator
@@ -56,6 +58,8 @@ quota不足は `YOUTUBE_QUOTA_DEFERRED` と次回reset時刻へ変換する。Yo
 ## 実行制御
 
 自動同期は原則 60 分、手動は subscription 単位 5 分の DB 保存時刻を使う。API と worker をまたぐ二重実行は `SyncLease` のownerと単調増加version（fencing token）で防ぐ。取得・期限比較・更新はDB時刻を使い、外部呼出しの前後でowner/versionを確認する。stale ownerの更新・解放・snapshot確定は条件付きtransactionで拒否し、crash後は期限切れを新versionで再取得する。channel lease所有者は取得開始状態を保存し、Broadcast更新と成功時刻・snapshotVersion増分を1 transactionで確定する。後続workerは新しい完了versionをbounded pollし、そのsnapshotを自分のsubscriptionへCalendar展開する。待機中に完了しなければDEFERREDでありSUCCESSにしない。各ユーザーのCalendar失敗は他ユーザーから隔離する。
+
+登録直後の初回同期も同じlease、quota予約、snapshot、差分同期、決定的event ID、同期履歴を使う。手動用quota保護ルールに従うが `lastManualSyncAt` は更新しない。quota不足または完了snapshot待ちは `DEFERRED`、その他の例外は `FAILED` とし、登録応答はどちらも201で同期状態を返す。
 
 各実行は `SyncRun`、各 subscription は `SyncTargetResult` に RUNNING から最終状態を保存する。定期実行は 1 利用者の失敗を隔離し、全体を SUCCESS/PARTIAL_FAILED/FAILED へ集約する。24時間超のRUNNINGは次の定期実行でFAILEDへ回収し、完了履歴は90日保持する。error logにはrunId/subscriptionId/safe error codeを含める。外部呼び出しは設定timeoutを使い、恒久失効と一時障害を区別する。OAuth token endpointの429/5xx/network failureは秒単位のexponential backoff+jitterと`Retry-After`を使って最大3回だけ試行し、`invalid_grant`だけを再認証要求にする。
 

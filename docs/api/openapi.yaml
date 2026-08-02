@@ -48,6 +48,18 @@ components:
       type: object
       required: [youtubeChannelId]
       properties: { youtubeChannelId: { type: string, minLength: 1 } }
+    ChannelRegistrationResult:
+      type: object
+      required: [id, status, initialSync]
+      properties:
+        id: { $ref: '#/components/schemas/Cuid' }
+        status: { type: string, enum: [ACTIVE, PAUSED] }
+        initialSync:
+          type: object
+          required: [status]
+          properties:
+            status: { type: string, enum: [SUCCESS, DEFERRED, FAILED] }
+            errorCode: { type: string }
     UpdateSubscription:
       type: object
       required: [status]
@@ -130,7 +142,16 @@ paths:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/CreateChannel' } } }
       responses:
-        '201': { description: created }
+        '201':
+          description: subscription created; initial sync result is reported separately
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, requestId]
+                properties:
+                  data: { $ref: '#/components/schemas/ChannelRegistrationResult' }
+                  requestId: { type: string }
         '400': { $ref: '#/components/responses/BadRequest' }
         '409': { description: duplicate or channel not resolved }
         '422': { description: three-channel limit }

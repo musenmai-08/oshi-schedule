@@ -1,6 +1,7 @@
 import type {
   ApiFailure,
   ApiSuccess,
+  ChannelRegistrationResult,
   ChannelSummary,
   MeView,
   SubscriptionView,
@@ -49,7 +50,10 @@ export const apiClient = {
       body: JSON.stringify({ handle }),
     }),
   register: (youtubeChannelId: string) =>
-    api('/api/v1/channels', { method: 'POST', body: JSON.stringify({ youtubeChannelId }) }),
+    api<ChannelRegistrationResult>('/api/v1/channels', {
+      method: 'POST',
+      body: JSON.stringify({ youtubeChannelId }),
+    }),
   status: (id: string, status: 'ACTIVE' | 'PAUSED') =>
     api(`/api/v1/channels/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
   remove: (id: string) => api<void>(`/api/v1/channels/${id}`, { method: 'DELETE' }),

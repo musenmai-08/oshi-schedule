@@ -4,6 +4,9 @@ import { createApp } from './app.js';
 import { createContainer } from './container.js';
 import { loadEnv } from './infrastructure/env.js';
 import { MemoryStore } from './infrastructure/database/memory-store.js';
+import { FakeCalendarGateway } from './infrastructure/google-calendar/fake-calendar-gateway.js';
+import { FakeYouTubeGateway } from './infrastructure/youtube/fake-youtube-gateway.js';
+import { AppError } from './domain/errors.js';
 
 const env = loadEnv({
   NODE_ENV: 'test',
@@ -15,6 +18,51 @@ const store = new MemoryStore();
 const container = createContainer(env, { store });
 const app = createApp(env, container);
 const auth = { authorization: 'Bearer demo-token' };
+
+class InitialSyncYouTube extends FakeYouTubeGateway {
+  listCalls = 0;
+  deferred = false;
+  override async listUpcoming(...args: Parameters<FakeYouTubeGateway['listUpcoming']>) {
+    this.listCalls += 1;
+    if (this.deferred)
+      throw new AppError(
+        'YOUTUBE_QUOTA_DEFERRED',
+        'YouTube情報の更新を次回同期まで延期しました',
+        429,
+        true,
+        { nextRetryAt: new Date(Date.now() + 60_000).toISOString() },
+      );
+    return super.listUpcoming(...args);
+  }
+}
+
+class InitialSyncCalendar extends FakeCalendarGateway {
+  failUpsert = false;
+  upserts = 0;
+  readonly userIds = new Set<string>();
+  override async upsertEvent(...args: Parameters<FakeCalendarGateway['upsertEvent']>) {
+    this.upserts += 1;
+    this.userIds.add(args[0].id);
+    if (this.failUpsert)
+      throw new AppError('GOOGLE_EVENT_CREATE_FAILED', '予定を作成できません', 502);
+    return super.upsertEvent(...args);
+  }
+}
+
+async function createInitialSyncApp() {
+  const localStore = new MemoryStore();
+  const youtube = new InitialSyncYouTube();
+  const calendar = new InitialSyncCalendar();
+  const localApp = createApp(
+    env,
+    createContainer(env, { store: localStore, youtube, calendar }),
+  );
+  await request(localApp)
+    .post('/api/v1/onboarding')
+    .set(auth)
+    .send({ providerRefreshToken: 'fake-refresh-token' });
+  return { localApp, localStore, youtube, calendar };
+}
 
 async function resolveAndRegister(handle: string) {
   const resolved = await request(app).post('/api/v1/channels/resolve').set(auth).send({ handle });
@@ -50,6 +98,99 @@ describe('API', () => {
     expect((await resolveAndRegister('@second')).status).toBe(201);
     expect((await resolveAndRegister('@third')).status).toBe(201);
     expect((await resolveAndRegister('@fourth')).status).toBe(422);
+  });
+  it('syncs once immediately after registration and keeps retry idempotent', async () => {
+    const { localApp, youtube, calendar } = await createInitialSyncApp();
+    const resolved = await request(localApp)
+      .post('/api/v1/channels/resolve')
+      .set(auth)
+      .send({ handle: '@initial' });
+    const created = await request(localApp)
+      .post('/api/v1/channels')
+      .set(auth)
+      .send({ youtubeChannelId: resolved.body.data.youtubeChannelId as string });
+    expect(created.status).toBe(201);
+    expect(created.body.data.initialSync.status).toBe('SUCCESS');
+    expect(youtube.listCalls).toBe(1);
+    expect(calendar.events.size).toBe(1);
+
+    expect(
+      (await request(localApp).post(`/api/v1/channels/${created.body.data.id}/sync`).set(auth))
+        .status,
+    ).toBe(202);
+    expect(calendar.events.size).toBe(1);
+  });
+  it('keeps the subscription when initial sync fails and permits an immediate retry', async () => {
+    const { localApp, calendar } = await createInitialSyncApp();
+    calendar.failUpsert = true;
+    const resolved = await request(localApp)
+      .post('/api/v1/channels/resolve')
+      .set(auth)
+      .send({ handle: '@failure' });
+    const created = await request(localApp)
+      .post('/api/v1/channels')
+      .set(auth)
+      .send({ youtubeChannelId: resolved.body.data.youtubeChannelId as string });
+    expect(created.status).toBe(201);
+    expect(created.body.data.initialSync).toMatchObject({
+      status: 'FAILED',
+      errorCode: 'GOOGLE_EVENT_CREATE_FAILED',
+    });
+    const channels = await request(localApp).get('/api/v1/channels').set(auth);
+    expect(channels.body.data).toHaveLength(1);
+    expect(channels.body.data[0].lastSyncStatus).toBe('FAILED');
+
+    calendar.failUpsert = false;
+    expect(
+      (await request(localApp).post(`/api/v1/channels/${created.body.data.id}/sync`).set(auth))
+        .status,
+    ).toBe(202);
+    expect(calendar.events.size).toBe(1);
+  });
+  it('keeps registration deferred when quota is unavailable', async () => {
+    const { localApp, youtube } = await createInitialSyncApp();
+    youtube.deferred = true;
+    const resolved = await request(localApp)
+      .post('/api/v1/channels/resolve')
+      .set(auth)
+      .send({ handle: '@deferred' });
+    const created = await request(localApp)
+      .post('/api/v1/channels')
+      .set(auth)
+      .send({ youtubeChannelId: resolved.body.data.youtubeChannelId as string });
+    expect(created.status).toBe(201);
+    expect(created.body.data.initialSync.status).toBe('DEFERRED');
+    expect((await request(localApp).get('/api/v1/channels').set(auth)).body.data).toHaveLength(1);
+  });
+  it('shares a fresh channel snapshot while syncing each user calendar separately', async () => {
+    const { localApp, youtube, calendar } = await createInitialSyncApp();
+    const firstResolved = await request(localApp)
+      .post('/api/v1/channels/resolve')
+      .set(auth)
+      .send({ handle: '@shared' });
+    await request(localApp)
+      .post('/api/v1/channels')
+      .set(auth)
+      .send({ youtubeChannelId: firstResolved.body.data.youtubeChannelId as string });
+
+    const secondAuth = { authorization: 'Bearer test:second:second@example.com' };
+    await request(localApp)
+      .post('/api/v1/onboarding')
+      .set(secondAuth)
+      .send({ providerRefreshToken: 'second-refresh-token' });
+    const secondResolved = await request(localApp)
+      .post('/api/v1/channels/resolve')
+      .set(secondAuth)
+      .send({ handle: '@shared' });
+    const secondCreated = await request(localApp)
+      .post('/api/v1/channels')
+      .set(secondAuth)
+      .send({ youtubeChannelId: secondResolved.body.data.youtubeChannelId as string });
+
+    expect(secondCreated.body.data.initialSync.status).toBe('SUCCESS');
+    expect(youtube.listCalls).toBe(1);
+    expect(calendar.events.size).toBe(2);
+    expect(calendar.userIds.size).toBe(2);
   });
   it('pauses, resumes, syncs and deletes a subscription', async () => {
     const created = await resolveAndRegister('@flow');

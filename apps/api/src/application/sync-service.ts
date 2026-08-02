@@ -15,6 +15,7 @@ import type {
   SyncPhaseStatus,
   SyncResult,
   YouTubeGateway,
+  YouTubeQuotaMode,
 } from './models.js';
 
 const STALE_SYNC_RUN_MILLISECONDS = 24 * 60 * 60_000;
@@ -85,6 +86,7 @@ export class SyncService {
     subscriptionId: string,
     manual = true,
     existingRunId?: string,
+    quotaMode: YouTubeQuotaMode = manual ? 'MANUAL' : 'SCHEDULED',
   ) {
     const target = await this.store.getSubscription(userId, subscriptionId);
     if (!target) throw new AppError('NOT_FOUND', '対象が見つかりません', 404);
@@ -101,7 +103,7 @@ export class SyncService {
     }
     const key = `subscription:${subscriptionId}`;
     const ownerToken = randomUUID();
-    const runId = existingRunId ?? (await this.store.startSyncRun('MANUAL', userId, 1, now));
+    const runId = existingRunId ?? (await this.store.startSyncRun(quotaMode, userId, 1, now));
     await this.store.startSyncTarget(runId, subscriptionId, now);
     const acquired = await this.store.acquireSyncLease(key, ownerToken, now, this.syncLeaseMs);
     if (!acquired) {
@@ -150,7 +152,7 @@ export class SyncService {
               if (!(await this.store.startChannelFetch(target.channel.id, now, channelLease)))
                 throw new AppError('SYNC_LEASE_LOST', 'YouTube取得の排他権を失いました', 409, true);
               const context = {
-                mode: manual ? ('MANUAL' as const) : ('SCHEDULED' as const),
+                mode: quotaMode,
                 runId,
               };
               try {
@@ -373,6 +375,10 @@ export class SyncService {
     } finally {
       await this.store.releaseSyncLease(acquired);
     }
+  }
+
+  async syncInitialSubscription(userId: string, subscriptionId: string) {
+    return this.syncSubscription(userId, subscriptionId, false, undefined, 'MANUAL');
   }
 
   async runScheduled() {

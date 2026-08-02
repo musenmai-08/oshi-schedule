@@ -119,12 +119,22 @@ export function Dashboard() {
     setBusy('register');
     setDialogError(null);
     try {
-      await apiClient.register(preview.youtubeChannelId);
+      const result = await apiClient.register(preview.youtubeChannelId);
       setDialogOpen(false);
       setPreview(null);
       setHandle('');
-      setNotice('チャンネルを登録しました');
       await load();
+      if (result.initialSync.status === 'SUCCESS') {
+        setNotice('チャンネルを登録し、初回同期が完了しました');
+      } else if (result.initialSync.status === 'DEFERRED') {
+        setNotice(
+          'チャンネルを登録しました。初回同期は延期されたため、「今すぐ同期」から再実行できます',
+        );
+      } else {
+        setError(
+          'チャンネルを登録しましたが、初回同期に失敗しました。「今すぐ同期」から再実行してください',
+        );
+      }
     } catch (caught) {
       setDialogError(channelDialogErrorMessage(caught, 'register'));
     } finally {
@@ -419,7 +429,10 @@ export function Dashboard() {
           {preview ? (
             <Button variant="contained" onClick={() => void register()} disabled={busy !== null}>
               {busy === 'register' ? (
-                <CircularProgress size={22} color="inherit" />
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <CircularProgress size={22} color="inherit" />
+                  <span>登録して初回同期中…</span>
+                </Stack>
               ) : (
                 'このチャンネルを登録'
               )}

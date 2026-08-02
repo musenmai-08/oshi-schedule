@@ -42,6 +42,15 @@ export interface SubscriptionView extends ChannelSummary {
   lastErrorMessage: string | null;
 }
 
+export interface ChannelRegistrationResult {
+  id: string;
+  status: SubscriptionStatus;
+  initialSync: {
+    status: 'SUCCESS' | 'DEFERRED' | 'FAILED';
+    errorCode?: string;
+  };
+}
+
 export interface MeView {
   id: string;
   email: string;

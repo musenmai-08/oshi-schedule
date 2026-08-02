@@ -86,6 +86,30 @@ export class OshiService {
     }
   }
 
+  async registerAndSync(identity: AuthIdentity, youtubeChannelId: string) {
+    const subscription = await this.register(identity, youtubeChannelId);
+    try {
+      const result = await this.sync.syncInitialSubscription(
+        subscription.userId,
+        subscription.id,
+      );
+      return {
+        id: subscription.id,
+        status: subscription.status,
+        initialSync: { status: result.status },
+      };
+    } catch (error) {
+      return {
+        id: subscription.id,
+        status: subscription.status,
+        initialSync: {
+          status: 'FAILED' as const,
+          ...(error instanceof AppError ? { errorCode: error.code } : {}),
+        },
+      };
+    }
+  }
+
   async setStatus(identity: AuthIdentity, id: string, status: 'ACTIVE' | 'PAUSED') {
     const user = await this.requireActiveUser(identity);
     const result = await this.store.updateSubscription(user.id, id, status);

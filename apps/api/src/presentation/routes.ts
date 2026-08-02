@@ -83,7 +83,7 @@ export function createApiRouter(container: Container): ExpressRouter {
     asyncRoute(async (request, response) => {
       success(
         response,
-        await container.service.register(
+        await container.service.registerAndSync(
           response.locals.identity,
           parse(createChannelSchema, request.body).youtubeChannelId,
         ),
