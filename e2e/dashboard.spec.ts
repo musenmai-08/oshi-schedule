@@ -123,3 +123,22 @@ test('認証済みルート遷移とログアウト後のルート保護', async
   await page.goto('/dashboard');
   await expect(page).toHaveURL(/\/$/);
 });
+
+test('未認証で利用規約とプライバシーポリシーを表示できる', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('link', { name: '利用規約' }).click();
+  await expect(page).toHaveURL(/\/terms$/);
+  await expect(page.getByRole('heading', { level: 1, name: '利用規約' })).toBeVisible();
+  await expect(page.getByText(/開発・動作確認用のデモ文面/)).toBeVisible();
+  await page.getByRole('link', { name: 'ログイン画面に戻る' }).click();
+
+  await page.getByRole('link', { name: 'プライバシー' }).click();
+  await expect(page).toHaveURL(/\/privacy$/);
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'プライバシーポリシー' }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('heading', { level: 2, name: /Google API Services User Data Policy/ }),
+  ).toBeVisible();
+  await expect(page.getByRole('link', { name: 'ログイン画面に戻る' })).toBeVisible();
+});

@@ -2,7 +2,9 @@ import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import SyncIcon from '@mui/icons-material/Sync';
 import { Box, Chip, Container, Link, Paper, Stack, Typography } from '@mui/material';
+import NextLink from 'next/link';
 import { LoginButton } from '@/components/login-button';
+import { APP_ROUTES } from '@/lib/routes';
 
 export default function LoginPage() {
   return (
@@ -108,10 +110,10 @@ export default function LoginPage() {
         spacing={3}
         sx={{ position: 'absolute', bottom: 20, left: 0, right: 0, justifyContent: 'center' }}
       >
-        <Link href="#" color="text.secondary">
+        <Link component={NextLink} href={APP_ROUTES.terms} color="text.secondary">
           利用規約
         </Link>
-        <Link href="#" color="text.secondary">
+        <Link component={NextLink} href={APP_ROUTES.privacy} color="text.secondary">
           プライバシー
         </Link>
       </Stack>

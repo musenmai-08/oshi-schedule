@@ -121,4 +121,4 @@ e2e             Playwrightシナリオ
 
 ## 本番前の注意
 
-Fake認証と既知の開発用暗号鍵は `production` で起動できません。実Google/Supabase/YouTube接続、OAuth審査、利用規約・プライバシーポリシーの公開、scheduler/Secret Manager/監視、DB backup、鍵ローテーション手順、負荷・クォータ試験を本番環境で確認してください。第三者向けYouTube Data APIだけでプレミア公開を確定できない項目は、誤推測せず「種別未確定」として扱います。
+Fake認証と既知の開発用暗号鍵は `production` で起動できません。実Google/Supabase/YouTube接続、OAuth審査、scheduler/Secret Manager/監視、DB backup、鍵ローテーション手順、負荷・クォータ試験を本番環境で確認してください。`/terms` と `/privacy` の文面は開発・動作確認用のデモであり、一般公開前に専門家の確認を受けて正式版に差し替えてください。第三者向けYouTube Data APIだけでプレミア公開を確定できない項目は、誤推測せず「種別未確定」として扱います。
