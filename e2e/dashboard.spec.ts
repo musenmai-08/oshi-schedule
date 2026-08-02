@@ -1,4 +1,10 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+
+async function login(page: Page) {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Googleでログイン' }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+}
 
 test('チャンネルの登録から同期・停止・削除まで操作できる', async ({ page, request }) => {
   const apiPort = Number(process.env.E2E_API_PORT ?? 4310);
@@ -7,7 +13,7 @@ test('チャンネルの登録から同期・停止・削除まで操作でき�
   expect(await health.json()).toMatchObject({
     data: { status: 'ok', service: 'oshi-schedule-api' },
   });
-  await page.goto('/dashboard');
+  await login(page);
   await expect(page.getByRole('heading', { name: 'おかえりなさい' })).toBeVisible();
   await page.getByRole('button', { name: 'チャンネルを追加' }).first().click();
   await page.getByLabel('YouTube @handle').fill('@playwright');
@@ -27,7 +33,7 @@ test('チャンネルの登録から同期・停止・削除まで操作でき�
 });
 
 test('チャンネル追加エラーをモーダル内で表示し再試行と閉じる操作で解除する', async ({ page }) => {
-  await page.goto('/dashboard');
+  await login(page);
   await page.getByRole('button', { name: 'チャンネルを追加' }).first().click();
   const dialog = page.getByRole('dialog', { name: 'チャンネルを追加' });
 
@@ -77,7 +83,7 @@ test('チャンネル追加エラーをモーダル内で表示し再試行と�
 });
 
 test('チャンネル登録上限をモーダル内で表示する', async ({ page }) => {
-  await page.goto('/dashboard');
+  await login(page);
   await page.getByRole('button', { name: 'チャンネルを追加' }).first().click();
   const dialog = page.getByRole('dialog');
   await page.getByLabel('YouTube @handle').fill('@limitcase');
@@ -96,4 +102,24 @@ test('チャンネル登録上限をモーダル内で表示する', async ({ pa
   });
   await dialog.getByRole('button', { name: 'このチャンネルを登録' }).click();
   await expect(dialog.getByRole('alert')).toHaveText('登録できるチャンネルは3件までです。');
+});
+
+test('認証済みルート遷移とログアウト後のルート保護', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: /推しの予定を/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Googleでログイン' }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+
+  await page.goto('/');
+  await expect(page).toHaveURL(/\/dashboard$/);
+  const logout = page.getByRole('button', { name: 'ログアウト' });
+  await logout.click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole('button', { name: 'Googleでログイン' })).toBeVisible();
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole('heading', { name: 'おかえりなさい' })).not.toBeVisible();
+  await page.goto('/dashboard');
+  await expect(page).toHaveURL(/\/$/);
 });

@@ -2,14 +2,16 @@
 import GoogleIcon from '@mui/icons-material/Google';
 import { Button } from '@mui/material';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { APP_ROUTES, DEMO_AUTH_COOKIE } from '@/lib/routes';
 
 export function LoginButton() {
   const login = async () => {
     if (process.env.NEXT_PUBLIC_DEMO_MODE === 'true') {
-      window.location.href = '/dashboard';
+      document.cookie = `${DEMO_AUTH_COOKIE}=1; Path=/; SameSite=Lax`;
+      window.location.href = APP_ROUTES.dashboard;
       return;
     }
-    const callback = `${window.location.origin}/auth/callback`;
+    const callback = `${window.location.origin}${APP_ROUTES.authCallback}`;
     await createSupabaseBrowserClient().auth.signInWithOAuth({
       provider: 'google',
       options: {
