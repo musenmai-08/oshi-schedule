@@ -31,7 +31,7 @@ APP_MODE=fake ALLOWED_EMAILS=developer@example.com pnpm --filter @oshi-schedule/
 NEXT_PUBLIC_DEMO_MODE=true NEXT_PUBLIC_API_URL=http://localhost:4000 pnpm --filter @oshi-schedule/web dev
 ```
 
-ブラウザーで `http://localhost:3000` を開き、「Googleでログイン」（デモでは外部通信なし）を押します。Fakeモードの状態はAPIプロセスのメモリ上にあり、再起動で初期化されます。
+ブラウザーで `http://localhost:3001` を開き、「Googleでログイン」（デモでは外部通信なし）を押します。Fakeモードの状態はAPIプロセスのメモリ上にあり、再起動で初期化されます。
 
 定期 worker の入口もFakeで確認できます。
 
@@ -61,7 +61,7 @@ APIとworkerは、各workspace packageをcwdとして起動した場合もprojec
 
 外部HTTP timeoutとlease、YouTube quotaは `.env` で調整できます。`ACCOUNT_DELETION_LEASE_MS` と `SYNC_LEASE_MS` は `EXTERNAL_API_TIMEOUT_MS` より長くしてください。YouTubeは一般endpoint用 `YOUTUBE_DAILY_QUOTA_BUDGET=8000` と、独立したsearch bucket用 `YOUTUBE_DAILY_SEARCH_QUOTA_BUDGET=80` をDBで管理します。日付境界は `YOUTUBE_QUOTA_TIMEZONE=America/Los_Angeles`、予定検索は既定1ページ、追跡は1チャンネル50件・30日です。既定値では通常最大がSEARCH 72/日・GENERAL 144/日、3 attemptを含むGENERAL上限が432/日です。設定から再計算した上限をreserveが満たさなければ起動時に失敗します。自動同期用予約枠を手動同期が消費することはできません。API呼出し直前に予約し、応答成否にかかわらず実績へ移します。process crash時の未使用予約は二重消費防止を優先して当日中は解放せず、Pacific Timeの日次行で自然に分離します。
 
-Supabase の Google provider に Calendar API scope を許可し、Site URL/redirect URL に `http://localhost:3000/auth/callback` を登録してください。Google Cloud 側でも同じ Supabase callback URI、YouTube Data API v3、Google Calendar API、OAuth同意画面を設定します。
+Supabase の Google provider に Calendar API scope を許可し、Auth URL Configuration の Site URLを `http://localhost:3001`、Redirect URLを `http://localhost:3001/auth/callback` に設定してください。Google Cloud の承認済みJavaScript生成元は `http://localhost:3001` にします。Google provider用の承認済みリダイレクトURIはSupabaseが提示する `https://<Supabase Project Ref>.supabase.co/auth/v1/callback` のままで、Webポート変更では変更しません。YouTube Data API v3、Google Calendar API、OAuth同意画面も設定します。
 
 ```bash
 # terminal 1

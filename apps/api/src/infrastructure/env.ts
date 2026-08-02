@@ -26,7 +26,7 @@ const schema = z
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
     APP_MODE: z.enum(['fake', 'real']).default('fake'),
     PORT: z.coerce.number().int().positive().default(4000),
-    WEB_ORIGIN: z.string().url().default('http://localhost:3000'),
+    WEB_ORIGIN: z.string().url().default('http://localhost:3001'),
     DATABASE_URL: z.string().optional(),
     ALLOWED_EMAILS: z.string().default('developer@example.com'),
     SUPABASE_URL: z.string().url().optional(),

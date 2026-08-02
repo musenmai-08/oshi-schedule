@@ -26,7 +26,7 @@ const env = loadEnv({
   NODE_ENV: 'test',
   APP_MODE: 'fake',
   ALLOWED_EMAILS: 'developer@example.com,second@example.com',
-  WEB_ORIGIN: 'http://localhost:3000',
+  WEB_ORIGIN: 'http://localhost:3001',
 });
 const app = createApp(env, createContainer(env, { store, authAdmin }));
 const ownerAuth = { authorization: 'Bearer test:prisma-owner:developer@example.com' };
