@@ -1,5 +1,6 @@
 'use client';
 import DeleteForeverOutlinedIcon from '@mui/icons-material/DeleteForeverOutlined';
+import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
 import GoogleIcon from '@mui/icons-material/Google';
 import {
   Alert,
@@ -20,8 +21,10 @@ import {
 } from '@mui/material';
 import type { MeView } from '@oshi-schedule/shared';
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { apiClient } from '@/lib/api';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { APP_ROUTES } from '@/lib/routes';
 
 export function AccountSettings() {
   const [me, setMe] = useState<MeView | null>(null);
@@ -66,6 +69,14 @@ export function AccountSettings() {
   };
   return (
     <Stack spacing={4} maxWidth={760}>
+      <Button
+        component={Link}
+        href={APP_ROUTES.dashboard}
+        startIcon={<ArrowBackRoundedIcon />}
+        sx={{ alignSelf: 'flex-start' }}
+      >
+        ダッシュボードに戻る
+      </Button>
       <Box>
         <Typography variant="h3" component="h1" sx={{ fontSize: { xs: '2rem', md: '2.6rem' } }}>
           アカウント設定

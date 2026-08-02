@@ -4,6 +4,7 @@ async function login(page: Page) {
   await page.goto('/');
   await page.getByRole('button', { name: 'Googleでログイン' }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByText('最初の推しを登録しましょう')).toBeVisible();
 }
 
 test('チャンネルの登録から同期・停止・削除まで操作できる', async ({ page, request }) => {
@@ -141,4 +142,13 @@ test('未認証で利用規約とプライバシーポリシーを表示でき�
     page.getByRole('heading', { level: 2, name: /Google API Services User Data Policy/ }),
   ).toBeVisible();
   await expect(page.getByRole('link', { name: 'ログイン画面に戻る' })).toBeVisible();
+});
+
+test('Settingsから認証状態を維持してダッシュボードへ戻れる', async ({ page }) => {
+  await login(page);
+  await page.goto('/settings');
+  await expect(page.getByRole('heading', { name: 'アカウント設定' })).toBeVisible();
+  await page.getByRole('link', { name: 'ダッシュボードに戻る' }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByRole('heading', { name: 'おかえりなさい' })).toBeVisible();
 });
