@@ -1,0 +1,19 @@
+apps/api/src/application/sync-service.test.ts
+  s_3a50bad78ea1cd::t_135b5c4c3ab3c4 636
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "8fdc96873afaeda26164fafbfd6dfed77fd6ea55",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
