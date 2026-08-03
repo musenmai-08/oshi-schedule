@@ -1,0 +1,23 @@
+docs/architecture/synchronization.md
+  s_3a50bad78ea1cd::t_02939b2e781e20 64
+apps/api/src/infrastructure/google-calendar/google-calendar-gateway.ts
+  s_3a50bad78ea1cd::t_02939b2e781e20 149-152
+apps/api/src/infrastructure/google-calendar/google-calendar-gateway.test.ts
+  s_3a50bad78ea1cd::t_02939b2e781e20 126-138
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "033a945f0df5686aee32efa2ac8b1217b8097563",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
