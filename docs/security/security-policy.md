@@ -12,6 +12,10 @@
 
 JSON 構造化ログにlevel/time/requestId/runId/errorCodeを記録する。YouTube quotaはmethod/bucket/予約unit/使用unit/残unitを記録する。秘密値、Authorization、メール、API key、外部応答全体は禁止。利用者向けには安定したerror code、安全な日本語メッセージ、quota延期時の次回時刻だけを返し、内部unit数は返さない。
 
+アプリケーションloggerは構造化フィールドと文字列内URLを共通サニタイズし、`code`、`access_token`、`refresh_token`、`token`、`authorization`、`client_secret`とBearer値を記録しない。OAuth callbackを追跡するときはパス、HTTP status、requestIdだけを記録し、URL全文やquery stringを渡さない。安全なアプリケーション分類は`code`ではなく`errorCode`へ記録する。
+
+Next.js開発サーバーは内部アクセスログへrequest targetを出力するため、OAuth callbackの一回限りの`code`を含むquery stringが表示されることがある。この内部ログへアプリのサニタイズ処理は適用できないため、開発stdout/stderrを機密情報として扱い、共有・永続保存しない。Next.js 15.5.20の`next start`では合成query付きrequestを標準出力へ記録しないことを確認済みだが、本番のreverse proxy、CDN、platform access logは別管理である。これらはquery stringを保存しない設定とし、OAuth callbackはpathnameとstatusだけを記録する。Next.jsやホスティング基盤の更新時は、本番相当起動でcallback queryが出力されないことを再確認する。
+
 アカウント削除の墓石はメールではなくSupabase user IDを一意キーとし、User削除後も保持する。Supabase Admin削除後の既発行JWTは署名上有効な間も墓石照合で410にし、ブラウザーは204受領後にsignOutする。削除errorには安全な固定codeだけを保存し、外部response本文は保存しない。削除leaseはDB時刻、owner、versionによるfencingを使い、古いownerのstep/FAILED書込みと解放を拒否する。
 
 ## Google 公開審査前チェック

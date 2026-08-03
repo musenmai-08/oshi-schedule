@@ -59,7 +59,7 @@ export const errorHandler = (
   logger.error(
     {
       requestId: response.locals.requestId,
-      code: appError.code,
+      errorCode: appError.code,
       errorName: error instanceof Error ? error.name : 'unknown',
     },
     'request failed',

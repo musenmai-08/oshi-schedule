@@ -229,7 +229,7 @@ export class SyncService {
                   {
                     runId,
                     subscriptionId,
-                    code: error.code,
+                    errorCode: error.code,
                     nextRetryAt: error.details?.nextRetryAt,
                   },
                   'YouTube refresh deferred; using cached broadcasts',
@@ -336,7 +336,11 @@ export class SyncService {
     } catch (error) {
       if (calendarStarted && phases.calendarSync !== 'SUCCESS') phases.calendarSync = 'FAILED';
       this.logger.error(
-        { code: error instanceof AppError ? error.code : 'SYNC_FAILED', subscriptionId, runId },
+        {
+          errorCode: error instanceof AppError ? error.code : 'SYNC_FAILED',
+          subscriptionId,
+          runId,
+        },
         'subscription sync failed',
       );
       if (!(error instanceof AppError) || error.code !== 'SYNC_LEASE_LOST')
