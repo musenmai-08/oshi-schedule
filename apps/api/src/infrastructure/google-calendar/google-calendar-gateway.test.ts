@@ -123,6 +123,19 @@ describe('GoogleCalendarGateway token refresh', () => {
     ).toHaveLength(1);
   });
 
+  it('treats an HTTP 200 cancelled event tombstone as deleted', async () => {
+    const { user, gateway } = await setup();
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(json({ access_token: 'access-token', expires_in: 3600 }))
+        .mockResolvedValueOnce(json({ id: 'event-id', status: 'cancelled' })),
+    );
+
+    await expect(gateway.eventExists(user, 'calendar-id', 'event-id')).resolves.toBe(false);
+  });
+
   it('uses exponential delay with jitter and honors Retry-After', async () => {
     const store = new MemoryStore();
     const user = await store.ensureUser({ subject: 'retry-user', email: 'developer@example.com' });

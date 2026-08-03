@@ -61,6 +61,6 @@ quota不足は `YOUTUBE_QUOTA_DEFERRED` と次回reset時刻へ変換する。Yo
 
 登録直後の初回同期も同じlease、quota予約、snapshot、差分同期、決定的event ID、同期履歴を使う。手動用quota保護ルールに従うが `lastManualSyncAt` は更新しない。quota不足または完了snapshot待ちは `DEFERRED`、その他の例外は `FAILED` とし、登録応答はどちらも201で同期状態を返す。
 
-各実行は `SyncRun`、各 subscription は `SyncTargetResult` に RUNNING から最終状態を保存する。定期実行は 1 利用者の失敗を隔離し、全体を SUCCESS/PARTIAL_FAILED/FAILED へ集約する。24時間超のRUNNINGは次の定期実行でFAILEDへ回収し、完了履歴は90日保持する。error logにはrunId/subscriptionId/safe error codeを含める。外部呼び出しは設定timeoutを使い、恒久失効と一時障害を区別する。OAuth token endpointの429/5xx/network failureは秒単位のexponential backoff+jitterと`Retry-After`を使って最大3回だけ試行し、`invalid_grant`だけを再認証要求にする。
+各実行は `SyncRun`、各 subscription は `SyncTargetResult` に RUNNING から最終状態を保存する。定期実行は 1 利用者の失敗を隔離し、全体を SUCCESS/PARTIAL_FAILED/FAILED へ集約する。24時間超のRUNNINGは次の定期実行でFAILEDへ回収し、完了履歴は90日保持する。error logにはrunId/subscriptionId/safe error codeを含める。外部呼び出しは設定timeoutを使い、恒久失効と一時障害を区別する。OAuth token endpointの429/5xx/network failureは秒単位のexponential backoff+jitterと`Retry-After`を使って最大3回だけ試行し、`invalid_grant`だけを再認証要求にする。Google Calendarは削除イベントをHTTP 200かつ`status=cancelled`の墓石として返す場合があるため、これは不存在として扱い、次回同期で同じ配信を復旧する。
 
 登録解除は所有者条件で subscription を取得し、`scheduledStartAt` が現在より未来の mapping だけを処理する。Google DELETE 成功または 404/410 の後に mapping を削除し、全件完了後に subscription を削除する。一部失敗時は subscription と未処理 mapping が残るため再実行でき、過去 event、他 User の mapping、共有 Channel/Broadcast は保持する。

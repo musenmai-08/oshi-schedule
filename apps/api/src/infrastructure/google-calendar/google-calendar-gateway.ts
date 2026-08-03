@@ -146,7 +146,10 @@ export class GoogleCalendarGateway implements CalendarGateway {
       user.id,
       `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
     );
-    if (response.ok) return true;
+    if (response.ok) {
+      const body = (await response.json().catch(() => ({}))) as { status?: string };
+      return body.status !== 'cancelled';
+    }
     if ([404, 410].includes(response.status)) return false;
     throw new AppError(
       'GOOGLE_EVENT_CHECK_FAILED',
