@@ -633,7 +633,7 @@ describe('SyncService', () => {
     expect(entries[0]).toMatchObject({
       subscriptionId: subscription.id,
       runId: store.syncRuns[0]?.id,
-      code: 'GOOGLE_CALENDAR_ERROR',
+      errorCode: 'GOOGLE_CALENDAR_ERROR',
     });
   });
 });
