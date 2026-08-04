@@ -31,8 +31,7 @@ COPY prisma prisma
 RUN pnpm --filter @oshi-schedule/shared build \
     && pnpm --filter @oshi-schedule/api build \
     && pnpm --filter @oshi-schedule/worker build \
-    && pnpm --filter @oshi-schedule/api deploy --prod /output/api \
-    && pnpm --filter @oshi-schedule/worker deploy --prod /output/worker
+    && pnpm --filter @oshi-schedule/api deploy --prod /output/api
 
 FROM node:22.23.1-bookworm-slim AS runtime
 
@@ -48,10 +47,13 @@ ADD --chown=root:root https://truststore.pki.rds.amazonaws.com/global/global-bun
     /etc/ssl/certs/aws-rds-global-bundle.pem
 
 COPY --from=workspace --chown=node:node /output/api ./api
-COPY --from=workspace --chown=node:node /output/worker ./worker
+COPY --from=workspace --chown=node:node /workspace/apps/worker/dist ./worker/dist
 COPY --from=workspace --chown=node:node /workspace/prisma ./prisma
 COPY --chown=node:node docker/entrypoint.sh ./entrypoint.sh
-RUN chmod 0555 ./entrypoint.sh
+RUN mkdir -p ./api/node_modules/@oshi-schedule \
+    && ln -s ../api/node_modules ./worker/node_modules \
+    && ln -s ../.. ./api/node_modules/@oshi-schedule/api \
+    && chmod 0555 ./entrypoint.sh
 
 USER node
 EXPOSE 4000
