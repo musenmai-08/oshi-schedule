@@ -1,0 +1,41 @@
+.dockerignore
+  s_3a50bad78ea1cd::t_116ab57be64dc5 1-15
+docker/entrypoint.sh
+  s_3a50bad78ea1cd::t_877cde626164ca 1-26
+apps/worker/package.json
+  s_3a50bad78ea1cd::t_116ab57be64dc5 6,13-14
+apps/api/tsconfig.json
+  s_3a50bad78ea1cd::t_116ab57be64dc5 4-5
+apps/worker/tsconfig.json
+  s_3a50bad78ea1cd::t_116ab57be64dc5 4-5
+apps/api/package.json
+  s_3a50bad78ea1cd::t_86f3db6f85bcec 32
+  s_3a50bad78ea1cd::t_116ab57be64dc5 7
+Dockerfile
+  s_3a50bad78ea1cd::t_116ab57be64dc5 1-8,12-20,22-41,46,50-52,55-58,60-64
+  s_3a50bad78ea1cd::t_cb44b721eca8f2 9-11,21,42-45
+  s_3a50bad78ea1cd::t_71ce9befac9965 54
+  s_3a50bad78ea1cd::t_877cde626164ca 47-49,53,59
+packages/shared/package.json
+  s_3a50bad78ea1cd::t_116ab57be64dc5 6
+packages/shared/tsconfig.json
+  s_3a50bad78ea1cd::t_116ab57be64dc5 4-5
+pnpm-lock.yaml
+  s_3a50bad78ea1cd::t_5802f1c2018699 74-76
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "195ce2039761f2a97e23e851950d7ef0d05b0901",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
