@@ -24,6 +24,8 @@ flowchart LR
 
 同期コアは port (`YouTubeGateway`, `CalendarGateway`, `Store`, `Clock`) のみに依存する。実 API と Fake は adapter として交換する。
 
+本番・stagingの配置、network、TLS、scale方針は[デプロイアーキテクチャ](deployment-architecture.md)を参照する。
+
 ## 可用性・拡張
 
 API と worker をまたぐ多重実行は、subscription 単位の `SyncLease` を MySQL に保存して防ぐ。lease は owner token と期限を持ち、同期中も更新するため長時間処理で別 replica に奪われない。異常終了後は期限切れ lease を取得し直せる。手動同期のクールダウンも DB 時刻で共有する。将来はジョブキューへチャンネル取得・利用者反映を分割できる。特定クラウドの SDK は domain/application に置かない。

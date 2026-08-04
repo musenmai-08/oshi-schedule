@@ -1,0 +1,102 @@
+# 環境戦略
+
+## 方針
+
+local、test、staging、productionのデータとcredentialを混在させない。個人開発の初期はAWS accountを1つに保ちつつ、外部に影響するproject、DB、Secret、OAuth client、URLはstagingとproductionで分離する。
+
+## 環境マトリクス
+
+| 項目               | local                             | test/CI                          | staging                                                           | production                                            |
+| ------------------ | --------------------------------- | -------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------- |
+| URL                | `http://localhost:3001` / `:4000` | localhost/ephemeral              | `https://staging.example.com` / `https://api-staging.example.com` | `https://app.example.com` / `https://api.example.com` |
+| `APP_MODE`         | realで実受入、fakeで開発          | fake中心                         | real                                                              | real                                                  |
+| MySQL              | Docker MySQL 8.4                  | disposable MySQL 8.4             | 独立RDS                                                           | 独立RDS                                               |
+| Supabase           | staging projectを明示利用         | fake、または専用test             | staging project                                                   | production project                                    |
+| Google Cloud       | staging project/client            | fake                             | staging project/client                                            | production project/client                             |
+| YouTube/Calendar   | 必要時のみ実service               | fake                             | 実service                                                         | 実service                                             |
+| Secret             | 追跡外`.env`                      | GitHubにapp secretを置かずtest値 | staging専用                                                       | production専用                                        |
+| GitHub Environment | なし                              | pull request                     | `staging`                                                         | `production` + manual approval                        |
+
+`example.com`は設計上のplaceholderであり、実domain購入後に置換する。
+
+## 分離単位
+
+- **AWS**: 初期は同一account/region/VPC/ECS cluster/ECR/ALBを共有する。ECS service/task definition、target group、security group、IAM role、RDS、log group、Scheduler、Secrets/Parametersは環境別に作成し、`application=oshi-schedule`と`environment` tagを必須にする。
+- **Google Cloud**: stagingとproductionでproject、OAuth consent/test users、OAuth client、YouTube quotaを分ける。quota増枠申請もproduction projectに限定する。
+- **Supabase**: projectを分け、Auth user、Google provider設定、URL allowlist、keyを共有しない。productionの可用性を求めるbetaではPro planを前提とする。
+- **DB**: RDS instance、database credential、subnet/security boundaryを分ける。schemaは同じmigration列を適用するがdataは移送しない。
+- **GitHub**: `staging`と`production` Environmentを分け、productionにrequired reviewerとdeployment concurrencyを設定する。AWS認証はOIDCを使い、長期access keyは保存しない。
+- **Domain**: staging/productionのWeb/APIを別hostにする。CORSは環境ごとに単一の正確なWeb originだけを許可する。
+
+## OAuth URL
+
+| 設定先                         | staging                                                      | production                                                      |
+| ------------------------------ | ------------------------------------------------------------ | --------------------------------------------------------------- |
+| Supabase Site URL              | `https://staging.example.com`                                | `https://app.example.com`                                       |
+| Supabase Redirect URL          | `https://staging.example.com/auth/callback`                  | `https://app.example.com/auth/callback`                         |
+| アプリcallback                 | 同上                                                         | 同上                                                            |
+| Google OAuth authorized origin | `https://staging.example.com`                                | `https://app.example.com`                                       |
+| Google provider redirect URI   | `https://<staging-project-ref>.supabase.co/auth/v1/callback` | `https://<production-project-ref>.supabase.co/auth/v1/callback` |
+
+Supabase project refや実domainはSecretではないが環境設定として管理し、document例の値をそのまま使わない。
+
+## 環境変数の分類と配置
+
+### Web公開設定
+
+これらはbrowser bundleへ含まれるためSecretを入れてはならない。Amplify appの環境別build settingに設定する。
+
+| 変数                                   | 用途                        |
+| -------------------------------------- | --------------------------- |
+| `NEXT_PUBLIC_API_URL`                  | 環境別API HTTPS origin      |
+| `NEXT_PUBLIC_SUPABASE_URL`             | 環境別Supabase project URL  |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | browser向けpublishable key  |
+| `NEXT_PUBLIC_DEMO_MODE`                | staging/productionは`false` |
+
+### Secret
+
+ECS task起動時にAWS Secrets Managerから注入し、Docker image、build artifact、Amplify、GitHub Actionsの通常ログへ入れない。
+
+| 変数                        | 推奨配置                                                                  | 備考                                          |
+| --------------------------- | ------------------------------------------------------------------------- | --------------------------------------------- |
+| `DATABASE_URL`              | RDS managed secretを参照してtask起動時に構成、または環境別Secrets Manager | TLS検証と小さいconnection poolを含める        |
+| `SUPABASE_SERVICE_ROLE_KEY` | 環境別app secret                                                          | ECSのみ。browser禁止                          |
+| `GOOGLE_CLIENT_SECRET`      | 環境別app secret                                                          | API/workerのみ                                |
+| `YOUTUBE_API_KEY`           | 環境別app secret                                                          | Google projectごとに分離                      |
+| `TOKEN_ENCRYPTION_KEYS`     | 専用versioned secret                                                      | app secretと分け、offline recovery copyを持つ |
+
+Secrets Managerの例は`/oshi-schedule/{environment}/app-secrets`、`/oshi-schedule/{environment}/token-encryption-keys`とする。環境別task execution roleに該当ARNのreadだけを許可する。
+
+### 非Secretだが環境依存
+
+| 変数                                                        | 配置                                              |
+| ----------------------------------------------------------- | ------------------------------------------------- |
+| `NODE_ENV`、`APP_MODE`、`PORT`、`WEB_ORIGIN`                | ECS task definition                               |
+| `SUPABASE_URL`、`SUPABASE_JWT_AUDIENCE`、`GOOGLE_CLIENT_ID` | SSM Parameter Store Standardまたはtask definition |
+| `ALLOWED_EMAILS`                                            | 個人情報を含むためSSM SecureString                |
+| timeout、lease、OAuth retry、YouTube quota/tracking設定     | SSM Parameter Store Standard。変更review対象      |
+
+`.env.example`の`SUPABASE_PUBLISHABLE_KEY`（`NEXT_PUBLIC_`なし）は現在のAPI validation/実装から参照されていない。productionへ配布せず、STEP 4でsampleから削除するか用途を明文化する。
+
+## Secret運用
+
+1. Secretはimage、Git、build output、CLI引数、ログへ書かない。GitHub ActionsはAWS OIDCでdeployし、app secretを読まない。
+2. ECSはtask definitionのsecret referenceで実行時に取得する。rotation時は新revisionをdeployする。
+3. `TOKEN_ENCRYPTION_KEYS`は`key-id:32-byte-base64`をcomma区切りにし、先頭keyで暗号化、後続keyで旧ciphertextを復号する。新key追加→再暗号化→復号監査→旧key除去の順にrotateする。
+4. Secret参照失敗、既知のsample値、`APP_MODE=fake`、`NEXT_PUBLIC_DEMO_MODE=true`はdeploymentを失敗させる。
+5. Secretの全文をCloudWatch、GitHub、support ticket、documentへ出さない。access auditはCloudTrailで確認する。
+
+## YouTube quota
+
+2026-08-04時点でdefault projectには`search.list`用の100 search query units/dayという独立budgetがある。アプリのdefaultは80/day、scheduled reserveは72/dayである。30チャンネルを毎時検索すると720 calls/dayになりdefault quotaでは実行できない。beta開始前に次のいずれかを採る。
+
+- 頻度を落とす、チャンネルを時分割する、既知broadcastを`videos.list`で追跡する。
+- production Google Cloud projectでquota増枠を申請する。
+
+費用とは別のhard constraintとして、quota alarmと残量dashboardを必須にする。
+
+## 関連文書
+
+- [デプロイアーキテクチャ](../architecture/deployment-architecture.md)
+- [デプロイ手順](deployment.md)
+- [暗号鍵を含む復旧](backup-and-recovery.md)
