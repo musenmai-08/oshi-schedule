@@ -56,7 +56,10 @@ jobs:
       - name: Check migration status and schema drift
         run: |
           pnpm exec prisma migrate status
-          pnpm exec prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code
+          pnpm exec prisma migrate diff \
+            --from-schema-datasource prisma/schema.prisma \
+            --to-schema-datamodel prisma/schema.prisma \
+            --exit-code
       - run: pnpm typecheck
       - run: pnpm lint
       - name: Unit and MySQL integration tests
