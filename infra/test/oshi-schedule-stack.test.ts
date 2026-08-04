@@ -9,6 +9,7 @@ const configFor = (environmentName: EnvironmentName): DeploymentConfig => ({
   account: '111111111111',
   region: 'ap-northeast-1',
   deployReady: false,
+  bootstrapOnly: false,
   monthlyBudgetUsd: 75,
   githubOwner: 'example-owner',
   githubRepository: 'oshi-schedule',
@@ -35,6 +36,20 @@ const render = (environmentName: EnvironmentName = 'staging'): Template => {
 };
 
 describe('OshiScheduleStack', () => {
+  it('supports an ECR-first bootstrap without creating billable compute or database resources', () => {
+    const app = new App();
+    const config = { ...configFor('staging'), bootstrapOnly: true };
+    const template = Template.fromStack(
+      new OshiScheduleStack(app, 'test-bootstrap', {
+        env: { account: '111111111111', region: 'ap-northeast-1' },
+        config,
+      }),
+    );
+    template.resourceCountIs('AWS::ECR::Repository', 1);
+    template.resourceCountIs('AWS::ECS::Service', 0);
+    template.resourceCountIs('AWS::RDS::DBInstance', 0);
+  });
+
   it('uses public compute subnets without NAT and keeps RDS private', () => {
     const template = render();
     template.resourceCountIs('AWS::EC2::NatGateway', 0);

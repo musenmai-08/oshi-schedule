@@ -6,10 +6,12 @@ import {
   RemovalPolicy,
   Stack,
   Tags,
+  Validations,
   aws_amplify as amplify,
   aws_budgets as budgets,
   aws_certificatemanager as acm,
   aws_cloudwatch as cloudwatch,
+  aws_cloudwatch_actions as cloudwatchActions,
   aws_ec2 as ec2,
   aws_ecr as ecr,
   aws_ecs as ecs,
@@ -22,6 +24,7 @@ import {
   aws_route53_targets as route53Targets,
   aws_scheduler as scheduler,
   aws_secretsmanager as secretsmanager,
+  aws_s3 as s3,
   aws_sns as sns,
   aws_sns_subscriptions as subscriptions,
   aws_sqs as sqs,
@@ -49,6 +52,11 @@ export class OshiScheduleStack extends Stack {
     Tags.of(this).add('Application', 'oshi-schedule');
     Tags.of(this).add('Environment', config.environmentName);
     Tags.of(this).add('ManagedBy', 'aws-cdk');
+    Validations.of(this).acknowledge({
+      id: 'CloudFormation-Validate::W2001',
+      reason:
+        'Imported SSM parameter names are referenced by ECS secret ARNs at runtime; CDK lookup parameters are intentionally not Ref-ed.',
+    });
 
     const vpc = new ec2.Vpc(this, 'Vpc', {
       vpcName: `${prefix}-vpc`,
@@ -68,6 +76,10 @@ export class OshiScheduleStack extends Stack {
       removalPolicy: RemovalPolicy.RETAIN,
       emptyOnDelete: false,
     });
+    if (config.bootstrapOnly) {
+      new CfnOutput(this, 'EcrRepositoryUri', { value: repository.repositoryUri });
+      return;
+    }
     const cluster = new ecs.Cluster(this, 'Cluster', {
       clusterName: `${prefix}-cluster`,
       vpc,
@@ -254,6 +266,10 @@ export class OshiScheduleStack extends Stack {
       family: `${prefix}-api`,
       cpu: config.apiCpu,
       memoryLimitMiB: config.apiMemoryMiB,
+      runtimePlatform: {
+        cpuArchitecture: ecs.CpuArchitecture.X86_64,
+        operatingSystemFamily: ecs.OperatingSystemFamily.LINUX,
+      },
     });
     const apiContainer = apiTaskDefinition.addContainer('api', {
       containerName: 'api',
@@ -293,6 +309,17 @@ export class OshiScheduleStack extends Stack {
       securityGroup: albSecurityGroup,
       vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
     });
+    loadBalancer.setAttribute('idle_timeout.timeout_seconds', '300');
+    const albLogBucket = new s3.Bucket(this, 'AlbLogBucket', {
+      bucketName: `${prefix}-alb-logs-${this.account}`,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      enforceSSL: true,
+      lifecycleRules: [{ expiration: Duration.days(isProduction ? 180 : 90) }],
+      removalPolicy: RemovalPolicy.RETAIN,
+      autoDeleteObjects: false,
+    });
+    loadBalancer.logAccessLogs(albLogBucket, 'alb');
     const targetGroup = new elbv2.ApplicationTargetGroup(this, 'ApiTargetGroup', {
       vpc,
       targetType: elbv2.TargetType.IP,
@@ -339,6 +366,10 @@ export class OshiScheduleStack extends Stack {
       family: `${prefix}-worker`,
       cpu: config.workerCpu,
       memoryLimitMiB: config.workerMemoryMiB,
+      runtimePlatform: {
+        cpuArchitecture: ecs.CpuArchitecture.X86_64,
+        operatingSystemFamily: ecs.OperatingSystemFamily.LINUX,
+      },
     });
     workerTaskDefinition.addContainer('worker', {
       containerName: 'worker',
@@ -354,6 +385,10 @@ export class OshiScheduleStack extends Stack {
       family: `${prefix}-migration`,
       cpu: 256,
       memoryLimitMiB: 512,
+      runtimePlatform: {
+        cpuArchitecture: ecs.CpuArchitecture.X86_64,
+        operatingSystemFamily: ecs.OperatingSystemFamily.LINUX,
+      },
     });
     migrationTaskDefinition.addContainer('migration', {
       containerName: 'migration',
@@ -409,7 +444,10 @@ export class OshiScheduleStack extends Stack {
 
     notificationTopic.addToResourcePolicy(
       new iam.PolicyStatement({
-        principals: [new iam.ServicePrincipal('events.amazonaws.com')],
+        principals: [
+          new iam.ServicePrincipal('budgets.amazonaws.com'),
+          new iam.ServicePrincipal('events.amazonaws.com'),
+        ],
         actions: ['sns:Publish'],
         resources: [notificationTopic.topicArn],
       }),
@@ -423,7 +461,19 @@ export class OshiScheduleStack extends Stack {
         'detail-type': ['ECS Task State Change'],
         detail: {
           lastStatus: ['STOPPED'],
-          taskDefinitionArn: [{ prefix: workerTaskDefinition.taskDefinitionArn }],
+          taskDefinitionArn: [
+            {
+              prefix: Arn.format(
+                {
+                  service: 'ecs',
+                  resource: 'task-definition',
+                  resourceName: `${prefix}-worker`,
+                  arnFormat: ArnFormat.SLASH_RESOURCE_NAME,
+                },
+                this,
+              ),
+            },
+          ],
           containers: { exitCode: [{ 'anything-but': 0 }] },
         },
       },
@@ -467,7 +517,7 @@ export class OshiScheduleStack extends Stack {
       }),
     ];
     for (const alarm of alarms) {
-      alarm.addAlarmAction({ bind: () => ({ alarmActionArn: notificationTopic.topicArn }) });
+      alarm.addAlarmAction(new cloudwatchActions.SnsAction(notificationTopic));
     }
 
     new budgets.CfnBudget(this, 'MonthlyBudget', {
@@ -570,7 +620,6 @@ export class OshiScheduleStack extends Stack {
           'ecs:DescribeClusters',
           'ecs:DescribeServices',
           'ecs:DescribeTasks',
-          'ecs:ListTasks',
           'ecs:RunTask',
           'ecs:UpdateService',
         ],
@@ -580,6 +629,12 @@ export class OshiScheduleStack extends Stack {
           Arn.format({ service: 'ecs', resource: 'task-definition', resourceName: `${prefix}-*`, arnFormat: ArnFormat.SLASH_RESOURCE_NAME }, this),
           Arn.format({ service: 'ecs', resource: 'task', resourceName: `${cluster.clusterName}/*`, arnFormat: ArnFormat.SLASH_RESOURCE_NAME }, this),
         ],
+      }),
+    );
+    githubRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ['ecs:ListTasks'],
+        resources: ['*'],
       }),
     );
     githubRole.addToPolicy(
@@ -596,6 +651,13 @@ export class OshiScheduleStack extends Stack {
             this,
           ),
         ],
+      }),
+    );
+    githubRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ['iam:PassRole'],
+        resources: [schedulerRole.roleArn],
+        conditions: { StringEquals: { 'iam:PassedToService': 'scheduler.amazonaws.com' } },
       }),
     );
     githubRole.addToPolicy(

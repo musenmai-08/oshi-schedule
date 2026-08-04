@@ -7,6 +7,7 @@ describe('loadConfig', () => {
     const app = new App({ context: { environment: 'staging' } });
     const config = loadConfig(app);
     expect(config.deployReady).toBe(false);
+    expect(config.bootstrapOnly).toBe(false);
     expect(config.webDomainName).toBeUndefined();
   });
 

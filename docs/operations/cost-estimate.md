@@ -34,9 +34,9 @@
 | API            | ECS Fargate Service                                          | ECS Fargate Service                                                                | Cloud Run Service                                                  |
 | worker         | Scheduler + Fargate Task                                     | Scheduler + Fargate Task                                                           | Cloud Scheduler + Cloud Run Job                                    |
 | MySQL          | RDS for MySQL                                                | RDS for MySQL                                                                      | Cloud SQL for MySQL                                                |
-| 月額beta概算   | $143〜200                                                    | **$123〜180**                                                                      | $95〜160                                                           |
+| 月額beta概算   | $143〜210                                                    | **$142〜234**                                                                      | $95〜160                                                           |
 | 無料枠         | Vercel Hobbyは非商用のみ。AWS各free allowanceは条件/期限あり | Amplify/Scheduler等にallowance。RDS/ALB常設分は残る                                | Cloud Run request/compute allowance。Cloud SQL固定費は残る         |
-| 最低固定費     | RDS、ALB、API、商用Vercel Pro seat                           | RDS 2台、ALB、API tasks、public IPv4                                               | Cloud SQL 2台、network。Cloud Runはscale-to-zero可能               |
+| 最低固定費     | RDS、ALB、API、商用Vercel Pro seat                           | RDS 2台、環境別ALB 2台、API tasks、public IPv4                                     | Cloud SQL 2台、network。Cloud Runはscale-to-zero可能               |
 | 小traffic      | Web変動は小さいがVercel Pro固定費あり                        | Web変動が小さく、AWS control planeを統一                                           | computeは最安になり得るがDB固定費あり                              |
 | Web deploy     | 最も容易、Next.js first-class                                | Next.js 15機能の対応範囲内。Edge API/streaming/on-demand ISRは非対応だが現行未使用 | Next.js SSR containerのbuild/運用が必要                            |
 | API deploy     | AWSとVercelに分散                                            | image/ECSへ統一                                                                    | container deploy容易、cold startとrequest timeoutを設計            |
@@ -66,14 +66,16 @@ App RunnerはExpressを簡単にdeployできる一方、total request timeout 12
 | ----------------------------------------------------- | ------------------------------------: | --------------------------------------------------- |
 | RDS MySQL Single-AZ x 2、20 GiB gp storage            |                               $35〜65 | 最大の固定費。実class単価をcalculatorで確認         |
 | ECS API desired 1 x 2 + hourly worker tasks           |                               $10〜25 | 主にAPI常駐compute。worker変動は小さい              |
-| shared ALB x 1                                        |                               $18〜30 | load balancer hour + LCU                            |
-| public IPv4（ALB 2個、ECS API x 2常時、worker実行時） |                               $14〜18 | ALBもpublic IPv4課金対象。NAT Gatewayを置かない構成 |
+| environment別 ALB x 2                                 |                               $36〜60 | load balancer hour + LCU                            |
+| public IPv4（ALB、ECS API常時、worker実行時）         |                               $20〜28 | ALBもpublic IPv4課金対象。NAT Gatewayを置かない構成 |
 | Amplify Web x 2                                       |                                 $0〜5 | build、SSR request/compute、hosting/egress          |
 | Secrets Manager、ECR、CloudWatch/S3、Route 53         |                                $5〜15 | Secret数、log量、image retentionで変動              |
-| AWS小計                                               |                          **$82〜162** | usageにより変動                                     |
+| AWS小計                                               |                         **$107〜199** | usageにより変動                                     |
 | Supabase                                              | Free $0、beta Pro 2 projectsは概ね$35 | Authの可用性/backup要件で選択                       |
 
-共有ALBはhost ruleで環境分離して固定費を抑える。security境界やaccount分離が必要になったらproduction専用ALBへ移す。NAT Gatewayは初期採用せず、固定outbound IP、private-only task、AWS private endpoint要件が生じた時点で再検討する。
+実装はstaging/productionでALBを分け、誤routingとsecurity境界の共有を避ける。費用最適化が必要なら、実測後にshared ALBへ統合する変更を別reviewする。NAT Gatewayは初期採用せず、固定outbound IP、private-only task、AWS private endpoint要件が生じた時点で再検討する。
+
+stagingだけを先に常設する場合のAWS planning rangeは概ね月$53〜95である。RDS、ALB、public IPv4はtrafficがなくても主要固定費になり、`cdk deploy`直後から発生する。AWS Pricing CalculatorではRDS MySQL 8.4 Single-AZ/20 GiB gp3、ALB hours/LCU、Fargate 0.25 vCPU/0.5 GiB、public IPv4、Amplify SSR/build、CloudWatch Logs、Secrets Manager、ECR/S3、Route 53、backup/snapshotを個別入力する。
 
 ## 規模別概算
 
@@ -81,10 +83,10 @@ App RunnerはExpressを簡単にdeployできる一方、total request timeout 12
 
 ```text
 初期費用：AWS resource作成は$0、未購入domainは年$10〜30程度を別計上
-月額固定費：$77〜115
-月額変動費：$5〜15
-合計概算：$82〜130（Supabase Freeを仮定）
-主な増加要因：staging/productionのRDS 2台、shared ALB、API常駐task、public IPv4
+月額固定費：$100〜175
+月額変動費：$7〜24
+合計概算：$107〜199（Supabase Freeを仮定）
+主な増加要因：staging/productionのRDS 2台、environment別ALB、API常駐task、public IPv4
 ```
 
 Supabase Freeのinactive pauseやbackup条件を受け入れられる本人利用だけを想定する。常時stagingが不要な月はAPI/RDS停止運用で下げられるが、worker定期実行と即時検証はできなくなるため基本見積には入れない。
@@ -95,7 +97,7 @@ Supabase Freeのinactive pauseやbackup条件を受け入れられる本人利�
 初期費用：AWS resource作成は$0、domain年$10〜30程度を別計上
 月額固定費：$112〜160（Supabase Pro 2 projects約$35を含む）
 月額変動費：$11〜20
-合計概算：$123〜180
+合計概算：$142〜234
 主な増加要因：Supabase Pro、RDS/ALB固定費、log、build、少量egress
 ```
 

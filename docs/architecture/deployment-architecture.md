@@ -6,7 +6,7 @@
 - 対象: 個人利用から招待制 beta、将来の小規模一般公開
 - 採用案: AWS 統一構成（Web のみ AWS Amplify Hosting、API/worker/DB は AWS のマネージドサービス）
 
-この文書は構成の決定であり、AWS リソース、契約、ドメイン、外部サービス設定はまだ作成・変更しない。
+STEP 4でAWS CDK、production image、CI/CDまで実装した。2026-08-04時点では`synth`とローカル検証だけが完了し、AWS resource、契約、domain、外部service設定はまだ作成・変更していない。
 
 ## 現行アプリケーションの実行要件
 
@@ -19,7 +19,7 @@
 
 Web の公開設定は `NEXT_PUBLIC_API_URL`、`NEXT_PUBLIC_DEMO_MODE=false`、`NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`。API/worker の秘密設定は [環境戦略](../operations/environment-strategy.md) に分類する。
 
-現行 API の rate limit はプロセスメモリ内、`trust proxy` は未設定、`GET /health` は DB readiness を確認せず、API の graceful shutdown と worker の明示的な Prisma 切断もない。これは採用構成を妨げないが、staging 構築前に実装する STEP 4 の前提条件とする。
+APIは`GET /health`をprocess liveness、`GET /ready`をDB readinessとして分離した。`TRUST_PROXY_HOPS=1`、設定可能なgraceful shutdown、API/workerのPrisma切断も実装済みである。ALB target checkは外部依存を呼ばない`/health`、deploy後のsmokeと運用監視は`/ready`も使う。
 
 ## 推奨構成
 
@@ -46,7 +46,7 @@ flowchart TB
   GH --> AW
 ```
 
-production と staging は同じ論理構成を使う。初期は1 AWSアカウント、1 VPC、1 ECS cluster、1 ECR repository と1台のインターネット向け ALB を共有し、host rule で環境別 target group へ分岐する。ECS service、task definition、IAM role、security group、log group、Secrets、RDS は環境ごとに分離する。
+production と staging は同じ論理構成を別stackとして使う。初期は1 AWS account/region内でも、VPC、ECS cluster、ECR repository、ALB、ECS service、IAM role、security group、log group、Secrets、RDSを環境ごとに分離する。固定費は増えるが、誤接続・誤削除・security group共有を避ける方を優先した。GitHub OIDC providerだけはaccount内で共有し、staging stackが作成、production stackが同じprovider ARNを参照する。
 
 ### コンポーネント責務
 
@@ -56,9 +56,9 @@ production と staging は同じ論理構成を使う。初期は1 AWSアカウ�
 | API            | Fargate service、desired count 1            | Fargate service、beta は desired count 1    | Express API、認証、手動同期、Google credential 管理  |
 | worker         | Scheduler → Fargate RunTask                 | 独立 Scheduler → Fargate RunTask            | 1時間ごとの同期。一回実行後に終了                    |
 | MySQL          | RDS for MySQL 8.4、Single-AZ、独立 instance | RDS for MySQL 8.4、Single-AZ、独立 instance | 永続データ、lease、fencing、migration                |
-| image          | production と共通の ECR image digest        | 同じ検証済み digest                         | API と worker を同一 image、別 command で実行        |
+| image          | staging ECRのimmutable digest                 | 同じmanifestをproduction ECRへ昇格          | API と worker を同一 image、別 command で実行        |
 
-Web はコンテナ化しない。API と worker は同じ source、Prisma Client、migration を含む同一 image を使い、API は `node apps/api/dist/server.js`、worker は `node apps/worker/dist/index.js` を command にする。migration も同じ image の一回限りの ECS task から `prisma migrate deploy` を実行する。
+Web はコンテナ化しない。API と worker は同じ source、Prisma Client、migration を含む同一 imageを使い、APIは`node api/dist/server.js`、workerは`node worker/dist/index.js`をcommandにする。migrationは同じimageの一回限りECS taskから`api/node_modules/.bin/prisma migrate deploy --schema=/opt/oshi-schedule/prisma/schema.prisma`を実行する。RDS managed secretのusername/passwordはentrypointがprocess memory上でTLS必須の`DATABASE_URL`へ構成し、imageやCloudFormationへ完全URLを保存しない。
 
 ## ネットワークと通信
 
@@ -67,7 +67,7 @@ Web はコンテナ化しない。API と worker は同じ source、Prisma Clien
 - 小規模段階の ECS task は public subnet と public IPv4 を使い、outbound は security group で許可する。これにより NAT Gateway の固定費を避ける。task への inbound は ALB security group から API port のみに限定し、worker は inbound rule を持たない。
 - DB security group は環境ごとの ECS security group から MySQL port のみ許可する。staging task から production DB、production task から staging DB へは接続できない。
 - RDS 接続は AWS CA bundle を検証する TLS を必須とし、`DATABASE_URL` の connection pool は task 数に応じた小さい `connection_limit` にする。
-- API の ALB idle timeout は、現行の同期 HTTP 処理を考慮して300秒を初期値とする。アプリ側 timeout より長くし、実測 p95 に基づき再調整する。
+- APIのALB idle timeoutは300秒、target deregistration delayは60秒を初期値とする。アプリ側timeoutより長くし、実測p95に基づき再調整する。
 
 ## TLS、HSTS、ドメイン
 
@@ -85,7 +85,7 @@ Supabase Site URL/Redirect URL、Google OAuth client、`WEB_ORIGIN` は環境ご
 ## rate limit
 
 - 招待制 beta は API desired count 1で開始し、既存のメモリ内 IP rate limit とDB上のユーザー/購読単位 cooldownを併用する。
-- ALBだけを唯一のproxyとして `trust proxy=1` を設定し、ALBの `X-Forwarded-For` は append mode を使う。実装への反映は STEP 4 で行う。
+- ALBだけを唯一のproxyとして`TRUST_PROXY_HOPS=1`をSSMから注入し、ALBの`X-Forwarded-For`はappend modeを使う。booleanの無条件`true`は使わない。
 - 認証後の制限はIPだけに頼らず、user ID単位を優先する。共有NATやIPv6の利用者を不当に巻き込まないためである。
 - desired countを2以上にする前、またはメモリ内制限の不一致を観測した時点で、ElastiCache for Valkey/Redisの共有storeへ移す。小規模では固定費と運用対象を増やすため導入しない。
 
@@ -110,15 +110,13 @@ Supabase Site URL/Redirect URL、Google OAuth client、`WEB_ORIGIN` は環境ご
 
 詳細は[費用見積](../operations/cost-estimate.md)と[Web配置ADR](../decisions/0001-host-web-on-amplify.md)を参照する。
 
-## STEP 4開始前の実装前提
+## STEP 4実装
 
-1. APIにSIGTERM/SIGINTのgraceful shutdownとPrisma disconnectを追加する。
-2. worker終了時にPrismaを明示切断し、45分の実行上限または監視による停止を追加する。
-3. DB readiness endpointを追加し、livenessと分離する。
-4. production topologyに固定した`trust proxy=1`を設定可能にする。
-5. production用Dockerfile、`.dockerignore`、ECS commandを追加する。
-6. workerのproduction commandをcompiled JavaScriptに固定する。
-7. TerraformまたはAWS CDKで環境別resourceをコード化する。
+- `Dockerfile`はNode.js 22.23.1/pnpm 9.15.9のmulti-stage build、非root、RDS CA bundle、API/worker/migration共用である。
+- `infra/`はTypeScript AWS CDKで、NATなしのpublic compute/isolated RDS、TLS未設定時の503固定応答、environment別removal policyを定義する。
+- Schedulerは既定disabled、1時間ごと、retry 2回、最大event age 1時間、SQS DLQを持つ。ECS STOPPEDかつexit code非0をEventBridge ruleでSNSへ通知する。
+- Amplify App/branchはCDK管理するが、GitHub接続とdomain verificationは管理画面で人が完了する。
+- 実構築手順は[staging構築](../operations/staging-setup.md)を正とする。
 
 ## 関連文書
 

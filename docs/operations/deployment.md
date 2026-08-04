@@ -8,13 +8,16 @@
 - migrationは環境ごとに単一の一回限りECS taskだけが実行し、API serviceやworker起動時には実行しない。
 - GitHub Environmentのconcurrencyで、同じ環境のdeploy/migrationを同時実行させない。
 
-## STEP 4で用意するartifact
+## STEP 4で実装済みのartifact
 
 1. Node.js 22.23.1を使うmulti-stage Dockerfile。API、worker、shared package、Prisma Client、migrationと`prisma` CLIだけをruntime imageに含める。
 2. `.dockerignore`で`.env*`、Git metadata、test output、local logsを除外する。
 3. API/worker/migrationのcommandを分けたECS task definition。
-4. TerraformまたはAWS CDKによるstaging/production infrastructure definition。
-5. GitHub Actions workflowと、staging/production GitHub Environment。
+4. `infra/`のTypeScript AWS CDKによるstaging/production infrastructure definitionとassertion test。
+5. `.github/workflows/`のCI、gated staging deploy、manual production deploy。
+6. `amplify.yml`と`scripts/smoke-staging.sh`。
+
+AWS resourceはまだ作成していない。初回は[staging構築手順](staging-setup.md)に従い、`bootstrapOnly=true`でVPC/ECRだけを作成し、imageをpushした後にfull stackをdeployする。image不在のままfull stackを先に作らない。
 
 ## Pull Request pipeline
 
@@ -29,7 +32,7 @@ Node.js 22.23.1、repositoryの`packageManager`に固定したpnpmを使い、�
 7. production相当の非秘密sample公開設定で`pnpm build`
 8. `docs/api/openapi.yaml`のparse/validationとgenerated contract test
 9. `pnpm test:e2e`
-10. production Docker image buildとvulnerability scan（pushはしない）
+10. production Docker image build（vulnerability scanはECR push前のstaging deploy workflowで必須）
 
 E2Eは現在の規模では毎PR実行する。所要時間が継続して10分を超えた場合だけ、smoke subsetをPR、full suiteをmainへ分ける。
 
@@ -51,19 +54,19 @@ flowchart LR
 1. PR checksを再実行する。
 2. imageを一度だけbuildし、OS/package vulnerability scanを行い、Critical未解決があれば停止する。
 3. ECRへcommit SHA tagでpushし、digestを記録する。mutable `latest`だけには依存しない。
-4. migration taskをdesired count 1で起動し、exit 0を待つ。失敗時は以降をdeployしない。
+4. migration taskをone-offで1つ起動し、exit 0を待つ。migration taskにはRDS managed secretのusername/passwordだけを渡し、Google/YouTube/Supabase app Secretは渡さない。失敗時は以降をdeployしない。
 5. ECS API task definitionを同digestへ更新し、rolling deploymentとtarget healthを待つ。
-6. worker task definitionを同digest/worker commandへ更新する。Scheduler自体は変更が必要な場合だけ更新する。
+6. worker task definitionを同digest/worker commandへ更新し、Scheduler targetを新revisionへ向ける。scheduleのenabled/disabled状態は維持する。
 7. Amplifyへ同commitのWebをdeployする。
 8. smoke testを実行する。定期workerは次回scheduleを待ち、実APIへの一回実行は明示承認がある場合のみ行う。
 
 ## production pipeline
 
-1. stagingで同image digestとWeb commitが成功していることを確認する。
+1. `workflow_dispatch`でstaging稼働中の`sha256` digestを指定し、workflowがstaging ECS serviceの実task definitionと一致することを確認する。
 2. GitHub `production` Environmentのmanual approvalを得る。
 3. RDSのon-demand pre-deploy snapshotを作成し、availableを確認する。
 4. production migration taskを1つだけ実行し、exit 0を確認する。
-5. API、worker task definition、Webの順にstagingで検証済みrevisionへ更新する。
+5. 同じmanifestをproduction ECRへ昇格し、API、worker task definition、Webの順にstagingで検証済みdigestへ更新する。
 6. smoke testとalarm状態を確認し、deploy recordにcommit、image digest、migration、承認者を残す。
 
 schema変更がないdeployでもmigration taskを実行して未適用migrationがないことを確認してよいが、複数runはしない。
@@ -82,7 +85,7 @@ schema変更がないdeployでもmigration taskを実行して未適用migration
 
 ## smoke test
 
-Secretや個人情報を出力せず、最低限次を確認する。
+`WEB_URL`、`API_URL`、deploy workflowだけが設定する`MIGRATION_VERIFIED=true`を渡して`scripts/smoke-staging.sh`を実行する。Secretや個人情報を出力せず、最低限次を確認する。
 
 - API `GET /health`がHTTP 200で`service=oshi-schedule-api`を返す。
 - STEP 4で追加するreadinessがDB接続成功を返し、ALB targetがhealthy。
@@ -92,6 +95,8 @@ Secretや個人情報を出力せず、最低限次を確認する。
 - ECS API taskにstartup crash、DB/TLS、env validation errorがない。
 - worker task definitionが正しいimage digest/command/環境別Secretを参照する。
 - smoke中にCalendar作成や外部event変更を行うtestは専用test userと明示承認なしに実行しない。
+
+staging workflowはRepository Variable `STAGING_DEPLOY_ENABLED=true`が設定されるまでdeploy jobをskipする。AWS未構築のrepositoryへworkflowを追加してもresource作成を開始しない。production workflowは`workflow_dispatch`、GitHub `production` Environmentのrequired reviewer、`DEPLOY_PRODUCTION`確認文字列をすべて必須とする。
 
 ## rollback
 
@@ -121,3 +126,6 @@ schemaは原則forward-fixする。expand migrationなら旧applicationへ戻し
 - [環境戦略](environment-strategy.md)
 - [監視](monitoring.md)
 - [バックアップ・復旧](backup-and-recovery.md)
+- [staging構築](staging-setup.md)
+- [AWS bootstrap](aws-bootstrap.md)
+- [GitHub Actions設定](github-actions.md)

@@ -21,7 +21,7 @@ local、test、staging、productionのデータとcredentialを混在させな�
 
 ## 分離単位
 
-- **AWS**: 初期は同一account/region/VPC/ECS cluster/ECR/ALBを共有する。ECS service/task definition、target group、security group、IAM role、RDS、log group、Scheduler、Secrets/Parametersは環境別に作成し、`application=oshi-schedule`と`environment` tagを必須にする。
+- **AWS**: 初期は同一account/regionでもenvironment別CDK stack、VPC、ECS cluster、ECR、ALB、RDS、IAM role、log group、Scheduler、Secrets/Parametersを使う。GitHub OIDC providerだけaccount内で共有する。全resourceに`Application=oshi-schedule`と`Environment` tagを付ける。
 - **Google Cloud**: stagingとproductionでproject、OAuth consent/test users、OAuth client、YouTube quotaを分ける。quota増枠申請もproduction projectに限定する。
 - **Supabase**: projectを分け、Auth user、Google provider設定、URL allowlist、keyを共有しない。productionの可用性を求めるbetaではPro planを前提とする。
 - **DB**: RDS instance、database credential、subnet/security boundaryを分ける。schemaは同じmigration列を適用するがdataは移送しない。
@@ -65,18 +65,19 @@ ECS task起動時にAWS Secrets Managerから注入し、Docker image、build ar
 | `YOUTUBE_API_KEY`           | 環境別app secret                                                          | Google projectごとに分離                      |
 | `TOKEN_ENCRYPTION_KEYS`     | 専用versioned secret                                                      | app secretと分け、offline recovery copyを持つ |
 
-Secrets Managerの例は`/oshi-schedule/{environment}/app-secrets`、`/oshi-schedule/{environment}/token-encryption-keys`とする。環境別task execution roleに該当ARNのreadだけを許可する。
+実装名は`oshi-schedule-{environment}/app/<secret-name>`、RDS managed secretは`oshi-schedule-{environment}/rds/credentials`である。`SUPABASE_SERVICE_ROLE_KEY`、`GOOGLE_CLIENT_SECRET`、`YOUTUBE_API_KEY`、`TOKEN_ENCRYPTION_KEYS`を別Secretとして事前作成し、task execution roleに該当ARNのreadだけを許可する。
 
 ### 非Secretだが環境依存
 
 | 変数                                                        | 配置                                              |
 | ----------------------------------------------------------- | ------------------------------------------------- |
-| `NODE_ENV`、`APP_MODE`、`PORT`、`WEB_ORIGIN`                | ECS task definition                               |
-| `SUPABASE_URL`、`SUPABASE_JWT_AUDIENCE`、`GOOGLE_CLIENT_ID` | SSM Parameter Store Standardまたはtask definition |
-| `ALLOWED_EMAILS`                                            | 個人情報を含むためSSM SecureString                |
+| `NODE_ENV`、`PORT`、`SUPABASE_JWT_AUDIENCE`                 | ECS task definition                               |
+| `APP_MODE`、`WEB_ORIGIN`、`TRUST_PROXY_HOPS`、log/quota     | CDKが作るSSM Parameter                            |
+| `SUPABASE_URL`、`GOOGLE_CLIENT_ID`                          | 事前作成するSSM Parameter                         |
+| `ALLOWED_EMAILS`                                            | 事前作成するSSM SecureString                      |
 | timeout、lease、OAuth retry、YouTube quota/tracking設定     | SSM Parameter Store Standard。変更review対象      |
 
-`.env.example`の`SUPABASE_PUBLISHABLE_KEY`（`NEXT_PUBLIC_`なし）は現在のAPI validation/実装から参照されていない。productionへ配布せず、STEP 4でsampleから削除するか用途を明文化する。
+parameter名は`/oshi-schedule-{environment}/runtime/<kebab-name>`である。customer managed KMS keyでSecureStringを作る場合は、ECS execution roleへそのkeyの`kms:Decrypt`を追加してからdeployする。`.env.example`の`SUPABASE_PUBLISHABLE_KEY`（`NEXT_PUBLIC_`なし）はAPIから参照されないためproductionへ配布しない。
 
 ## Secret運用
 

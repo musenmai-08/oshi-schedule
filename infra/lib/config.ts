@@ -7,6 +7,7 @@ export interface DeploymentConfig {
   account?: string;
   region: string;
   deployReady: boolean;
+  bootstrapOnly: boolean;
   hostedZoneId?: string;
   hostedZoneName?: string;
   webDomainName?: string;
@@ -53,6 +54,7 @@ export const loadConfig = (app: App): DeploymentConfig => {
     account: optionalString(app, 'awsAccount'),
     region: optionalString(app, 'awsRegion') ?? 'ap-northeast-1',
     deployReady: app.node.tryGetContext('deployReady') === true,
+    bootstrapOnly: app.node.tryGetContext('bootstrapOnly') === true,
     hostedZoneId: optionalString(app, 'hostedZoneId'),
     hostedZoneName: optionalString(app, 'hostedZoneName'),
     webDomainName: optionalString(app, 'webDomainName'),
@@ -84,8 +86,10 @@ export const loadConfig = (app: App): DeploymentConfig => {
     throw new Error('production requires -c confirmProduction=DEPLOY_PRODUCTION');
   }
   if (config.deployReady) {
+    requiredForDeploy(config, 'account');
+  }
+  if (config.deployReady && !config.bootstrapOnly) {
     for (const key of [
-      'account',
       'hostedZoneId',
       'hostedZoneName',
       'webDomainName',

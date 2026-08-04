@@ -102,8 +102,50 @@ APIの確認例:
 
 ```bash
 curl http://localhost:4000/health
+curl http://localhost:4000/ready
 curl -H 'Authorization: Bearer demo-token' http://localhost:4000/api/v1/channels
 ```
+
+`/health`はprocess livenessだけを返し、DB障害時もprocessが生きていれば応答します。`/ready`は軽量DB queryを行い、処理可能なら200、DB障害時は503を返します。外部Google/YouTube APIは呼びません。
+
+## production container
+
+API、worker、migrationはNode.js 22.23.1の同じmulti-stage imageを使います。runtimeは非rootで、`.env`を含めず、RDS CA bundleでTLSを検証します。
+
+```bash
+docker build -t oshi-schedule:local .
+
+# 外部APIを呼ばないAPI確認
+docker run --rm -p 4400:4000 \
+  -e NODE_ENV=development -e APP_MODE=fake \
+  -e ALLOWED_EMAILS=developer@example.com \
+  oshi-schedule:local
+
+# worker command
+docker run --rm \
+  -e NODE_ENV=development -e APP_MODE=fake \
+  -e ALLOWED_EMAILS=developer@example.com \
+  oshi-schedule:local node worker/dist/index.js
+
+# ECS migration taskが使用するcommand（DATABASE_URLはruntime injection）
+api/node_modules/.bin/prisma migrate deploy \
+  --schema=/opt/oshi-schedule/prisma/schema.prisma
+```
+
+SIGTERM受信時、APIは新規受付停止、処理中request待機、Prisma disconnectの順で終了します。`SHUTDOWN_TIMEOUT_SECONDS`の既定は30秒です。ECS stop timeoutは45秒です。
+
+## AWS staging準備
+
+`infra/`はTypeScript AWS CDKです。通常の`synth`は課金やAWS変更を行わず、domain未設定でも検査できます。
+
+```bash
+pnpm --filter @oshi-schedule/infra typecheck
+pnpm --filter @oshi-schedule/infra test
+pnpm --filter @oshi-schedule/infra synth
+pnpm validate:yaml -- docs/api/openapi.yaml amplify.yml .github/workflows/*.yml
+```
+
+実`cdk deploy`はこのREADMEから直接開始せず、[staging構築チェックリスト](docs/operations/staging-setup.md)と[AWS bootstrap](docs/operations/aws-bootstrap.md)に従ってください。RDS、ALB、public IPv4はstagingでも主要固定費です。AWS resourceはまだ作成されていません。
 
 ## 構成
 
@@ -117,9 +159,12 @@ packages/typescript-config  共通TypeScript設定
 prisma          schema、完全な初期migration、seed
 docs            日本語の要件・設計書
 e2e             Playwrightシナリオ
+infra           AWS CDK stack、environment validation、assertion test
+scripts         YAML検証、ECS revision更新、staging smoke test
+.github/workflows  CI、gated staging deploy、manual production deploy
 ```
 
-設計の入口は [プロダクト要件](docs/requirements/product-requirements.md)、[システム概要](docs/architecture/system-overview.md)、[同期設計](docs/architecture/synchronization.md)、[API仕様](docs/api/api-specification.md)、[セキュリティ方針](docs/security/security-policy.md) です。
+設計の入口は [プロダクト要件](docs/requirements/product-requirements.md)、[システム概要](docs/architecture/system-overview.md)、[同期設計](docs/architecture/synchronization.md)、[API仕様](docs/api/api-specification.md)、[セキュリティ方針](docs/security/security-policy.md) です。AWS運用は[デプロイ構成](docs/architecture/deployment-architecture.md)、[staging構築](docs/operations/staging-setup.md)、[GitHub Actions](docs/operations/github-actions.md)を参照してください。
 
 ## 本番前の注意
 

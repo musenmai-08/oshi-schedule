@@ -23,7 +23,7 @@
 
 | 対象          | metric / 判定                                           | 初期alarm                                      | 通知・対応                                   |
 | ------------- | ------------------------------------------------------- | ---------------------------------------------- | -------------------------------------------- |
-| API 5xx       | ALB `HTTPCode_Target_5XX_Count`                         | 5分で5件以上、またはtrafficがある時5xx率5%以上 | SNS email、logをrequest IDで追跡             |
+| API 5xx       | ALB `HTTPCode_ELB_5XX_Count`                            | 5分で5件以上                                  | SNS email、logをrequest IDで追跡             |
 | API latency   | ALB target response p95                                 | 15分で5秒超                                    | manual syncとDB/external latencyを分離       |
 | target health | unhealthy target count                                  | 2 datapoints連続で1以上                        | deployment停止/rollback                      |
 | ECS resource  | CPU/Memory utilization                                  | 15分で70%超                                    | task size/index/処理を調査                   |
@@ -38,11 +38,11 @@
 | backup        | RDS backup event、retention設定監査                     | backup失敗または24時間成功なし                 | snapshot/PITR状態を確認                      |
 | cost          | AWS Budget actual/forecast                              | 月予算の50/80/100/120%                         | 80%で原因確認、100%で非必須staging停止を判断 |
 
-`SyncTargetResult`、再認証数、quota残量、worker heartbeatは現行DB/logから読めるがCloudWatch custom metric送信は未実装でありSTEP 4対象とする。高cardinalityのuser/channel IDをmetric dimensionに使わない。
+CDKはAPI CPU、ALB 5xx、RDS free storage、worker exit非0の4 alarmとSNS、月額forecast 80%のBudget通知を作成する。`SyncTargetResult`、再認証数、quota残量、worker heartbeat、target latency/healthの追加alarmは現行DB/logから読めるがcustom metric送信は未実装であり、staging baseline取得後の追加課題とする。高cardinalityのuser/channel IDをmetric dimensionに使わない。
 
 ## worker監視
 
-EventBridge SchedulerのretryはECS taskを起動できなかった場合に限定し、maximum event ageと少数retry、SQS DLQを設定する。taskが起動後exit 1になった場合はSchedulerのtarget成功とは別なので、ECS Task State Change eventの`stoppedReason`とcontainer exit codeをEventBridge ruleで捕捉する。
+EventBridge Schedulerはflexible window off、maximum event age 1時間、retry 2回、SQS DLQで定義する。taskが起動後exit 1になった場合はSchedulerのtarget成功とは別なので、ECS Task State Change eventのcontainer exit code非0をEventBridge ruleで捕捉してSNSへ送る。初回deploy時はscheduleをdisabledとし、Secret、quota、手動worker確認後に有効化する。
 
 DB lease/fencingにより重複taskが同じsubscriptionを同時確定することは防げるが、重複起動を通常運用にしない。Schedulerのflexible time windowはoff、1時間ごと、task executionの期待上限は45分とする。45分超過はalarmと停止automationの対象にし、次回scheduleとの重なりを調査する。
 
