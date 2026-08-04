@@ -68,7 +68,7 @@ components:
       type: object
       required: [confirmation]
       properties: { confirmation: { type: string, const: DELETE } }
-    SyncAccepted:
+    SyncResult:
       type: object
       required: [status, broadcasts, snapshotVersion, phases]
       properties:
@@ -85,7 +85,7 @@ components:
         nextRetryAt: { type: string, format: date-time }
   responses:
     BadRequest:
-      description: validation error
+      description: validation error, missing body, or malformed JSON
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
     Unauthorized:
       description: unauthorized
@@ -95,6 +95,18 @@ components:
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
     Gone:
       description: account deletion is pending or complete
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    NotFound:
+      description: resource or API route not found
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    PayloadTooLarge:
+      description: request body exceeds 32 KiB
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    TooManyRequests:
+      description: rate limit, cooldown, or application quota limit
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    InternalError:
+      description: unexpected internal error without implementation details
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
 security: [{ bearerAuth: [] }]
 paths:
@@ -130,6 +142,7 @@ paths:
       responses:
         '200': { description: configured }
         '400': { $ref: '#/components/responses/BadRequest' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '410': { $ref: '#/components/responses/Gone' }
   /api/v1/channels:
@@ -153,6 +166,7 @@ paths:
                   data: { $ref: '#/components/schemas/ChannelRegistrationResult' }
                   requestId: { type: string }
         '400': { $ref: '#/components/responses/BadRequest' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '409': { description: duplicate or channel not resolved }
         '422': { description: three-channel limit }
   /api/v1/channels/resolve:
@@ -163,6 +177,7 @@ paths:
       responses:
         '200': { description: resolved channel }
         '400': { $ref: '#/components/responses/BadRequest' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '404': { description: not found }
         '429': { description: YouTube acquisition deferred until the next quota window }
   /api/v1/channels/{subscriptionId}:
@@ -175,6 +190,7 @@ paths:
       responses:
         '200': { description: updated }
         '400': { $ref: '#/components/responses/BadRequest' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '404': { description: not found or not owned }
     delete:
       responses:
@@ -185,7 +201,7 @@ paths:
     parameters: [{ $ref: '#/components/parameters/SubscriptionId' }]
     post:
       responses:
-        '202':
+        '200':
           description: Calendar sync completed; YouTube acquisition may be deferred
           content:
             application/json:
@@ -193,7 +209,7 @@ paths:
                 type: object
                 required: [data, requestId]
                 properties:
-                  data: { $ref: '#/components/schemas/SyncAccepted' }
+                  data: { $ref: '#/components/schemas/SyncResult' }
                   requestId: { type: string }
         '400': { $ref: '#/components/responses/BadRequest' }
         '404': { description: not found or not owned }
@@ -209,6 +225,7 @@ paths:
       responses:
         '200': { description: reconnected }
         '400': { $ref: '#/components/responses/BadRequest' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '410': { $ref: '#/components/responses/Gone' }
   /api/v1/account:
     delete:
@@ -219,5 +236,6 @@ paths:
       responses:
         '204': { description: deletion completed or already complete }
         '400': { $ref: '#/components/responses/BadRequest' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '409': { description: deletion for this subject is already running }
         '502': { description: external deletion step failed; request can be retried }

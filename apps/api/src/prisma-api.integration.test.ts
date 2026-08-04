@@ -95,7 +95,7 @@ describe.runIf(Boolean(databaseUrl))('API with Prisma/MySQL IDs and constraints'
         .status,
     ).toBe(200);
     expect((await request(app).post(`/api/v1/channels/${id}/sync`).set(ownerAuth)).status).toBe(
-      202,
+      200,
     );
     expect(
       (await request(app).patch(`/api/v1/channels/${id}`).set(otherAuth).send({ status: 'PAUSED' }))

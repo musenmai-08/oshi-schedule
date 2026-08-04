@@ -4,7 +4,8 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import type { Container } from './container.js';
 import type { Env } from './infrastructure/env.js';
-import { authenticate, errorHandler, requestContext } from './presentation/http.js';
+import { apiNotFound, authenticate, errorHandler, requestContext } from './presentation/http.js';
+import { AppError } from './domain/errors.js';
 import { createApiRouter } from './presentation/routes.js';
 
 export function createApp(env: Env, container: Container): Express {
@@ -33,10 +34,19 @@ export function createApp(env: Env, container: Container): Express {
       limit: env.NODE_ENV === 'test' ? 10_000 : 100,
       standardHeaders: true,
       legacyHeaders: false,
+      handler: (_request, _response, next) =>
+        next(
+          new AppError(
+            'RATE_LIMITED',
+            'リクエストが多すぎます。時間を置いて再試行してください',
+            429,
+          ),
+        ),
     }),
     authenticate(container),
     createApiRouter(container),
   );
+  app.use(apiNotFound);
   app.use(errorHandler);
   return app;
 }

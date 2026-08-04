@@ -121,7 +121,7 @@ export function createApiRouter(container: Container): ExpressRouter {
         user.id,
         parse(entityIdSchema, request.params.subscriptionId),
       );
-      success(response, result, 202);
+      success(response, result);
     }),
   );
   router.get(
