@@ -1,0 +1,59 @@
+apps/api/src/infrastructure/env.test.ts
+  s_3a50bad78ea1cd::t_700399ad4c180e 47-49
+  s_3a50bad78ea1cd::t_c25123028d7dbd 111-138
+apps/web/src/components/account-settings.tsx
+  s_3a50bad78ea1cd::t_e70ef6e0f17249 30,50,64
+apps/api/package.json
+  s_3a50bad78ea1cd::t_e70ef6e0f17249 38
+apps/web/src/lib/supabase/client.ts
+  s_3a50bad78ea1cd::t_e70ef6e0f17249 3-8
+package.json
+  s_3a50bad78ea1cd::t_e70ef6e0f17249 7
+apps/web/src/lib/env.ts
+  s_3a50bad78ea1cd::t_e70ef6e0f17249 1-70
+apps/web/src/components/login-button.tsx
+  s_3a50bad78ea1cd::t_e70ef6e0f17249 6,11
+apps/web/src/middleware.ts
+  s_3a50bad78ea1cd::t_700399ad4c180e 22,27-33,36,40
+  s_3a50bad78ea1cd::t_e70ef6e0f17249 4,18,25
+apps/worker/package.json
+  s_3a50bad78ea1cd::t_e70ef6e0f17249 20
+apps/web/src/components/app-shell.tsx
+  s_3a50bad78ea1cd::t_e70ef6e0f17249 23,36
+apps/web/src/components/dashboard.tsx
+  s_3a50bad78ea1cd::t_e70ef6e0f17249 43,123
+apps/web/src/lib/supabase/server.ts
+  s_3a50bad78ea1cd::t_e70ef6e0f17249 3,7
+  s_3a50bad78ea1cd::t_700399ad4c180e 8-16,19
+apps/web/src/lib/env.test.ts
+  s_3a50bad78ea1cd::t_e70ef6e0f17249 1-14,21-50
+  s_3a50bad78ea1cd::t_700399ad4c180e 15-20
+apps/web/src/app/auth/callback/route.ts
+  s_3a50bad78ea1cd::t_e70ef6e0f17249 4
+  s_3a50bad78ea1cd::t_700399ad4c180e 10,16-20,22-26
+apps/web/src/lib/api.ts
+  s_3a50bad78ea1cd::t_e70ef6e0f17249 9,22,29
+apps/web/package.json
+  s_3a50bad78ea1cd::t_e70ef6e0f17249 31
+README.md
+  s_3a50bad78ea1cd::t_e70ef6e0f17249 62,77,128
+  s_3a50bad78ea1cd::t_0f995a251d7c1b 129
+pnpm-lock.yaml
+  s_3a50bad78ea1cd::t_c2ad63af919f4b 91-92,110,161-162,177,192-193,205,3503,3512,3518,3526,3569,3574,3580
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "31e6eae03155e6ec677ad9749defdbe05522dfae",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
