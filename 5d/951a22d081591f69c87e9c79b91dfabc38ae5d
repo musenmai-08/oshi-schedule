@@ -1,0 +1,30 @@
+docs/security/security-policy.md
+  s_3a50bad78ea1cd::t_020de871a8273b 6,8,11-14,25-32,35
+apps/api/src/app.test.ts
+  s_3a50bad78ea1cd::t_020de871a8273b 88-90
+apps/api/src/app.ts
+  s_3a50bad78ea1cd::t_020de871a8273b 15-22
+apps/web/next.config.ts
+  s_3a50bad78ea1cd::t_020de871a8273b 2-19
+apps/web/src/lib/security-headers.test.ts
+  s_3a50bad78ea1cd::t_1994e4c0e03dbb 30
+  s_3a50bad78ea1cd::t_020de871a8273b 1-29,31-35
+apps/web/src/lib/security-headers.ts
+  s_3a50bad78ea1cd::t_020de871a8273b 1-48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "5d951a22d081591f69c87e9c79b91dfabc38ae5d",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
