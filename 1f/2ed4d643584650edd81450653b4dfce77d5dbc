@@ -1,0 +1,45 @@
+infra/tsconfig.json
+  s_3a50bad78ea1cd::t_f2666cb9a093b7 6-7
+  s_3a50bad78ea1cd::t_dc9412f3a8044f 1-5,8-10
+infra/lib/config.ts
+  s_3a50bad78ea1cd::t_af9544d0a6c6e2 16-17,62-63,95-96
+  s_3a50bad78ea1cd::t_dc9412f3a8044f 1-15,18-61,64-94,97-109
+infra/test/oshi-schedule-stack.test.ts
+  s_3a50bad78ea1cd::t_f115cee849f8f7 1-147,149-153
+  s_3a50bad78ea1cd::t_9bd98711458693 148
+pnpm-workspace.yaml
+  s_3a50bad78ea1cd::t_dc9412f3a8044f 3
+infra/test/config.test.ts
+  s_3a50bad78ea1cd::t_1aa5c10cfa969e 1-22
+infra/cdk.json
+  s_3a50bad78ea1cd::t_dc9412f3a8044f 1-19
+.gitignore
+  s_3a50bad78ea1cd::t_1aa5c10cfa969e 13
+infra/bin/infra.ts
+  s_3a50bad78ea1cd::t_dc9412f3a8044f 1-13
+infra/package.json
+  s_3a50bad78ea1cd::t_dc9412f3a8044f 1-24
+infra/lib/oshi-schedule-stack.ts
+  s_3a50bad78ea1cd::t_1aa5c10cfa969e 494-508,512,522-527,604-619
+  s_3a50bad78ea1cd::t_af9544d0a6c6e2 1-173,175-176,178,180-181,183,185-186,188-441,443-493,509-511,513-521,528-603,620-639
+  s_3a50bad78ea1cd::t_9bd98711458693 442
+  s_3a50bad78ea1cd::t_2ab5a25b54fb39 174,177,179,182,184,187
+pnpm-lock.yaml
+  s_3a50bad78ea1cd::t_997a06a32db346 210-234,264,270-282,1369-1371,1468-1470,1474-1484,1496-1498,1502-1504,1508-1510,1514-1516,1520-1522,1564-1587,1694-1696,2731-2758,2817-2822,3637,3646,3660,3681-3684,3707,3712,3718,3868-3875,3884-3891,3900-3911,3916-3921,3928-3933,3940-3943,3948-3953,3992-4000,4114-4115,5249-5269,5284-5338,5380-5420
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "1f2ed4d643584650edd81450653b4dfce77d5dbc",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
