@@ -1,0 +1,37 @@
+apps/api/src/prisma-api.integration.test.ts
+  s_3a50bad78ea1cd::t_ac2283e81103d3 98
+apps/api/src/presentation/http.ts
+  s_3a50bad78ea1cd::t_50c453b4563eba 57-60,83
+  s_3a50bad78ea1cd::t_ac2283e81103d3 50-56,61-67,75-82,84
+apps/api/src/app.test.ts
+  s_3a50bad78ea1cd::t_fe09def4d47660 208-211
+  s_3a50bad78ea1cd::t_ac2283e81103d3 2,10,81-83,121,148,207,251-334
+  s_3a50bad78ea1cd::t_50c453b4563eba 57,215-218
+docs/api/openapi.yaml
+  s_3a50bad78ea1cd::t_ac2283e81103d3 71,99-104,204,212
+  s_3a50bad78ea1cd::t_fe09def4d47660 88,105-110,145,169,180,193,228,239
+apps/api/src/app.ts
+  s_3a50bad78ea1cd::t_50c453b4563eba 38-44
+  s_3a50bad78ea1cd::t_ac2283e81103d3 7-8,37,49
+docs/api/api-specification.md
+  s_3a50bad78ea1cd::t_ac2283e81103d3 17,26-28
+  s_3a50bad78ea1cd::t_50c453b4563eba 7-16,18-20
+apps/api/src/presentation/routes.ts
+  s_3a50bad78ea1cd::t_ac2283e81103d3 124
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "52e146e8adbf6e31a57fce22acfb5a02f673b904",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
