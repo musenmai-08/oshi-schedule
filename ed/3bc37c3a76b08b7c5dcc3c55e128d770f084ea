@@ -1,0 +1,52 @@
+apps/api/src/container.ts
+  s_3a50bad78ea1cd::t_9e844875500740 34-38,48,54-64,134-140
+docs/api/api-specification.md
+  s_3a50bad78ea1cd::t_90b8827d00e401 10,25
+  s_3a50bad78ea1cd::t_0625c01973384f 26
+apps/api/src/shutdown.ts
+  s_3a50bad78ea1cd::t_9e844875500740 1-69
+apps/api/src/infrastructure/env.ts
+  s_3a50bad78ea1cd::t_9e844875500740 30-31
+apps/worker/src/scheduled-worker.ts
+  s_3a50bad78ea1cd::t_9e844875500740 12-25
+docs/api/openapi.yaml
+  s_3a50bad78ea1cd::t_90b8827d00e401 130-159
+docs/security/security-policy.md
+  s_3a50bad78ea1cd::t_90b8827d00e401 6,13
+apps/api/src/infrastructure/env.test.ts
+  s_3a50bad78ea1cd::t_da70e608cbf602 95-111
+apps/api/src/app.ts
+  s_3a50bad78ea1cd::t_9e844875500740 10,15,39-53
+.env.example
+  s_3a50bad78ea1cd::t_9e844875500740 5-6
+apps/api/src/runtime.ts
+  s_3a50bad78ea1cd::t_9e844875500740 7-12
+apps/worker/src/scheduled-worker.test.ts
+  s_3a50bad78ea1cd::t_da70e608cbf602 1,4,61-90
+apps/worker/src/index.ts
+  s_3a50bad78ea1cd::t_9e844875500740 2,5-16,18
+apps/api/src/shutdown.test.ts
+  s_3a50bad78ea1cd::t_da70e608cbf602 1-116
+apps/api/src/app.test.ts
+  s_3a50bad78ea1cd::t_da70e608cbf602 93-135
+apps/api/src/infrastructure/database/prisma-store.ts
+  s_3a50bad78ea1cd::t_9e844875500740 76-81
+apps/api/src/server.ts
+  s_3a50bad78ea1cd::t_9e844875500740 5,8-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "ed3bc37c3a76b08b7c5dcc3c55e128d770f084ea",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
