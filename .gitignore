@@ -10,4 +10,5 @@ test-results
 *.log
 *.tsbuildinfo
 .turbo
+cdk.out
 prisma/dev.db

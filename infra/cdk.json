@@ -1,0 +1,19 @@
+{
+  "app": "pnpm exec tsx bin/infra.ts",
+  "context": {
+    "environment": "staging",
+    "awsRegion": "ap-northeast-1",
+    "monthlyBudgetUsd": 75,
+    "apiCpu": 256,
+    "apiMemoryMiB": 512,
+    "workerCpu": 256,
+    "workerMemoryMiB": 512,
+    "rdsInstanceType": "t4g.micro",
+    "rdsAllocatedStorageGiB": 20,
+    "rdsBackupRetentionDays": 1,
+    "rdsMultiAz": false,
+    "rdsDeletionProtection": true,
+    "workerScheduleEnabled": false,
+    "imageTag": "bootstrap-required"
+  }
+}
