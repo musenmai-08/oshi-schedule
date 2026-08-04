@@ -1,0 +1,15 @@
+.git
+.github
+.env*
+.pnpm-store
+.turbo
+**/.next
+**/dist
+**/node_modules
+**/coverage
+**/test-results
+**/playwright-report
+docs
+e2e
+infra
+*.log
