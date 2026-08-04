@@ -135,9 +135,7 @@ test('未認証で利用規約とプライバシーポリシーを表示でき�
 
   await page.getByRole('link', { name: 'プライバシー' }).click();
   await expect(page).toHaveURL(/\/privacy$/);
-  await expect(
-    page.getByRole('heading', { level: 1, name: 'プライバシーポリシー' }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'プライバシーポリシー' })).toBeVisible();
   await expect(
     page.getByRole('heading', { level: 2, name: /Google API Services User Data Policy/ }),
   ).toBeVisible();
@@ -151,4 +149,73 @@ test('Settingsから認証状態を維持してダッシュボードへ戻れる
   await page.getByRole('link', { name: 'ダッシュボードに戻る' }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByRole('heading', { name: 'おかえりなさい' })).toBeVisible();
+});
+
+test('callbackの固定エラーだけを表示してqueryをURLから除去する', async ({ page }) => {
+  await login(page);
+
+  await page.goto('/dashboard?setup=failed');
+  await expect(
+    page.getByRole('alert').filter({ hasText: 'Google Calendarの初回設定に失敗しました' }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Googleを再連携' })).toBeVisible();
+  await expect(page).toHaveURL(/\/dashboard$/);
+
+  await page.goto('/dashboard?setup=reauth');
+  await expect(
+    page.getByRole('alert').filter({ hasText: 'Googleの再同意が必要です' }),
+  ).toBeVisible();
+  await expect(page).toHaveURL(/\/dashboard$/);
+
+  await page.goto('/dashboard?setup=%3Cimg%20src%3Dx%20onerror%3Dalert(1)%3E');
+  await expect(page.getByText('<img src=x onerror=alert(1)>')).not.toBeVisible();
+  await expect(page).toHaveURL(/\/dashboard$/);
+});
+
+test('APIの再認証状態をダッシュボードに表示する', async ({ page }) => {
+  await page.route('**/api/v1/me', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          id: 'anonymous-e2e-user',
+          email: 'masked@example.com',
+          onboardingCompleted: true,
+          reauthRequired: true,
+          calendarStatus: 'ACTIVE',
+        },
+        requestId: 'e2e-request',
+      }),
+    });
+  });
+  await login(page);
+  await expect(
+    page.getByRole('alert').filter({ hasText: 'Googleの再連携が必要です' }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Googleを再連携' })).toBeVisible();
+});
+
+test('Settingsの読み込み中・失敗・正常な接続状態を区別する', async ({ page }) => {
+  let releaseResponse: (() => void) | undefined;
+  const responseGate = new Promise<void>((resolve) => {
+    releaseResponse = resolve;
+  });
+  await page.route('**/api/v1/me', async (route) => {
+    await responseGate;
+    await route.fulfill({ status: 503, contentType: 'application/json', body: '{}' });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Googleでログイン' }).click();
+  await page.goto('/settings');
+  await expect(page.getByText('確認中', { exact: true })).toBeVisible();
+  await expect(page.getByText('接続済み', { exact: true })).not.toBeVisible();
+  releaseResponse?.();
+  await expect(page.getByText('取得失敗', { exact: true })).toBeVisible();
+  await expect(page.getByRole('alert').filter({ hasText: '通信状態を確認して' })).toBeVisible();
+
+  await page.unroute('**/api/v1/me');
+  await page.reload();
+  await expect(page.getByText('接続済み', { exact: true })).toBeVisible();
+  await expect(page.getByText('推しスケジュール（有効）')).toBeVisible();
 });

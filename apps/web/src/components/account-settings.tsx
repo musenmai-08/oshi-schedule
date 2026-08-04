@@ -23,36 +23,38 @@ import type { MeView } from '@oshi-schedule/shared';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { apiClient } from '@/lib/api';
+import { settingsConnectionView, type GoogleConnectionState } from '@/lib/google-connection';
+import { startGoogleOAuth } from '@/lib/google-oauth';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { APP_ROUTES } from '@/lib/routes';
 
 export function AccountSettings() {
-  const [me, setMe] = useState<MeView | null>(null);
+  const [connection, setConnection] = useState<GoogleConnectionState>({ status: 'loading' });
   const [error, setError] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState('');
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const loadConnection = async () => {
+    setConnection({ status: 'loading' });
+    try {
+      setConnection({ status: 'ready', me: await apiClient.me() });
+    } catch {
+      setConnection({ status: 'error' });
+    }
+  };
   useEffect(() => {
-    apiClient
-      .me()
-      .then(setMe)
-      .catch((caught: unknown) =>
-        setError(caught instanceof Error ? caught.message : '設定を取得できません'),
-      );
+    void loadConnection();
   }, []);
   const reconnect = async () => {
     if (process.env.NEXT_PUBLIC_DEMO_MODE === 'true') {
       setError('デモモードではGoogle再連携を実行しません');
       return;
     }
-    await createSupabaseBrowserClient().auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-        scopes: 'https://www.googleapis.com/auth/calendar',
-        queryParams: { access_type: 'offline', prompt: 'consent', include_granted_scopes: 'true' },
-      },
-    });
+    try {
+      await startGoogleOAuth(createSupabaseBrowserClient(), window.location.origin);
+    } catch {
+      setError('Google再連携を開始できませんでした。もう一度お試しください。');
+    }
   };
   const deleteAccount = async () => {
     setBusy(true);
@@ -67,6 +69,8 @@ export function AccountSettings() {
       setOpen(false);
     }
   };
+  const me: MeView | null = connection.status === 'ready' ? connection.me : null;
+  const connectionView = settingsConnectionView(connection);
   return (
     <Stack spacing={4} maxWidth={760}>
       <Button
@@ -90,15 +94,31 @@ export function AccountSettings() {
           {error}
         </Alert>
       )}
+      {connectionView.notice && (
+        <Alert
+          severity={connectionView.notice.severity}
+          role={connectionView.notice.severity === 'info' ? 'status' : 'alert'}
+          action={
+            connectionView.notice.action === 'retry' ? (
+              <Button color="inherit" size="small" onClick={() => void loadConnection()}>
+                再読み込み
+              </Button>
+            ) : connectionView.notice.action === 'reconnect' ? (
+              <Button color="inherit" size="small" onClick={() => void reconnect()}>
+                Googleを再連携
+              </Button>
+            ) : undefined
+          }
+        >
+          {connectionView.notice.message}
+        </Alert>
+      )}
       <Card>
         <CardContent>
           <Stack spacing={2.5}>
             <Stack direction="row" justifyContent="space-between" alignItems="center">
               <Typography variant="h6">Google連携</Typography>
-              <Chip
-                color={me?.reauthRequired ? 'warning' : 'success'}
-                label={me?.reauthRequired ? '再連携が必要' : '接続済み'}
-              />
+              <Chip color={connectionView.chipColor} label={connectionView.chipLabel} />
             </Stack>
             <Divider />
             <Box>
@@ -111,9 +131,7 @@ export function AccountSettings() {
               <Typography variant="caption" color="text.secondary">
                 専用カレンダー
               </Typography>
-              <Typography>
-                {me?.calendarStatus === 'ACTIVE' ? '推しスケジュール（有効）' : '未設定'}
-              </Typography>
+              <Typography>{connectionView.calendarLabel}</Typography>
             </Box>
             <Button
               variant="outlined"

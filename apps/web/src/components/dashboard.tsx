@@ -7,6 +7,7 @@ import SyncRoundedIcon from '@mui/icons-material/SyncRounded';
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import {
   Alert,
+  AlertTitle,
   Avatar,
   Box,
   Button,
@@ -29,7 +30,16 @@ import {
 import type { ChannelSummary, SubscriptionView } from '@oshi-schedule/shared';
 import { MAX_CHANNELS_PER_USER, channelHandleSchema } from '@oshi-schedule/shared';
 import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { ApiClientError, apiClient } from '@/lib/api';
+import {
+  dashboardConnectionNotice,
+  type GoogleConnectionState,
+  type SetupRecovery,
+} from '@/lib/google-connection';
+import { startGoogleOAuth } from '@/lib/google-oauth';
+import { APP_ROUTES } from '@/lib/routes';
+import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 
 const formatDate = (value: string | null) =>
   value
@@ -62,9 +72,18 @@ const channelDialogErrorMessage = (caught: unknown, action: 'resolve' | 'registe
     : 'チャンネルを登録できませんでした。もう一度お試しください。';
 };
 
-export function Dashboard() {
+export function Dashboard({
+  initialSetup = null,
+  clearSetupQuery = false,
+}: {
+  initialSetup?: SetupRecovery;
+  clearSetupQuery?: boolean;
+}) {
+  const router = useRouter();
   const [channels, setChannels] = useState<SubscriptionView[]>([]);
   const [loading, setLoading] = useState(true);
+  const [connection, setConnection] = useState<GoogleConnectionState>({ status: 'loading' });
+  const [setup] = useState<SetupRecovery>(initialSetup);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [handle, setHandle] = useState('');
   const [preview, setPreview] = useState<ChannelSummary | null>(null);
@@ -72,6 +91,15 @@ export function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  const loadConnection = useCallback(async () => {
+    setConnection({ status: 'loading' });
+    try {
+      setConnection({ status: 'ready', me: await apiClient.me() });
+    } catch {
+      setConnection({ status: 'error' });
+    }
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -84,7 +112,24 @@ export function Dashboard() {
   }, []);
   useEffect(() => {
     void load();
-  }, [load]);
+    void loadConnection();
+  }, [load, loadConnection]);
+  useEffect(() => {
+    if (clearSetupQuery) router.replace(APP_ROUTES.dashboard, { scroll: false });
+  }, [clearSetupQuery, router]);
+
+  const reconnect = async () => {
+    if (process.env.NEXT_PUBLIC_DEMO_MODE === 'true') {
+      setError('デモモードではGoogle再連携を実行しません');
+      return;
+    }
+    try {
+      await startGoogleOAuth(createSupabaseBrowserClient(), window.location.origin);
+    } catch {
+      setError('Google再連携を開始できませんでした。もう一度お試しください。');
+    }
+  };
+  const connectionNotice = dashboardConnectionNotice(connection, setup);
   const act = async (key: string, action: () => Promise<unknown>, message: string) => {
     setBusy(key);
     setError(null);
@@ -177,6 +222,28 @@ export function Dashboard() {
           チャンネルを追加
         </Button>
       </Stack>
+      {connectionNotice && (
+        <Alert
+          severity={connectionNotice.severity}
+          role={connectionNotice.severity === 'info' ? 'status' : 'alert'}
+          action={
+            connectionNotice.action ? (
+              <Button
+                color="inherit"
+                size="small"
+                onClick={() =>
+                  connectionNotice.action === 'retry' ? void loadConnection() : void reconnect()
+                }
+              >
+                {connectionNotice.action === 'retry' ? '再読み込み' : 'Googleを再連携'}
+              </Button>
+            ) : undefined
+          }
+        >
+          <AlertTitle>{connectionNotice.title}</AlertTitle>
+          {connectionNotice.message}
+        </Alert>
+      )}
       {error && (
         <Alert severity="error" onClose={() => setError(null)}>
           {error}
@@ -365,22 +432,12 @@ export function Dashboard() {
       >
         表示を更新
       </Button>
-      <Dialog
-        open={dialogOpen}
-        onClose={() => !busy && closeDialog()}
-        fullWidth
-        maxWidth="sm"
-      >
+      <Dialog open={dialogOpen} onClose={() => !busy && closeDialog()} fullWidth maxWidth="sm">
         <DialogTitle>チャンネルを追加</DialogTitle>
         <DialogContent>
           <Stack spacing={3} pt={1}>
             {dialogError && (
-              <Alert
-                id="channel-dialog-error"
-                severity="error"
-                role="alert"
-                aria-live="assertive"
-              >
+              <Alert id="channel-dialog-error" severity="error" role="alert" aria-live="assertive">
                 {dialogError}
               </Alert>
             )}

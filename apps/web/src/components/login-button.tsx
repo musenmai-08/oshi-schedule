@@ -2,6 +2,7 @@
 import GoogleIcon from '@mui/icons-material/Google';
 import { Button } from '@mui/material';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { startGoogleOAuth } from '@/lib/google-oauth';
 import { APP_ROUTES, DEMO_AUTH_COOKIE } from '@/lib/routes';
 
 export function LoginButton() {
@@ -11,15 +12,7 @@ export function LoginButton() {
       window.location.href = APP_ROUTES.dashboard;
       return;
     }
-    const callback = `${window.location.origin}${APP_ROUTES.authCallback}`;
-    await createSupabaseBrowserClient().auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: callback,
-        scopes: 'https://www.googleapis.com/auth/calendar',
-        queryParams: { access_type: 'offline', prompt: 'consent', include_granted_scopes: 'true' },
-      },
-    });
+    await startGoogleOAuth(createSupabaseBrowserClient(), window.location.origin);
   };
   return (
     <Button
