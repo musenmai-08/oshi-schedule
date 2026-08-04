@@ -1,0 +1,54 @@
+infra/test/oshi-schedule-stack.test.ts
+  s_3a50bad78ea1cd::t_dc6ec99bc4754a 39-52
+  s_3a50bad78ea1cd::t_113929cedef811 12
+docs/operations/deployment.md
+  s_3a50bad78ea1cd::t_581d31b7559c1a 11,16-20,57,59,65,88,99-100,129-131
+  s_3a50bad78ea1cd::t_6b956765a5b5f6 35,69
+docs/operations/github-actions.md
+  s_3a50bad78ea1cd::t_6e3a49884f66cf 1-61
+docs/architecture/deployment-architecture.md
+  s_3a50bad78ea1cd::t_e37c1abb6c0b7d 9,22,49,59,61,70,88,113,115-119
+docs/operations/staging-setup.md
+  s_3a50bad78ea1cd::t_6e3a49884f66cf 1-44
+README.md
+  s_3a50bad78ea1cd::t_6b956765a5b5f6 105,109-149,162-164,167
+docs/operations/backup-and-recovery.md
+  s_3a50bad78ea1cd::t_581d31b7559c1a 15,19-21
+docs/operations/aws-bootstrap.md
+  s_3a50bad78ea1cd::t_6e3a49884f66cf 1-49,51-110
+  s_3a50bad78ea1cd::t_5ec6ae16b2ba4b 50
+infra/lib/oshi-schedule-stack.ts
+  s_3a50bad78ea1cd::t_5ec6ae16b2ba4b 14,269-272,369-372,388-391,447-450,464-476,520,634-639,654-660
+  s_3a50bad78ea1cd::t_36ce23d708dc52 9,55-59
+  s_3a50bad78ea1cd::t_506ba5bce8460b 27,312-322
+  s_3a50bad78ea1cd::t_113929cedef811 79-82
+infra/test/config.test.ts
+  s_3a50bad78ea1cd::t_113929cedef811 10
+docs/operations/environment-strategy.md
+  s_3a50bad78ea1cd::t_e37c1abb6c0b7d 24,68,74-77,80
+infra/lib/config.ts
+  s_3a50bad78ea1cd::t_113929cedef811 10,57,89-91
+docs/operations/monitoring.md
+  s_3a50bad78ea1cd::t_581d31b7559c1a 26,41,45
+infra/cdk.json
+  s_3a50bad78ea1cd::t_113929cedef811 5
+docs/operations/cost-estimate.md
+  s_3a50bad78ea1cd::t_6b956765a5b5f6 86-89
+  s_3a50bad78ea1cd::t_581d31b7559c1a 37,39,69-70,73,76-78,100
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "0328213f00d7444e5e18d06605bb9cded75f1049",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
