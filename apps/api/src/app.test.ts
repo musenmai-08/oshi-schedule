@@ -85,6 +85,9 @@ describe('API', () => {
     const health = await request(app).get('/health');
     expect(health.status).toBe(200);
     expect(health.body.data).toEqual({ status: 'ok', service: 'oshi-schedule-api' });
+    expect(health.headers['x-content-type-options']).toBe('nosniff');
+    expect(health.headers).not.toHaveProperty('content-security-policy');
+    expect(health.headers).not.toHaveProperty('strict-transport-security');
     expect((await request(app).get('/api/v1/me')).status).toBe(401);
   });
   it('rejects a non invited email', async () => {

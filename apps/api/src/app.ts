@@ -12,7 +12,14 @@ export function createApp(env: Env, container: Container): Express {
   const app = express();
   app.disable('x-powered-by');
   app.use(requestContext);
-  app.use(helmet({ contentSecurityPolicy: false }));
+  app.use(
+    helmet({
+      // This service returns JSON, so a document CSP is intentionally owned by the Web app.
+      contentSecurityPolicy: false,
+      // TLS terminates at the deployment edge. Do not advertise HSTS from local HTTP.
+      strictTransportSecurity: false,
+    }),
+  );
   app.use(
     cors({
       origin: env.WEB_ORIGIN,
