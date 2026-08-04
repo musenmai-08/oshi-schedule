@@ -16,6 +16,8 @@
     "typecheck": "turbo typecheck",
     "test": "turbo test",
     "test:e2e": "playwright test",
+    "validate:yaml": "node scripts/validate-yaml.mjs",
+    "smoke:staging": "bash scripts/smoke-staging.sh",
     "format": "prettier --write .",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
@@ -33,6 +35,7 @@
     "tsx": "4.23.1",
     "turbo": "2.10.5",
     "typescript": "5.9.3",
-    "typescript-eslint": "8.64.0"
+    "typescript-eslint": "8.64.0",
+    "yaml": "2.9.0"
   }
 }

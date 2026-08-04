@@ -519,9 +519,48 @@ export class OshiScheduleStack extends Stack {
       maxSessionDuration: Duration.hours(1),
     });
     repository.grantPullPush(githubRole);
+    if (isProduction) {
+      githubRole.addToPolicy(
+        new iam.PolicyStatement({
+          actions: ['ecr:BatchCheckLayerAvailability', 'ecr:BatchGetImage', 'ecr:GetDownloadUrlForLayer'],
+          resources: [
+            Arn.format(
+              {
+                service: 'ecr',
+                resource: 'repository',
+                resourceName: 'oshi-schedule-staging',
+                arnFormat: ArnFormat.SLASH_RESOURCE_NAME,
+              },
+              this,
+            ),
+          ],
+        }),
+      );
+      githubRole.addToPolicy(
+        new iam.PolicyStatement({
+          actions: ['ecs:DescribeServices'],
+          resources: [
+            Arn.format(
+              {
+                service: 'ecs',
+                resource: 'service',
+                resourceName: 'oshi-schedule-staging-cluster/oshi-schedule-staging-api',
+                arnFormat: ArnFormat.SLASH_RESOURCE_NAME,
+              },
+              this,
+            ),
+          ],
+        }),
+      );
+    }
     githubRole.addToPolicy(
       new iam.PolicyStatement({
-        actions: ['ecs:RegisterTaskDefinition'],
+        actions: [
+          'ecs:DescribeTaskDefinition',
+          'ecs:ListTaskDefinitions',
+          'ecs:RegisterTaskDefinition',
+          'rds:DescribeDBSnapshots',
+        ],
         resources: ['*'],
       }),
     );
@@ -540,6 +579,22 @@ export class OshiScheduleStack extends Stack {
           apiService.serviceArn,
           Arn.format({ service: 'ecs', resource: 'task-definition', resourceName: `${prefix}-*`, arnFormat: ArnFormat.SLASH_RESOURCE_NAME }, this),
           Arn.format({ service: 'ecs', resource: 'task', resourceName: `${cluster.clusterName}/*`, arnFormat: ArnFormat.SLASH_RESOURCE_NAME }, this),
+        ],
+      }),
+    );
+    githubRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ['scheduler:GetSchedule', 'scheduler:UpdateSchedule'],
+        resources: [
+          Arn.format(
+            {
+              service: 'scheduler',
+              resource: 'schedule',
+              resourceName: `default/${prefix}-hourly-worker`,
+              arnFormat: ArnFormat.SLASH_RESOURCE_NAME,
+            },
+            this,
+          ),
         ],
       }),
     );
@@ -635,5 +690,6 @@ export class OshiScheduleStack extends Stack {
     new CfnOutput(this, 'MigrationTaskDefinitionArn', { value: migrationTaskDefinition.taskDefinitionArn });
     new CfnOutput(this, 'AmplifyAppId', { value: amplifyApp.attrAppId });
     new CfnOutput(this, 'AmplifyBranchName', { value: amplifyBranch.branchName });
+    new CfnOutput(this, 'GitHubActionsRoleArn', { value: githubRole.roleArn });
   }
 }

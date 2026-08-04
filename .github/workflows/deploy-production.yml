@@ -1,0 +1,190 @@
+name: Deploy production
+
+on:
+  workflow_dispatch:
+    inputs:
+      staging_image_digest:
+        description: sha256 digest currently running in staging
+        required: true
+        type: string
+      backup_snapshot_id:
+        description: Available manual RDS snapshot verified before migration
+        required: true
+        type: string
+      confirm:
+        description: Type DEPLOY_PRODUCTION
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    if: inputs.confirm == 'DEPLOY_PRODUCTION'
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    if: inputs.confirm == 'DEPLOY_PRODUCTION'
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_DEPLOY_ROLE_ARN: ${{ vars.PRODUCTION_AWS_DEPLOY_ROLE_ARN }}
+      AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+      STAGING_ECR_REPOSITORY: ${{ vars.STAGING_ECR_REPOSITORY }}
+      PRODUCTION_ECR_REPOSITORY: ${{ vars.PRODUCTION_ECR_REPOSITORY }}
+      STAGING_ECS_CLUSTER: ${{ vars.STAGING_ECS_CLUSTER }}
+      STAGING_ECS_API_SERVICE: ${{ vars.STAGING_ECS_API_SERVICE }}
+      ECS_CLUSTER: ${{ vars.PRODUCTION_ECS_CLUSTER }}
+      ECS_API_SERVICE: ${{ vars.PRODUCTION_ECS_API_SERVICE }}
+      ECS_API_TASK_FAMILY: ${{ vars.PRODUCTION_ECS_API_TASK_FAMILY }}
+      ECS_WORKER_TASK_FAMILY: ${{ vars.PRODUCTION_ECS_WORKER_TASK_FAMILY }}
+      ECS_MIGRATION_TASK_FAMILY: ${{ vars.PRODUCTION_ECS_MIGRATION_TASK_FAMILY }}
+      ECS_PUBLIC_SUBNET_IDS: ${{ vars.PRODUCTION_ECS_PUBLIC_SUBNET_IDS }}
+      ECS_WORKER_SECURITY_GROUP_ID: ${{ vars.PRODUCTION_ECS_WORKER_SECURITY_GROUP_ID }}
+      WORKER_SCHEDULE_NAME: ${{ vars.PRODUCTION_WORKER_SCHEDULE_NAME }}
+      AMPLIFY_APP_ID: ${{ vars.PRODUCTION_AMPLIFY_APP_ID }}
+      AMPLIFY_BRANCH: ${{ vars.PRODUCTION_AMPLIFY_BRANCH }}
+      WEB_URL: ${{ vars.PRODUCTION_WEB_URL }}
+      API_URL: ${{ vars.PRODUCTION_API_URL }}
+      IMAGE_DIGEST: ${{ inputs.staging_image_digest }}
+      BACKUP_SNAPSHOT_ID: ${{ inputs.backup_snapshot_id }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@v6.2.3
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.AWS_DEPLOY_ROLE_ARN }}
+          role-session-name: oshi-schedule-production-${{ github.run_id }}
+      - name: Validate deployment inputs and variables
+        run: |
+          [[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo 'Invalid image digest' >&2; exit 1; }
+          for name in AWS_REGION AWS_DEPLOY_ROLE_ARN AWS_ACCOUNT_ID STAGING_ECR_REPOSITORY \
+            PRODUCTION_ECR_REPOSITORY STAGING_ECS_CLUSTER STAGING_ECS_API_SERVICE ECS_CLUSTER \
+            ECS_API_SERVICE ECS_API_TASK_FAMILY ECS_WORKER_TASK_FAMILY ECS_MIGRATION_TASK_FAMILY \
+            ECS_PUBLIC_SUBNET_IDS ECS_WORKER_SECURITY_GROUP_ID WORKER_SCHEDULE_NAME \
+            AMPLIFY_APP_ID AMPLIFY_BRANCH WEB_URL API_URL BACKUP_SNAPSHOT_ID; do
+            test -n "${!name}" || { echo "Missing production input or variable: $name" >&2; exit 1; }
+          done
+      - name: Verify digest is currently deployed to staging
+        id: verified
+        run: |
+          staging_task="$(aws ecs describe-services --region "$AWS_REGION" --cluster "$STAGING_ECS_CLUSTER" \
+            --services "$STAGING_ECS_API_SERVICE" --query 'services[0].taskDefinition' --output text)"
+          staging_image="$(aws ecs describe-task-definition --region "$AWS_REGION" --task-definition "$staging_task" \
+            --query 'taskDefinition.containerDefinitions[?name==`api`].image | [0]' --output text)"
+          [[ "$staging_image" == *@"$IMAGE_DIGEST" ]] || {
+            echo 'Requested digest is not the image currently configured in staging' >&2
+            exit 1
+          }
+          echo 'staging digest verified'
+      - name: Verify pre-deployment RDS snapshot
+        run: |
+          status="$(aws rds describe-db-snapshots --region "$AWS_REGION" \
+            --db-snapshot-identifier "$BACKUP_SNAPSHOT_ID" \
+            --query 'DBSnapshots[0].Status' --output text)"
+          [[ "$status" == available ]] || { echo 'RDS snapshot is not available' >&2; exit 1; }
+      - name: Promote the exact staging manifest to production ECR
+        id: promoted
+        run: |
+          manifest="$(aws ecr batch-get-image --region "$AWS_REGION" --repository-name "$STAGING_ECR_REPOSITORY" \
+            --image-ids imageDigest="$IMAGE_DIGEST" --query 'images[0].imageManifest' --output text)"
+          test -n "$manifest" && [[ "$manifest" != None ]] || { echo 'Staging image manifest not found' >&2; exit 1; }
+          tag="promoted-${IMAGE_DIGEST:7:12}"
+          promoted_digest="$(aws ecr describe-images --region "$AWS_REGION" --repository-name "$PRODUCTION_ECR_REPOSITORY" \
+            --image-ids imageTag="$tag" --query 'imageDetails[0].imageDigest' --output text 2>/dev/null || true)"
+          if [[ -z "$promoted_digest" || "$promoted_digest" == None ]]; then
+            promoted_digest="$(aws ecr put-image --region "$AWS_REGION" --repository-name "$PRODUCTION_ECR_REPOSITORY" \
+              --image-tag "$tag" --image-manifest "$manifest" --query 'image.imageId.imageDigest' --output text)"
+          fi
+          [[ "$promoted_digest" == "$IMAGE_DIGEST" ]] || { echo 'Promoted manifest digest changed' >&2; exit 1; }
+          echo "image=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$PRODUCTION_ECR_REPOSITORY@$IMAGE_DIGEST" >> "$GITHUB_OUTPUT"
+      - name: Record rollback revisions
+        id: rollback
+        run: |
+          previous_api="$(aws ecs describe-services --region "$AWS_REGION" --cluster "$ECS_CLUSTER" \
+            --services "$ECS_API_SERVICE" --query 'services[0].taskDefinition' --output text)"
+          previous_worker="$(aws scheduler get-schedule --region "$AWS_REGION" --name "$WORKER_SCHEDULE_NAME" \
+            --query 'Target.EcsParameters.TaskDefinitionArn' --output text)"
+          echo "api=$previous_api" >> "$GITHUB_OUTPUT"
+          echo "worker=$previous_worker" >> "$GITHUB_OUTPUT"
+      - name: Register production task revisions
+        id: tasks
+        env:
+          IMAGE: ${{ steps.promoted.outputs.image }}
+        run: |
+          api_arn="$(bash scripts/register-ecs-task-definition.sh "$ECS_API_TASK_FAMILY" "$IMAGE")"
+          worker_arn="$(bash scripts/register-ecs-task-definition.sh "$ECS_WORKER_TASK_FAMILY" "$IMAGE")"
+          migration_arn="$(bash scripts/register-ecs-task-definition.sh "$ECS_MIGRATION_TASK_FAMILY" "$IMAGE")"
+          echo "api=$api_arn" >> "$GITHUB_OUTPUT"
+          echo "worker=$worker_arn" >> "$GITHUB_OUTPUT"
+          echo "migration=$migration_arn" >> "$GITHUB_OUTPUT"
+      - name: Run one-off migration and require exit 0
+        env:
+          MIGRATION_TASK: ${{ steps.tasks.outputs.migration }}
+        run: |
+          task_arn="$(aws ecs run-task --region "$AWS_REGION" --cluster "$ECS_CLUSTER" \
+            --task-definition "$MIGRATION_TASK" --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[$ECS_PUBLIC_SUBNET_IDS],securityGroups=[$ECS_WORKER_SECURITY_GROUP_ID],assignPublicIp=ENABLED}" \
+            --query 'tasks[0].taskArn' --output text)"
+          [[ "$task_arn" == arn:* ]] || { echo 'Migration task did not start' >&2; exit 1; }
+          aws ecs wait tasks-stopped --region "$AWS_REGION" --cluster "$ECS_CLUSTER" --tasks "$task_arn"
+          exit_code="$(aws ecs describe-tasks --region "$AWS_REGION" --cluster "$ECS_CLUSTER" \
+            --tasks "$task_arn" --query 'tasks[0].containers[0].exitCode' --output text)"
+          [[ "$exit_code" == 0 ]] || { echo "Migration task failed with exit code $exit_code" >&2; exit 1; }
+      - name: Deploy API and worker revision
+        env:
+          API_TASK: ${{ steps.tasks.outputs.api }}
+          WORKER_TASK: ${{ steps.tasks.outputs.worker }}
+        run: |
+          aws ecs update-service --region "$AWS_REGION" --cluster "$ECS_CLUSTER" \
+            --service "$ECS_API_SERVICE" --task-definition "$API_TASK" >/dev/null
+          aws ecs wait services-stable --region "$AWS_REGION" --cluster "$ECS_CLUSTER" \
+            --services "$ECS_API_SERVICE"
+          bash scripts/update-scheduler-task.sh "$WORKER_SCHEDULE_NAME" "$WORKER_TASK"
+      - name: Start Amplify production build and wait
+        run: |
+          job_id="$(aws amplify start-job --region "$AWS_REGION" --app-id "$AMPLIFY_APP_ID" \
+            --branch-name "$AMPLIFY_BRANCH" --job-type RELEASE --query 'jobSummary.jobId' --output text)"
+          for attempt in $(seq 1 60); do
+            status="$(aws amplify get-job --region "$AWS_REGION" --app-id "$AMPLIFY_APP_ID" \
+              --branch-name "$AMPLIFY_BRANCH" --job-id "$job_id" --query 'job.summary.status' --output text)"
+            case "$status" in
+              SUCCEED) break ;;
+              FAILED|CANCELLED) echo "Amplify build ended with $status" >&2; exit 1 ;;
+            esac
+            [[ "$attempt" != 60 ]] || { echo 'Amplify build timed out' >&2; exit 1; }
+            sleep 15
+          done
+      - name: Run production smoke test
+        env:
+          MIGRATION_VERIFIED: 'true'
+          WORKER_TASK_DEFINITION: ${{ steps.tasks.outputs.worker }}
+        run: bash scripts/smoke-staging.sh
+      - name: Deployment and rollback summary
+        if: always()
+        env:
+          PREVIOUS_API: ${{ steps.rollback.outputs.api }}
+          PREVIOUS_WORKER: ${{ steps.rollback.outputs.worker }}
+        run: |
+          {
+            echo '## Production deployment'
+            echo "- Result: ${{ job.status }}"
+            echo "- Staging-verified image digest: $IMAGE_DIGEST"
+            echo "- Backup snapshot: $BACKUP_SNAPSHOT_ID"
+            echo '### Rollback'
+            echo "1. Update $ECS_API_SERVICE to task definition ${PREVIOUS_API:-record-unavailable}."
+            echo "2. Point $WORKER_SCHEDULE_NAME to ${PREVIOUS_WORKER:-record-unavailable}."
+            echo '3. Redeploy the previous successful Amplify commit.'
+            echo '4. Database rollback is restore-forward from the verified snapshot; do not reverse migrations in place.'
+          } >> "$GITHUB_STEP_SUMMARY"

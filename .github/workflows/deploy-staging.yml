@@ -1,0 +1,155 @@
+name: Deploy staging
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    if: vars.STAGING_DEPLOY_ENABLED == 'true'
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    if: vars.STAGING_DEPLOY_ENABLED == 'true'
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: staging
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_DEPLOY_ROLE_ARN: ${{ vars.STAGING_AWS_DEPLOY_ROLE_ARN }}
+      AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+      ECR_REPOSITORY: ${{ vars.STAGING_ECR_REPOSITORY }}
+      ECS_CLUSTER: ${{ vars.STAGING_ECS_CLUSTER }}
+      ECS_API_SERVICE: ${{ vars.STAGING_ECS_API_SERVICE }}
+      ECS_API_TASK_FAMILY: ${{ vars.STAGING_ECS_API_TASK_FAMILY }}
+      ECS_WORKER_TASK_FAMILY: ${{ vars.STAGING_ECS_WORKER_TASK_FAMILY }}
+      ECS_MIGRATION_TASK_FAMILY: ${{ vars.STAGING_ECS_MIGRATION_TASK_FAMILY }}
+      ECS_PUBLIC_SUBNET_IDS: ${{ vars.STAGING_ECS_PUBLIC_SUBNET_IDS }}
+      ECS_WORKER_SECURITY_GROUP_ID: ${{ vars.STAGING_ECS_WORKER_SECURITY_GROUP_ID }}
+      WORKER_SCHEDULE_NAME: ${{ vars.STAGING_WORKER_SCHEDULE_NAME }}
+      AMPLIFY_APP_ID: ${{ vars.STAGING_AMPLIFY_APP_ID }}
+      AMPLIFY_BRANCH: ${{ vars.STAGING_AMPLIFY_BRANCH }}
+      WEB_URL: ${{ vars.STAGING_WEB_URL }}
+      API_URL: ${{ vars.STAGING_API_URL }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@v6.2.3
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.AWS_DEPLOY_ROLE_ARN }}
+          role-session-name: oshi-schedule-staging-${{ github.run_id }}
+      - name: Validate deployment variables
+        run: |
+          for name in AWS_REGION AWS_DEPLOY_ROLE_ARN AWS_ACCOUNT_ID ECR_REPOSITORY ECS_CLUSTER \
+            ECS_API_SERVICE ECS_API_TASK_FAMILY ECS_WORKER_TASK_FAMILY ECS_MIGRATION_TASK_FAMILY \
+            ECS_PUBLIC_SUBNET_IDS ECS_WORKER_SECURITY_GROUP_ID WORKER_SCHEDULE_NAME \
+            AMPLIFY_APP_ID AMPLIFY_BRANCH WEB_URL API_URL; do
+            test -n "${!name}" || { echo "Missing repository variable: $name" >&2; exit 1; }
+          done
+      - uses: aws-actions/amazon-ecr-login@v2
+      - name: Build immutable image
+        id: image
+        run: |
+          image_uri="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY"
+          docker build --tag "$image_uri:$GITHUB_SHA" .
+          echo "uri=$image_uri" >> "$GITHUB_OUTPUT"
+          echo "tagged=$image_uri:$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+      - name: Scan image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.image.outputs.tagged }}
+          format: table
+          exit-code: '1'
+          ignore-unfixed: false
+          severity: HIGH,CRITICAL
+      - name: Push image and resolve digest
+        id: pushed
+        env:
+          IMAGE_URI: ${{ steps.image.outputs.uri }}
+          TAGGED_IMAGE: ${{ steps.image.outputs.tagged }}
+        run: |
+          docker push "$TAGGED_IMAGE"
+          digest="$(aws ecr describe-images --region "$AWS_REGION" --repository-name "$ECR_REPOSITORY" \
+            --image-ids imageTag="$GITHUB_SHA" --query 'imageDetails[0].imageDigest' --output text)"
+          [[ "$digest" == sha256:* ]] || { echo 'ECR did not return an image digest' >&2; exit 1; }
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "image=$IMAGE_URI@$digest" >> "$GITHUB_OUTPUT"
+      - name: Register API, worker, and migration task revisions
+        id: tasks
+        env:
+          IMAGE: ${{ steps.pushed.outputs.image }}
+        run: |
+          api_arn="$(bash scripts/register-ecs-task-definition.sh "$ECS_API_TASK_FAMILY" "$IMAGE")"
+          worker_arn="$(bash scripts/register-ecs-task-definition.sh "$ECS_WORKER_TASK_FAMILY" "$IMAGE")"
+          migration_arn="$(bash scripts/register-ecs-task-definition.sh "$ECS_MIGRATION_TASK_FAMILY" "$IMAGE")"
+          echo "api=$api_arn" >> "$GITHUB_OUTPUT"
+          echo "worker=$worker_arn" >> "$GITHUB_OUTPUT"
+          echo "migration=$migration_arn" >> "$GITHUB_OUTPUT"
+      - name: Run one-off migration and require exit 0
+        env:
+          MIGRATION_TASK: ${{ steps.tasks.outputs.migration }}
+        run: |
+          task_arn="$(aws ecs run-task --region "$AWS_REGION" --cluster "$ECS_CLUSTER" \
+            --task-definition "$MIGRATION_TASK" --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[$ECS_PUBLIC_SUBNET_IDS],securityGroups=[$ECS_WORKER_SECURITY_GROUP_ID],assignPublicIp=ENABLED}" \
+            --query 'tasks[0].taskArn' --output text)"
+          [[ "$task_arn" == arn:* ]] || { echo 'Migration task did not start' >&2; exit 1; }
+          aws ecs wait tasks-stopped --region "$AWS_REGION" --cluster "$ECS_CLUSTER" --tasks "$task_arn"
+          exit_code="$(aws ecs describe-tasks --region "$AWS_REGION" --cluster "$ECS_CLUSTER" \
+            --tasks "$task_arn" --query 'tasks[0].containers[0].exitCode' --output text)"
+          [[ "$exit_code" == 0 ]] || { echo "Migration task failed with exit code $exit_code" >&2; exit 1; }
+      - name: Deploy API and wait for stability
+        env:
+          API_TASK: ${{ steps.tasks.outputs.api }}
+        run: |
+          aws ecs update-service --region "$AWS_REGION" --cluster "$ECS_CLUSTER" \
+            --service "$ECS_API_SERVICE" --task-definition "$API_TASK" >/dev/null
+          aws ecs wait services-stable --region "$AWS_REGION" --cluster "$ECS_CLUSTER" \
+            --services "$ECS_API_SERVICE"
+      - name: Point Scheduler at the worker revision
+        env:
+          WORKER_TASK: ${{ steps.tasks.outputs.worker }}
+        run: bash scripts/update-scheduler-task.sh "$WORKER_SCHEDULE_NAME" "$WORKER_TASK"
+      - name: Start Amplify build and wait
+        run: |
+          job_id="$(aws amplify start-job --region "$AWS_REGION" --app-id "$AMPLIFY_APP_ID" \
+            --branch-name "$AMPLIFY_BRANCH" --job-type RELEASE --query 'jobSummary.jobId' --output text)"
+          for attempt in $(seq 1 60); do
+            status="$(aws amplify get-job --region "$AWS_REGION" --app-id "$AMPLIFY_APP_ID" \
+              --branch-name "$AMPLIFY_BRANCH" --job-id "$job_id" --query 'job.summary.status' --output text)"
+            case "$status" in
+              SUCCEED) break ;;
+              FAILED|CANCELLED) echo "Amplify build ended with $status" >&2; exit 1 ;;
+            esac
+            [[ "$attempt" != 60 ]] || { echo 'Amplify build timed out' >&2; exit 1; }
+            sleep 15
+          done
+      - name: Run staging smoke test
+        env:
+          MIGRATION_VERIFIED: 'true'
+          WORKER_TASK_DEFINITION: ${{ steps.tasks.outputs.worker }}
+        run: bash scripts/smoke-staging.sh
+      - name: Deployment summary
+        if: always()
+        env:
+          IMAGE_DIGEST: ${{ steps.pushed.outputs.digest }}
+        run: |
+          {
+            echo '## Staging deployment'
+            echo "- Result: ${{ job.status }}"
+            echo "- Commit: $GITHUB_SHA"
+            echo "- Image digest: ${IMAGE_DIGEST:-not-pushed}"
+            echo '- Migration runs once before API deployment; worker schedule state is preserved.'
+          } >> "$GITHUB_STEP_SUMMARY"
