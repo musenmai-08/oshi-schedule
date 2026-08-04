@@ -1,0 +1,45 @@
+infra/lib/oshi-schedule-stack.ts
+  s_3a50bad78ea1cd::t_94c0cfab70856c 522-555
+  s_3a50bad78ea1cd::t_ab425a891e750f 558-563,585-600,693
+scripts/smoke-staging.sh
+  s_3a50bad78ea1cd::t_5476cad95997c7 1-83
+scripts/validate-yaml.mjs
+  s_3a50bad78ea1cd::t_5476cad95997c7 1-4,6-29
+  s_3a50bad78ea1cd::t_566f1baaf5d6c3 5
+.github/workflows/deploy-staging.yml
+  s_3a50bad78ea1cd::t_e7f86084aaafc4 1-93,97-123,125-142,144-155
+  s_3a50bad78ea1cd::t_67ac2c9e948eed 94-96,124,143
+package.json
+  s_3a50bad78ea1cd::t_5476cad95997c7 19-20,38
+  s_3a50bad78ea1cd::t_743341861d0bc0 39
+.github/workflows/ci.yml
+  s_3a50bad78ea1cd::t_41943bca5545dd 1-103
+scripts/update-scheduler-task.sh
+  s_3a50bad78ea1cd::t_ab425a891e750f 1-30
+amplify.yml
+  s_3a50bad78ea1cd::t_5476cad95997c7 1-29
+scripts/register-ecs-task-definition.sh
+  s_3a50bad78ea1cd::t_ab425a891e750f 1-31
+.github/workflows/deploy-production.yml
+  s_3a50bad78ea1cd::t_f05a77b5515c59 104-109
+  s_3a50bad78ea1cd::t_94c0cfab70856c 1-103,110-125,129-153,155-172,174-190
+  s_3a50bad78ea1cd::t_67ac2c9e948eed 126-128,154,173
+pnpm-lock.yaml
+  s_3a50bad78ea1cd::t_1d8c38ef1540fd 44-46,116,183,211,236,267,2811-2815,3892,3898,3900,3906,3908,3914,5236,5242,5257,5263,5278,5291,5293,5306,5308,5312,5330-5331,5349,5353,5371-5372,5390,5394,5412-5413,5446-5447
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "2dde5bd63027f1f5e0057efc088a1a438a9281da",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
