@@ -76,6 +76,8 @@ APP_MODE=real pnpm sync:scheduled
 
 1時間ごとの実行はインフラのschedulerから `pnpm sync:scheduled` を呼びます。worker はHTTPサーバーを必要としません。同じYouTubeチャンネルの取得はDB leaseとversion付きsnapshotで共有し、取得完了後は各subscriptionが自分のCalendarへ必ず展開します。完了snapshotがない後続workerやquota不足は`SUCCESS`にせず`DEFERRED`とし、保存済みデータのCalendar同期だけを続けます。
 
+workerはSUCCESS/SKIPPED/DEFERREDと対象0件を終了コード0、1件以上のFAILEDまたはworker全体の例外を終了コード1にします。schedulerは非0終了を監視・通知し、終了ログの件数サマリーを収集してください。
+
 ## 品質確認
 
 ```bash
