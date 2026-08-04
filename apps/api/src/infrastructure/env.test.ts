@@ -44,9 +44,9 @@ describe('loadEnv production encryption keys', () => {
   });
 
   it('rejects malformed base64 instead of accepting a lenient decode', () => {
-    expect(() =>
-      loadEnv({ ...realEnv, TOKEN_ENCRYPTION_KEYS: `v2:${'!'.repeat(44)}` }),
-    ).toThrow(/base64/i);
+    expect(() => loadEnv({ ...realEnv, TOKEN_ENCRYPTION_KEYS: `v2:${'!'.repeat(44)}` })).toThrow(
+      /base64/i,
+    );
   });
 
   it('rejects all-zero and low-entropy keys even when the key identifier changes', () => {
@@ -107,5 +107,33 @@ describe('loadEnv production encryption keys', () => {
       prebuild: 'prisma generate',
       pretypecheck: 'prisma generate',
     });
+  });
+
+  it('aligns the repository runtime and Node type declarations with Node 22', async () => {
+    const root = new URL('../../../../', import.meta.url);
+    const [rootPackage, webPackage, apiPackage, workerPackage, nvmrc] = await Promise.all([
+      readFile(new URL('package.json', root), 'utf8'),
+      readFile(new URL('apps/web/package.json', root), 'utf8'),
+      readFile(new URL('apps/api/package.json', root), 'utf8'),
+      readFile(new URL('apps/worker/package.json', root), 'utf8'),
+      readFile(new URL('.nvmrc', root), 'utf8'),
+    ]);
+    expect((JSON.parse(rootPackage) as { engines: { node: string } }).engines.node).toBe(
+      '>=22.23.1 <23',
+    );
+    for (const appPackage of [webPackage, apiPackage, workerPackage])
+      expect(
+        (JSON.parse(appPackage) as { devDependencies: { '@types/node': string } }).devDependencies[
+          '@types/node'
+        ],
+      ).toMatch(/^22\./);
+    expect(nvmrc.trim()).toBe('22.23.1');
+  });
+
+  it('does not advertise application settings that are fixed policies or scheduler concerns', async () => {
+    const example = await readFile(new URL('../../../../.env.example', import.meta.url), 'utf8');
+    expect(example).not.toMatch(
+      /^(SYNC_INTERVAL_MINUTES|YOUTUBE_MIN_FETCH_INTERVAL_SECONDS|SYNC_LOOKAHEAD_DAYS)=/m,
+    );
   });
 });

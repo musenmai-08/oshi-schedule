@@ -28,7 +28,7 @@
   "devDependencies": {
     "@oshi-schedule/eslint-config": "workspace:*",
     "@oshi-schedule/typescript-config": "workspace:*",
-    "@types/node": "20.19.33",
+    "@types/node": "22.15.21",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "eslint": "9.39.4",

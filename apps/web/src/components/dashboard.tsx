@@ -40,6 +40,7 @@ import {
 import { startGoogleOAuth } from '@/lib/google-oauth';
 import { APP_ROUTES } from '@/lib/routes';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { publicEnv } from '@/lib/env';
 
 const formatDate = (value: string | null) =>
   value
@@ -119,7 +120,7 @@ export function Dashboard({
   }, [clearSetupQuery, router]);
 
   const reconnect = async () => {
-    if (process.env.NEXT_PUBLIC_DEMO_MODE === 'true') {
+    if (publicEnv.demoMode) {
       setError('デモモードではGoogle再連携を実行しません');
       return;
     }

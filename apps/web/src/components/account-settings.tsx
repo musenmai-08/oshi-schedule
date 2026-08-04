@@ -27,6 +27,7 @@ import { settingsConnectionView, type GoogleConnectionState } from '@/lib/google
 import { startGoogleOAuth } from '@/lib/google-oauth';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { APP_ROUTES } from '@/lib/routes';
+import { publicEnv } from '@/lib/env';
 
 export function AccountSettings() {
   const [connection, setConnection] = useState<GoogleConnectionState>({ status: 'loading' });
@@ -46,7 +47,7 @@ export function AccountSettings() {
     void loadConnection();
   }, []);
   const reconnect = async () => {
-    if (process.env.NEXT_PUBLIC_DEMO_MODE === 'true') {
+    if (publicEnv.demoMode) {
       setError('デモモードではGoogle再連携を実行しません');
       return;
     }
@@ -60,8 +61,7 @@ export function AccountSettings() {
     setBusy(true);
     try {
       await apiClient.deleteAccount();
-      if (process.env.NEXT_PUBLIC_DEMO_MODE !== 'true')
-        await createSupabaseBrowserClient().auth.signOut();
+      if (!publicEnv.demoMode) await createSupabaseBrowserClient().auth.signOut();
       window.location.href = '/';
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '削除できませんでした');

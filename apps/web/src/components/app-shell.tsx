@@ -20,6 +20,7 @@ import { type ReactNode, useRef, useState } from 'react';
 import { signOutSession } from '@/lib/auth-actions';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { APP_ROUTES, DEMO_AUTH_COOKIE } from '@/lib/routes';
+import { publicEnv } from '@/lib/env';
 
 export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -32,7 +33,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     setLoggingOut(true);
     setLogoutError(null);
     try {
-      if (process.env.NEXT_PUBLIC_DEMO_MODE === 'true') {
+      if (publicEnv.demoMode) {
         document.cookie = `${DEMO_AUTH_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
       } else {
         const supabase = createSupabaseBrowserClient();

@@ -6,8 +6,8 @@ import type {
   MeView,
   SubscriptionView,
 } from '@oshi-schedule/shared';
+import { publicEnv } from './env';
 
-const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 export class ApiClientError extends Error {
   constructor(
     readonly code: string,
@@ -19,14 +19,14 @@ export class ApiClientError extends Error {
 }
 
 async function sessionToken() {
-  if (process.env.NEXT_PUBLIC_DEMO_MODE === 'true') return 'demo-token';
+  if (publicEnv.demoMode) return 'demo-token';
   const { createSupabaseBrowserClient } = await import('./supabase/client');
   const { data } = await createSupabaseBrowserClient().auth.getSession();
   return data.session?.access_token ?? null;
 }
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = await sessionToken();
-  const response = await fetch(`${baseUrl}${path}`, {
+  const response = await fetch(`${publicEnv.apiUrl}${path}`, {
     ...init,
     headers: {
       'content-type': 'application/json',

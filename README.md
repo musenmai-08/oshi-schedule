@@ -59,7 +59,7 @@ pnpm db:seed
 
 APIとworkerは、各workspace packageをcwdとして起動した場合もproject rootの `.env` を読みます。real/productionでは `.env.example` の全ゼロ鍵、既知sample、反復、連番など予測可能な鍵を拒否します。独自の強度推定を安全性の根拠にはせず、必ずOSのCSPRNGで生成し、ログやGitへ出さないでください。ローテーション時は `v2:<new>,v1:<old>` のように新鍵を先頭へ追加し、旧暗号文を復号して新鍵で再暗号化した後に旧鍵を外します。暗号文自身にもkey IDが保存されます。
 
-外部HTTP timeoutとlease、YouTube quotaは `.env` で調整できます。`ACCOUNT_DELETION_LEASE_MS` と `SYNC_LEASE_MS` は `EXTERNAL_API_TIMEOUT_MS` より長くしてください。YouTubeは一般endpoint用 `YOUTUBE_DAILY_QUOTA_BUDGET=8000` と、独立したsearch bucket用 `YOUTUBE_DAILY_SEARCH_QUOTA_BUDGET=80` をDBで管理します。日付境界は `YOUTUBE_QUOTA_TIMEZONE=America/Los_Angeles`、予定検索は既定1ページ、追跡は1チャンネル50件・30日です。既定値では通常最大がSEARCH 72/日・GENERAL 144/日、3 attemptを含むGENERAL上限が432/日です。設定から再計算した上限をreserveが満たさなければ起動時に失敗します。自動同期用予約枠を手動同期が消費することはできません。API呼出し直前に予約し、応答成否にかかわらず実績へ移します。process crash時の未使用予約は二重消費防止を優先して当日中は解放せず、Pacific Timeの日次行で自然に分離します。
+外部HTTP timeoutとlease、YouTube quotaは `.env` で調整できます。`ACCOUNT_DELETION_LEASE_MS` と `SYNC_LEASE_MS` は `EXTERNAL_API_TIMEOUT_MS` より長くしてください。YouTubeは一般endpoint用 `YOUTUBE_DAILY_QUOTA_BUDGET=8000` と、独立したsearch bucket用 `YOUTUBE_DAILY_SEARCH_QUOTA_BUDGET=80` をDBで管理します。日付境界は `YOUTUBE_QUOTA_TIMEZONE=America/Los_Angeles`、予定検索は既定1ページ、追跡は1チャンネル50件・30日です。手動同期の再実行間隔（5分）と同期対象期間（30日）はプロダクト仕様の定数で、環境変数では変更しません。既定値では通常最大がSEARCH 72/日・GENERAL 144/日、3 attemptを含むGENERAL上限が432/日です。設定から再計算した上限をreserveが満たさなければ起動時に失敗します。自動同期用予約枠を手動同期が消費することはできません。API呼出し直前に予約し、応答成否にかかわらず実績へ移します。process crash時の未使用予約は二重消費防止を優先して当日中は解放せず、Pacific Timeの日次行で自然に分離します。
 
 Supabase の Google provider に Calendar API scope を許可し、Auth URL Configuration の Site URLを `http://localhost:3001`、Redirect URLを `http://localhost:3001/auth/callback` に設定してください。Google Cloud の承認済みJavaScript生成元は `http://localhost:3001` にします。Google provider用の承認済みリダイレクトURIはSupabaseが提示する `https://<Supabase Project Ref>.supabase.co/auth/v1/callback` のままで、Webポート変更では変更しません。YouTube Data API v3、Google Calendar API、OAuth同意画面も設定します。
 
@@ -74,7 +74,7 @@ NEXT_PUBLIC_DEMO_MODE=false pnpm --filter @oshi-schedule/web dev
 APP_MODE=real pnpm sync:scheduled
 ```
 
-1時間ごとの実行はインフラのschedulerから `pnpm sync:scheduled` を呼びます。worker はHTTPサーバーを必要としません。同じYouTubeチャンネルの取得はDB leaseとversion付きsnapshotで共有し、取得完了後は各subscriptionが自分のCalendarへ必ず展開します。完了snapshotがない後続workerやquota不足は`SUCCESS`にせず`DEFERRED`とし、保存済みデータのCalendar同期だけを続けます。
+1時間ごとの実行はインフラのschedulerから `pnpm sync:scheduled` を呼びます。同期間隔はアプリ環境変数ではなく、デプロイ先schedulerの設定を正とします。worker はHTTPサーバーを必要としません。同じYouTubeチャンネルの取得はDB leaseとversion付きsnapshotで共有し、取得完了後は各subscriptionが自分のCalendarへ必ず展開します。完了snapshotがない後続workerやquota不足は`SUCCESS`にせず`DEFERRED`とし、保存済みデータのCalendar同期だけを続けます。
 
 workerはSUCCESS/SKIPPED/DEFERREDと対象0件を終了コード0、1件以上のFAILEDまたはworker全体の例外を終了コード1にします。schedulerは非0終了を監視・通知し、終了ログの件数サマリーを収集してください。
 
@@ -124,5 +124,7 @@ e2e             Playwrightシナリオ
 ## 本番前の注意
 
 Fake認証と既知の開発用暗号鍵は `production` で起動できません。実Google/Supabase/YouTube接続、OAuth審査、scheduler/Secret Manager/監視、DB backup、鍵ローテーション手順、負荷・クォータ試験を本番環境で確認してください。`/terms` と `/privacy` の文面は開発・動作確認用のデモであり、一般公開前に専門家の確認を受けて正式版に差し替えてください。第三者向けYouTube Data APIだけでプレミア公開を確定できない項目は、誤推測せず「種別未確定」として扱います。
+
+Webのproduction buildでは `NEXT_PUBLIC_API_URL`、`NEXT_PUBLIC_DEMO_MODE=false`、`NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` を明示してください。`NEXT_PUBLIC_*` はブラウザーへ公開されるため、service role key、OAuth client secret、暗号鍵などの秘密値を設定してはいけません。
 
 Next.js開発サーバーのアクセスログはOAuth callbackのquery stringを表示する場合があるため、開発ログも機密情報として扱い、共有・永続保存しないでください。アプリケーションloggerはOAuth credentialとBearer値を共通サニタイズします。本番のreverse proxy・CDN・platform access logではquery stringを保存せず、`/auth/callback`はpathnameとHTTP statusだけを記録してください。
