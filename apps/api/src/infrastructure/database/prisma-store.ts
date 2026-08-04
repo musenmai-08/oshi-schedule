@@ -73,6 +73,12 @@ const toSubscription = (row: {
 
 export class PrismaStore implements Store {
   constructor(readonly prisma = new PrismaClient()) {}
+  async checkReadiness() {
+    await this.prisma.$queryRaw`SELECT 1`;
+  }
+  async disconnect() {
+    await this.prisma.$disconnect();
+  }
   async findUserBySubject(subject: string) {
     const row = await this.prisma.user.findUnique({
       where: { supabaseUserId: subject },

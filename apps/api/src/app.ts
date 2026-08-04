@@ -7,10 +7,12 @@ import type { Env } from './infrastructure/env.js';
 import { apiNotFound, authenticate, errorHandler, requestContext } from './presentation/http.js';
 import { AppError } from './domain/errors.js';
 import { createApiRouter } from './presentation/routes.js';
+import { logger } from './infrastructure/logging/logger.js';
 
 export function createApp(env: Env, container: Container): Express {
   const app = express();
   app.disable('x-powered-by');
+  app.set('trust proxy', env.TRUST_PROXY_HOPS);
   app.use(requestContext);
   app.use(
     helmet({
@@ -34,6 +36,21 @@ export function createApp(env: Env, container: Container): Express {
       requestId: response.locals.requestId,
     }),
   );
+  app.get('/ready', async (_request, response) => {
+    try {
+      await container.resources.checkReadiness();
+      response.json({
+        data: { status: 'ready', service: 'oshi-schedule-api' },
+        requestId: response.locals.requestId,
+      });
+    } catch {
+      logger.warn({ requestId: response.locals.requestId }, 'readiness check failed');
+      response.status(503).json({
+        data: { status: 'not_ready', service: 'oshi-schedule-api' },
+        requestId: response.locals.requestId,
+      });
+    }
+  });
   app.use(
     '/api/v1',
     rateLimit({

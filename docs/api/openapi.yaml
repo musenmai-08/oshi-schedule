@@ -127,6 +127,36 @@ paths:
                     properties:
                       status: { type: string, const: ok }
                       service: { type: string, const: oshi-schedule-api }
+  /ready:
+    get:
+      security: []
+      responses:
+        '200':
+          description: API is ready to serve requests and the database is reachable
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    required: [status, service]
+                    properties:
+                      status: { type: string, const: ready }
+                      service: { type: string, const: oshi-schedule-api }
+        '503':
+          description: API process is alive but a required dependency is not ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    required: [status, service]
+                    properties:
+                      status: { type: string, const: not_ready }
+                      service: { type: string, const: oshi-schedule-api }
   /api/v1/me:
     get:
       responses:

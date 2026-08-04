@@ -31,6 +31,11 @@ export interface Container {
   store: Store;
   auth: AuthVerifier;
   invitation: AllowedEmailInvitationPolicy;
+  resources: RuntimeResources;
+}
+export interface RuntimeResources {
+  checkReadiness(): Promise<void>;
+  disconnect(): Promise<void>;
 }
 export interface ContainerOverrides {
   store?: Store;
@@ -40,11 +45,23 @@ export interface ContainerOverrides {
   cipher?: TokenCipher;
   clock?: Clock;
   authAdmin?: AuthAdmin;
+  resources?: RuntimeResources;
 }
 
 export function createContainer(env: Env, overrides: ContainerOverrides = {}): Container {
   const store =
     overrides.store ?? (env.APP_MODE === 'fake' ? new MemoryStore(true) : new PrismaStore());
+  const resources =
+    overrides.resources ??
+    (store instanceof PrismaStore
+      ? {
+          checkReadiness: () => store.checkReadiness(),
+          disconnect: () => store.disconnect(),
+        }
+      : {
+          checkReadiness: async () => undefined,
+          disconnect: async () => undefined,
+        });
   const cipher = overrides.cipher ?? new AesTokenCipher(env.TOKEN_ENCRYPTION_KEYS);
   const clock = overrides.clock ?? { now: () => new Date() };
   const youtube =
@@ -114,5 +131,11 @@ export function createContainer(env: Env, overrides: ContainerOverrides = {}): C
     sync,
     env.ACCOUNT_DELETION_LEASE_MS,
   );
-  return { service, store, auth, invitation: new AllowedEmailInvitationPolicy(env.ALLOWED_EMAILS) };
+  return {
+    service,
+    store,
+    auth,
+    invitation: new AllowedEmailInvitationPolicy(env.ALLOWED_EMAILS),
+    resources,
+  };
 }

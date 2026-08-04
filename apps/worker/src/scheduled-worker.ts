@@ -9,7 +9,20 @@ export interface ScheduledSyncSummary {
 export interface ScheduledWorkerOutcome {
   exitCode: 0 | 1;
   summary: ScheduledSyncSummary;
-  errorCode?: 'WORKER_UNHANDLED_ERROR';
+  errorCode?: 'WORKER_UNHANDLED_ERROR' | 'WORKER_DISCONNECT_FAILED';
+}
+
+export async function executeScheduledWorkerLifecycle(
+  runScheduled: () => Promise<ReadonlyArray<{ status: string }>>,
+  disconnect: () => Promise<void>,
+): Promise<ScheduledWorkerOutcome> {
+  const outcome = await executeScheduledWorker(runScheduled);
+  try {
+    await disconnect();
+    return outcome;
+  } catch {
+    return { ...outcome, exitCode: 1, errorCode: 'WORKER_DISCONNECT_FAILED' };
+  }
 }
 
 const emptySummary = (): ScheduledSyncSummary => ({

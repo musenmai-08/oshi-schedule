@@ -27,6 +27,8 @@ const schema = z
     APP_MODE: z.enum(['fake', 'real']).default('fake'),
     PORT: z.coerce.number().int().positive().default(4000),
     WEB_ORIGIN: z.string().url().default('http://localhost:3001'),
+    TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(0),
+    SHUTDOWN_TIMEOUT_SECONDS: z.coerce.number().int().min(1).max(300).default(30),
     DATABASE_URL: z.string().optional(),
     ALLOWED_EMAILS: z.string().default('developer@example.com'),
     SUPABASE_URL: z.string().url().optional(),

@@ -92,6 +92,23 @@ describe('loadEnv production encryption keys', () => {
     );
   });
 
+  it('accepts bounded proxy hops and shutdown timeout settings', () => {
+    const env = loadEnv({
+      NODE_ENV: 'test',
+      APP_MODE: 'fake',
+      TRUST_PROXY_HOPS: '1',
+      SHUTDOWN_TIMEOUT_SECONDS: '45',
+    });
+    expect(env.TRUST_PROXY_HOPS).toBe(1);
+    expect(env.SHUTDOWN_TIMEOUT_SECONDS).toBe(45);
+  });
+
+  it.each(['-1', '1.5', '11', 'true'])('rejects invalid proxy hops %s', (value) => {
+    expect(() =>
+      loadEnv({ NODE_ENV: 'test', APP_MODE: 'fake', TRUST_PROXY_HOPS: value }),
+    ).toThrow();
+  });
+
   it('loads dotenv from the repository root independently of the working directory', () => {
     expect(ROOT_ENV_PATH).toBe(
       resolve(fileURLToPath(new URL('../../../../', import.meta.url)), '.env'),

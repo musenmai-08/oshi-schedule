@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   executeScheduledWorker,
+  executeScheduledWorkerLifecycle,
   formatScheduledWorkerLog,
   summarizeScheduledResults,
 } from './scheduled-worker.js';
@@ -56,5 +57,35 @@ describe('scheduled worker outcome', () => {
   it('treats an unknown target status as failed', async () => {
     const outcome = await executeScheduledWorker(async () => [{ status: 'UNKNOWN' }]);
     expect(outcome).toMatchObject({ exitCode: 1, summary: { total: 1, failed: 1 } });
+  });
+
+  it.each([
+    ['SUCCESS', 0],
+    ['FAILED', 1],
+  ] as const)('disconnects after a %s result', async (status, exitCode) => {
+    const disconnect = vi.fn(async () => undefined);
+    const outcome = await executeScheduledWorkerLifecycle(async () => [{ status }], disconnect);
+    expect(disconnect).toHaveBeenCalledOnce();
+    expect(outcome.exitCode).toBe(exitCode);
+  });
+
+  it('disconnects after an unhandled worker exception', async () => {
+    const disconnect = vi.fn(async () => undefined);
+    const outcome = await executeScheduledWorkerLifecycle(async () => {
+      throw new Error('worker failure');
+    }, disconnect);
+    expect(disconnect).toHaveBeenCalledOnce();
+    expect(outcome).toMatchObject({ exitCode: 1, errorCode: 'WORKER_UNHANDLED_ERROR' });
+  });
+
+  it('reports disconnect failure with a safe error code', async () => {
+    const outcome = await executeScheduledWorkerLifecycle(
+      async () => [{ status: 'SUCCESS' }],
+      async () => {
+        throw new Error('database-url-must-not-be-logged');
+      },
+    );
+    expect(outcome).toMatchObject({ exitCode: 1, errorCode: 'WORKER_DISCONNECT_FAILED' });
+    expect(formatScheduledWorkerLog(outcome)).not.toContain('database-url-must-not-be-logged');
   });
 });

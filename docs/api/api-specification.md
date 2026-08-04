@@ -7,6 +7,7 @@ OpenAPI の機械可読定義は [`openapi.yaml`](./openapi.yaml)。subscription
 | Method | Path                                     | 認証 | 成功    | 用途                                                           |
 | ------ | ---------------------------------------- | ---- | ------- | -------------------------------------------------------------- |
 | GET    | `/health`                                | 不要 | 200     | liveness・`service=oshi-schedule-api`識別                      |
+| GET    | `/ready`                                 | 不要 | 200/503 | 必須設定検証済みprocessのDB readiness。外部APIは呼ばない       |
 | GET    | `/api/v1/me`                             | 必須 | 200     | 利用者・連携状態                                               |
 | POST   | `/api/v1/onboarding`                     | 必須 | 200/201 | provider token 保存・Calendar 作成                             |
 | GET    | `/api/v1/channels`                       | 必須 | 200     | 登録一覧                                                       |
@@ -20,6 +21,8 @@ OpenAPI の機械可読定義は [`openapi.yaml`](./openapi.yaml)。subscription
 | DELETE | `/api/v1/account`                        | 必須 | 204     | 確認文字付き・再開可能な段階削除                               |
 
 すべての所有資源操作は JWT `sub` と resource ID を同時条件にする。JSON 上限は 32 KiB。
+
+`/health`はprocess livenessだけを返し、DB障害時も200を維持する。ALB target groupのhealth checkには`/health`を使う。`/ready`はPrismaから`SELECT 1`だけを実行し、DB接続不能時は503を返す。いずれも認証不要で、設定値、DB endpoint、例外詳細、外部Google/YouTube応答を返さない。
 
 通常APIは既存active Userだけを受け付ける。onboardingだけがローカルUserを作成でき、削除墓石があるsubjectは410を返す。削除APIは途中の外部障害を502で返すが進捗を保持し、同じJWTから再実行できる。同じsubjectの削除が実行中なら409を返す。完了後も墓石は残るため、旧JWTからUserを再作成しない。
 

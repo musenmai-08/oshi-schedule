@@ -90,6 +90,49 @@ describe('API', () => {
     expect(health.headers).not.toHaveProperty('strict-transport-security');
     expect((await request(app).get('/api/v1/me')).status).toBe(401);
   });
+  it('separates liveness from database readiness without exposing errors', async () => {
+    const healthyReady = await request(app).get('/ready');
+    expect(healthyReady.status).toBe(200);
+    expect(healthyReady.body.data).toEqual({ status: 'ready', service: 'oshi-schedule-api' });
+
+    const unavailableApp = createApp(
+      env,
+      createContainer(env, {
+        store: new MemoryStore(),
+        resources: {
+          checkReadiness: async () => {
+            throw new Error('database-url-must-not-be-returned');
+          },
+          disconnect: async () => undefined,
+        },
+      }),
+    );
+    const readiness = await request(unavailableApp).get('/ready');
+    expect(readiness.status).toBe(503);
+    expect(readiness.body.data).toEqual({
+      status: 'not_ready',
+      service: 'oshi-schedule-api',
+    });
+    expect(JSON.stringify(readiness.body)).not.toContain('database-url-must-not-be-returned');
+    expect((await request(unavailableApp).get('/health')).status).toBe(200);
+  });
+  it('trusts only the configured number of proxy hops', () => {
+    expect(app.get('trust proxy')).toBe(0);
+    const oneHopApp = createApp(
+      loadEnv({
+        NODE_ENV: 'test',
+        APP_MODE: 'fake',
+        ALLOWED_EMAILS: 'developer@example.com',
+        WEB_ORIGIN: 'http://localhost:3001',
+        TRUST_PROXY_HOPS: '1',
+      }),
+      container,
+    );
+    expect(oneHopApp.get('trust proxy')).toBe(1);
+    const trust = oneHopApp.get('trust proxy fn') as (address: string, index: number) => boolean;
+    expect(trust('10.0.0.1', 0)).toBe(true);
+    expect(trust('10.0.0.2', 1)).toBe(false);
+  });
   it('rejects a non invited email', async () => {
     const response = await request(app)
       .get('/api/v1/me')
