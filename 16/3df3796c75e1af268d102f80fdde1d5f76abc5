@@ -1,0 +1,31 @@
+docs/operations/deployment.md
+  s_3a50bad78ea1cd::t_5abd1a52d84f83 39-40,103
+  s_3a50bad78ea1cd::t_35e4a5d5572471 104
+docs/operations/github-actions.md
+  s_3a50bad78ea1cd::t_5abd1a52d84f83 11-23,67-73
+docs/operations/staging-setup.md
+  s_3a50bad78ea1cd::t_5abd1a52d84f83 13-14,38
+docs/architecture/deployment-architecture.md
+  s_3a50bad78ea1cd::t_5abd1a52d84f83 5,58,109
+docs/operations/aws-bootstrap.md
+  s_3a50bad78ea1cd::t_5abd1a52d84f83 5-6,33-45
+  s_3a50bad78ea1cd::t_6ff375954c6ad0 46
+README.md
+  s_3a50bad78ea1cd::t_5abd1a52d84f83 150-151
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "163df3796c75e1af268d102f80fdde1d5f76abc5",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
