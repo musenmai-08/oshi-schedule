@@ -122,7 +122,7 @@ export class OshiScheduleStack extends Stack {
     databaseSecurityGroup.addIngressRule(workerSecurityGroup, ec2.Port.tcp(3306), 'Worker and migration to MySQL');
 
     const databaseEngine = rds.DatabaseInstanceEngine.mysql({
-      version: rds.MysqlEngineVersion.of('8.4.6', '8.4'),
+      version: rds.MysqlEngineVersion.VER_8_4_10,
     });
     const databaseParameterGroup = new rds.ParameterGroup(this, 'DatabaseParameterGroup', {
       engine: databaseEngine,

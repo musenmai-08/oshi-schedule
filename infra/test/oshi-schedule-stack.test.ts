@@ -59,7 +59,7 @@ describe('OshiScheduleStack', () => {
       AllocatedStorage: '20',
       DeletionProtection: true,
       Engine: 'mysql',
-      EngineVersion: '8.4.6',
+      EngineVersion: '8.4.10',
     });
     template.hasResourceProperties('AWS::RDS::DBSubnetGroup', {
       DBSubnetGroupDescription: Match.anyValue(),
