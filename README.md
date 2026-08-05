@@ -147,6 +147,8 @@ pnpm validate:yaml -- docs/api/openapi.yaml amplify.yml .github/workflows/*.yml
 
 実`cdk deploy`はこのREADMEから直接開始せず、[staging構築チェックリスト](docs/operations/staging-setup.md)と[AWS bootstrap](docs/operations/aws-bootstrap.md)に従ってください。RDS、ALB、public IPv4はstagingでも主要固定費です。AWS resourceはまだ作成されていません。
 
+AWS bootstrap前にGitHubのdefault branchを`main`へ変更し、`staging`/`production` Environmentを作成して、mainのCI validate/E2Eを成功させてください。CIのproduction Web buildは`example.invalid`の非秘密公開テスト値を使用し、実Secretや外部serviceを必要としません。RDSはMySQL 8.4.10を固定し、minor更新手順と終了日は[AWS bootstrap](docs/operations/aws-bootstrap.md)を正とします。
+
 ## 構成
 
 ```text

@@ -36,6 +36,8 @@ Node.js 22.23.1、repositoryの`packageManager`に固定したpnpmを使い、�
 
 E2Eは現在の規模では毎PR実行する。所要時間が継続して10分を超えた場合だけ、smoke subsetをPR、full suiteをmainへ分ける。
 
+CIのWeb buildは`example.invalid`配下の非秘密`NEXT_PUBLIC_API_URL`/Supabase URL、テスト専用publishable文字列、`NEXT_PUBLIC_DEMO_MODE=false`を使う。E2EはWeb 3310/API 4310、fake API、`NEXT_PUBLIC_DEMO_MODE=true`へ明示的に切り替えるため、実外部serviceやローカル`.env`へ依存しない。
+
 ## main merge後のstaging pipeline
 
 ```mermaid
@@ -97,6 +99,8 @@ schema変更がないdeployでもmigration taskを実行して未適用migration
 - smoke中にCalendar作成や外部event変更を行うtestは専用test userと明示承認なしに実行しない。
 
 staging workflowはRepository Variable `STAGING_DEPLOY_ENABLED=true`が設定されるまでdeploy jobをskipする。AWS未構築のrepositoryへworkflowを追加してもresource作成を開始しない。production workflowは`workflow_dispatch`、GitHub `production` Environmentのrequired reviewer、`DEPLOY_PRODUCTION`確認文字列をすべて必須とする。
+
+Repositoryのdefault branchは`main`とする。GitHub UIはdefault branch上のworkflowを基準に手動実行候補を表示するため、別branchがdefaultのままなら`deploy-production.yml`が追跡済みかつYAML妥当でも表示されない場合がある。OIDC subjectとpush triggerは`main`限定を維持し、誤ったdefault branchへコードを合わせない。
 
 ## rollback
 

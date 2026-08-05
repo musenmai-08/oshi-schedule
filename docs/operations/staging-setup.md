@@ -10,6 +10,8 @@ application、Docker、CDK、GitHub Actions、Amplify build、smoke scriptは実
 - [ ] AWS Pricing CalculatorでRDS、ALB、Fargate、public IPv4、Amplify、Logs、Secrets、ECR/S3、Route 53、backupを確認
 - [ ] domain/TLD、Route 53 hosted zone、staging Web/API FQDNを確定
 - [ ] alert email、monthly budget、RDS class/storage/retention/deletion protectionを承認
+- [ ] GitHub default branchを`main`へ変更し、`staging`/`production` Environmentを作成
+- [ ] GitHub ActionsでCI validate/E2Eが成功し、3 workflowがActions画面に表示されることを確認
 - [ ] GitHub owner/repository、staging/production Environment方針を確定
 - [ ] staging Supabase/Google Cloud projectをproductionと分離
 - [ ] OAuth client、YouTube key、allowed email、encryption keyを安全に用意
@@ -33,7 +35,7 @@ application、Docker、CDK、GitHub Actions、Amplify build、smoke scriptは実
 
 - Web/APIがHTTPSのみで、HTTPはredirect。domain未設定の503 listenerを完成扱いにしない
 - `/health`はprocess liveness、`/ready`はRDS readinessとして成功
-- RDSはMySQL 8.4、isolated subnet、public accessなし、TLS required、Single-AZ、20 GiB、backup 1日
+- RDSはMySQL 8.4.10、isolated subnet、public accessなし、TLS required、Single-AZ、20 GiB、backup 1日
 - API inboundはALBのみ、DB inboundはAPI/worker SGのみ、worker inboundなし、NAT Gatewayなし
 - API desired count 1、circuit breaker、graceful shutdown、CloudWatch Logsが機能
 - Schedulerはhourly、retry 2、DLQ、exit非0通知を持ち、lease/fencingを維持

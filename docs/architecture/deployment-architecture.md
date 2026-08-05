@@ -2,7 +2,7 @@
 
 ## ステータス
 
-- 決定日: 2026-08-04
+- 決定日: 2026-08-04（RDS minorは2026-08-05更新）
 - 対象: 個人利用から招待制 beta、将来の小規模一般公開
 - 採用案: AWS 統一構成（Web のみ AWS Amplify Hosting、API/worker/DB は AWS のマネージドサービス）
 
@@ -55,7 +55,7 @@ production と staging は同じ論理構成を別stackとして使う。初期�
 | Web            | Amplify app（staging branch）               | 独立 Amplify app                            | Next.js SSR、middleware、CSP、Supabase PKCE callback |
 | API            | Fargate service、desired count 1            | Fargate service、beta は desired count 1    | Express API、認証、手動同期、Google credential 管理  |
 | worker         | Scheduler → Fargate RunTask                 | 独立 Scheduler → Fargate RunTask            | 1時間ごとの同期。一回実行後に終了                    |
-| MySQL          | RDS for MySQL 8.4、Single-AZ、独立 instance | RDS for MySQL 8.4、Single-AZ、独立 instance | 永続データ、lease、fencing、migration                |
+| MySQL          | RDS for MySQL 8.4.10、Single-AZ、独立 instance | RDS for MySQL 8.4.10、Single-AZ、独立 instance | 永続データ、lease、fencing、migration                |
 | image          | staging ECRのimmutable digest                 | 同じmanifestをproduction ECRへ昇格          | API と worker を同一 image、別 command で実行        |
 
 Web はコンテナ化しない。API と worker は同じ source、Prisma Client、migration を含む同一 imageを使い、APIは`node api/dist/server.js`、workerは`node worker/dist/index.js`をcommandにする。migrationは同じimageの一回限りECS taskから`api/node_modules/.bin/prisma migrate deploy --schema=/opt/oshi-schedule/prisma/schema.prisma`を実行する。RDS managed secretのusername/passwordはentrypointがprocess memory上でTLS必須の`DATABASE_URL`へ構成し、imageやCloudFormationへ完全URLを保存しない。
@@ -106,6 +106,7 @@ Supabase Site URL/Redirect URL、Google OAuth client、`WEB_ORIGIN` は環境ご
 - **ECS FargateをAPIに採用**: Express/Prismaを大きく変更せず、120秒を超える可能性がある同期リクエスト、任意command、graceful shutdown、将来の水平scaleを扱える。App Runnerはrequest total timeoutが120秒なので不採用。Lambdaは処理分割を伴うため不採用。
 - **Scheduler + Fargate Taskをworkerに採用**: 一回実行型CLIとexit codeをそのまま使える。常駐workerとLambdaへの移植は不要。
 - **RDS for MySQLを採用**: Prisma migration、外部キー、transaction、lease/fencingをMySQLのまま使える。Aurora Serverless v2は小規模で構成と費用の利点が明確でなく、auto-pause復帰もある。MySQL互換PaaSは互換性・backup・network境界の検証対象が増えるため初期採用しない。
+- **MySQL 8.4 minorを固定**: 初回構築はAWS/CDKが対応する8.4.10をstaging/production共通で使う。standard support終了日前にAWSの現行minor、東京region、Prisma、CDK定数を再確認し、integration testと`cdk diff`を経て更新する。
 - VercelはNext.jsとの適合性が最も高いが、商用Proのseat固定費とAWSとの運用分散を避けるため採用しない。Cloud Run案はscale-to-zeroで安価になり得るが、Cloud SQLとの接続pool、cold start、複数cloudの監視と権限管理を優先課題にしないため採用しない。
 
 詳細は[費用見積](../operations/cost-estimate.md)と[Web配置ADR](../decisions/0001-host-web-on-amplify.md)を参照する。

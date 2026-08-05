@@ -2,6 +2,8 @@
 
 この手順はAWS resourceを作る直前のrunbookである。STEP 4の実装・検証では以下のcommandを実行しておらず、CloudFormation stackも存在しない。実行するとECR、ALB、RDS、public IPv4などの課金が始まるため、先に[費用見積](cost-estimate.md)を承認する。
 
+GitHubのdefault branchが`main`、`staging`/`production` Environmentが作成済み、mainのCI validate/E2Eが成功済みであることもbootstrapの前提とする。workflowがdefault branchに存在しない状態やCI失敗中にはAWS resourceを作らない。
+
 ## 必要な入力
 
 - AWS account ID、`ap-northeast-1`などのregion、初回bootstrapに使うAWS CLI profile
@@ -27,6 +29,20 @@ pnpm --filter @oshi-schedule/infra synth
 ```
 
 最後の`synth`はdomainなしでも成功し、TLS未設定のALB listenerは503固定応答になる。これは検査用であり完成したHTTP stagingではない。full deployでは必ず`deployReady=true`を指定し、domain/certificate/public Web設定が欠ければconfig validationで停止させる。
+
+### RDS MySQL minor version
+
+2026-08-05確認時点で、staging/productionはRDS for MySQL 8.4.10を固定指定する。AWSはMySQL 8.4を全Commercial Regionで提供し、8.4.10を現行対応minorとして掲載している。8.4.10のRDS standard support終了予定は2027-07-07、旧8.4.6は2026-09-30である。CDKは`MysqlEngineVersion.VER_8_4_10`を使い、Prisma migration/integration testはMySQL 8.4系で検証する。
+
+AWSログイン後、実deploy直前に東京regionのlive catalogも確認する。
+
+```bash
+aws rds describe-db-engine-versions --profile <profile> --region ap-northeast-1 \
+  --engine mysql --engine-version 8.4.10 \
+  --query 'DBEngineVersions[0].EngineVersion' --output text
+```
+
+minor更新時はAWSのsupported versionと終了日、東京regionのlive catalog、利用中CDKの定数を確認し、stack/testのversionを同時に変更する。MySQL integration、CDK test/synth、`cdk diff`を通し、既存環境ではsnapshot/maintenance windowを承認してから適用する。majorは8.4のまま維持し、未検証の自動major upgradeは行わない。
 
 ## 2. CDK toolkitとECR-first bootstrap
 
