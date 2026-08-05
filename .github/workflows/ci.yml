@@ -109,6 +109,8 @@ jobs:
           package-manager-cache: false
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
+      - name: Build E2E workspace dependencies
+        run: pnpm --filter @oshi-schedule/shared build
       - run: pnpm test:e2e
       - uses: actions/upload-artifact@v6
         if: failure()
