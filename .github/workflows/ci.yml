@@ -10,6 +10,14 @@ on:
 permissions:
   contents: read
 
+env:
+  # Reserved, non-routable values used only to validate the production Web build contract.
+  # Playwright overrides API URL and demo mode with its local fake-service values.
+  NEXT_PUBLIC_API_URL: https://api.ci.example.invalid
+  NEXT_PUBLIC_DEMO_MODE: 'false'
+  NEXT_PUBLIC_SUPABASE_URL: https://supabase.ci.example.invalid
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_only_not_a_secret
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -64,7 +72,8 @@ jobs:
       - run: pnpm lint
       - name: Unit and MySQL integration tests
         run: pnpm test
-      - run: pnpm build
+      - name: Build with safe public CI configuration
+        run: pnpm build
       - name: Validate OpenAPI and deployment YAML
         run: >-
           pnpm validate:yaml --
@@ -83,6 +92,9 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    env:
+      E2E_WEB_PORT: '3310'
+      E2E_API_PORT: '4310'
     steps:
       - uses: actions/checkout@v7
         with:
