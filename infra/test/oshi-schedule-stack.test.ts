@@ -1,8 +1,28 @@
 import { App } from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import { describe, expect, it } from 'vitest';
-import type { DeploymentConfig, EnvironmentName } from '../lib/config.js';
+import { loadConfig, type DeploymentConfig, type EnvironmentName } from '../lib/config.js';
 import { OshiScheduleStack } from '../lib/oshi-schedule-stack.js';
+
+const fullStagingContext: Record<string, unknown> = {
+  environment: 'staging',
+  deployReady: 'true',
+  bootstrapOnly: 'false',
+  awsAccount: '111111111111',
+  awsRegion: 'ap-northeast-1',
+  hostedZoneId: 'Z00000000000000000000',
+  hostedZoneName: 'example.invalid',
+  webDomainName: 'staging.example.invalid',
+  apiDomainName: 'api.staging.example.invalid',
+  certificateArn:
+    'arn:aws:acm:ap-northeast-1:111111111111:certificate/00000000-0000-4000-8000-000000000000',
+  alertEmail: 'synth-only@example.invalid',
+  nextPublicSupabaseUrl: 'https://supabase.example.invalid',
+  nextPublicSupabasePublishableKey: 'sb_publishable_synth_only',
+  githubOwner: 'example-owner',
+  githubRepository: 'oshi-schedule',
+  imageTag: 'sha-0123456789abcdef',
+};
 
 const configFor = (environmentName: EnvironmentName): DeploymentConfig => ({
   environmentName,
@@ -35,19 +55,60 @@ const render = (environmentName: EnvironmentName = 'staging'): Template => {
   return Template.fromStack(stack);
 };
 
+const renderFromCliContext = (context: Record<string, unknown>): Template => {
+  const app = new App({ context });
+  const config = loadConfig(app);
+  return Template.fromStack(
+    new OshiScheduleStack(app, `cli-${config.environmentName}`, {
+      env: { account: config.account, region: config.region },
+      config,
+    }),
+  );
+};
+
 describe('OshiScheduleStack', () => {
-  it('supports an ECR-first bootstrap without creating billable compute or database resources', () => {
-    const app = new App();
-    const config = { ...configFor('staging'), bootstrapOnly: true };
-    const template = Template.fromStack(
-      new OshiScheduleStack(app, 'test-bootstrap', {
-        env: { account: '111111111111', region: 'ap-northeast-1' },
-        config,
-      }),
-    );
+  it('supports an ECR-first bootstrap from CLI string context without full-stack resources', () => {
+    const template = renderFromCliContext({
+      environment: 'staging',
+      deployReady: 'true',
+      bootstrapOnly: 'true',
+      awsAccount: '111111111111',
+      awsRegion: 'ap-northeast-1',
+    });
+    template.resourceCountIs('AWS::EC2::VPC', 1);
     template.resourceCountIs('AWS::ECR::Repository', 1);
     template.resourceCountIs('AWS::ECS::Service', 0);
     template.resourceCountIs('AWS::RDS::DBInstance', 0);
+    template.resourceCountIs('AWS::ElasticLoadBalancingV2::LoadBalancer', 0);
+    template.resourceCountIs('AWS::Amplify::App', 0);
+    template.resourceCountIs('AWS::Scheduler::Schedule', 0);
+    template.resourceCountIs('AWS::Budgets::Budget', 0);
+    template.resourceCountIs('AWS::SecretsManager::Secret', 0);
+    template.resourceCountIs('AWS::SSM::Parameter', 0);
+  });
+
+  it('synthesizes full staging resources from CLI string context', () => {
+    const template = renderFromCliContext(fullStagingContext);
+    template.resourceCountIs('AWS::ECS::Service', 1);
+    template.resourceCountIs('AWS::RDS::DBInstance', 1);
+    template.resourceCountIs('AWS::ElasticLoadBalancingV2::LoadBalancer', 1);
+    template.resourceCountIs('AWS::Amplify::App', 1);
+    template.resourceCountIs('AWS::Scheduler::Schedule', 1);
+    template.resourceCountIs('AWS::Budgets::Budget', 1);
+  });
+
+  it('applies RDS and worker CLI boolean strings to the template', () => {
+    const template = renderFromCliContext({
+      ...fullStagingContext,
+      rdsMultiAz: 'true',
+      rdsDeletionProtection: 'false',
+      workerScheduleEnabled: 'true',
+    });
+    template.hasResourceProperties('AWS::RDS::DBInstance', {
+      MultiAZ: true,
+      DeletionProtection: false,
+    });
+    template.hasResourceProperties('AWS::Scheduler::Schedule', { State: 'ENABLED' });
   });
 
   it('uses public compute subnets without NAT and keeps RDS private', () => {

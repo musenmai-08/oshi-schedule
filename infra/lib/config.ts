@@ -37,6 +37,17 @@ const optionalString = (app: App, name: string): string | undefined => {
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
 };
 
+export const parseBooleanContext = (
+  name: string,
+  value: unknown,
+  defaultValue: boolean,
+): boolean => {
+  if (value === undefined) return defaultValue;
+  if (value === true || value === 'true') return true;
+  if (value === false || value === 'false') return false;
+  throw new Error(`CDK context ${name} must be true or false`);
+};
+
 const requiredForDeploy = (config: DeploymentConfig, name: keyof DeploymentConfig): void => {
   if (config[name] === undefined || config[name] === '') {
     throw new Error(`CDK deploy requires context: ${String(name)}`);
@@ -53,8 +64,12 @@ export const loadConfig = (app: App): DeploymentConfig => {
     environmentName,
     account: optionalString(app, 'awsAccount'),
     region: optionalString(app, 'awsRegion') ?? 'ap-northeast-1',
-    deployReady: app.node.tryGetContext('deployReady') === true,
-    bootstrapOnly: app.node.tryGetContext('bootstrapOnly') === true,
+    deployReady: parseBooleanContext('deployReady', app.node.tryGetContext('deployReady'), false),
+    bootstrapOnly: parseBooleanContext(
+      'bootstrapOnly',
+      app.node.tryGetContext('bootstrapOnly'),
+      false,
+    ),
     hostedZoneId: optionalString(app, 'hostedZoneId'),
     hostedZoneName: optionalString(app, 'hostedZoneName'),
     webDomainName: optionalString(app, 'webDomainName'),
@@ -74,9 +89,17 @@ export const loadConfig = (app: App): DeploymentConfig => {
     rdsInstanceType: optionalString(app, 'rdsInstanceType') ?? 't4g.micro',
     rdsAllocatedStorageGiB: Number(app.node.tryGetContext('rdsAllocatedStorageGiB') ?? 20),
     rdsBackupRetentionDays: Number(app.node.tryGetContext('rdsBackupRetentionDays') ?? 1),
-    rdsMultiAz: app.node.tryGetContext('rdsMultiAz') === true,
-    rdsDeletionProtection: app.node.tryGetContext('rdsDeletionProtection') !== false,
-    workerScheduleEnabled: app.node.tryGetContext('workerScheduleEnabled') === true,
+    rdsMultiAz: parseBooleanContext('rdsMultiAz', app.node.tryGetContext('rdsMultiAz'), false),
+    rdsDeletionProtection: parseBooleanContext(
+      'rdsDeletionProtection',
+      app.node.tryGetContext('rdsDeletionProtection'),
+      true,
+    ),
+    workerScheduleEnabled: parseBooleanContext(
+      'workerScheduleEnabled',
+      app.node.tryGetContext('workerScheduleEnabled'),
+      false,
+    ),
   };
 
   if (!Number.isFinite(config.monthlyBudgetUsd) || config.monthlyBudgetUsd <= 0) {

@@ -30,6 +30,8 @@ pnpm --filter @oshi-schedule/infra synth
 
 最後の`synth`はdomainなしでも成功し、TLS未設定のALB listenerは503固定応答になる。これは検査用であり完成したHTTP stagingではない。full deployでは必ず`deployReady=true`を指定し、domain/certificate/public Web設定が欠ければconfig validationで停止させる。
 
+CDK CLIの`-c key=value`は値を文字列としてapplicationへ渡す。boolean contextは共通parserがbooleanまたは小文字の文字列`true`/`false`だけを受け付け、未指定時は`cdk.json`または実装のdefaultを使う。`TRUE`、`yes`、`1`、空文字などはsynth/deploy前に設定エラーとして拒否する。
+
 ### RDS MySQL minor version
 
 2026-08-05確認時点で、staging/productionはRDS for MySQL 8.4.10を固定指定する。AWSはMySQL 8.4を全Commercial Regionで提供し、8.4.10を現行対応minorとして掲載している。8.4.10のRDS standard support終了予定は2027-07-07、旧8.4.6は2026-09-30である。CDKは`MysqlEngineVersion.VER_8_4_10`を使い、Prisma migration/integration testはMySQL 8.4系で検証する。
@@ -60,7 +62,7 @@ AWS_PROFILE=<profile> pnpm --filter @oshi-schedule/infra cdk deploy \
   -c awsRegion=<region>
 ```
 
-この段階はVPCとimmutable ECR repositoryだけを同じstackに作る。ECS/RDS/ALBは作らない。出力されたrepositoryへ検証済みimageをcommit SHA tagでpushし、digestを記録する。
+この段階はVPC（public subnetとisolated database subnet、NATなし）とimmutable ECR repositoryだけを同じstackに作る。ECS service、RDS、ALB、Scheduler、Amplify、Budget、application Secret/Parameterは作らない。`deployReady=true`はaccountを必須化し、`bootstrapOnly=true`との組み合わせではfull deploy入力を要求しない。出力されたrepositoryへ検証済みimageをcommit SHA tagでpushし、digestを記録する。
 
 ```bash
 docker build --platform linux/amd64 -t oshi-schedule:<commit-sha> .
@@ -96,6 +98,8 @@ Route 53 hosted zoneを確認し、staging API FQDNを含むACM certificateを�
 ## 4. full stack
 
 deploy前に`cdk diff`を読み、RDS/ALB/ECS/Budgetとremoval policyを確認する。例の値を実値に置換する。
+
+`deployReady=true`かつ`bootstrapOnly=false`では、domain/certificate、通知先、GitHub、公開Supabase設定、既存immutable image tagを必須にする。入力不足または不正boolean contextのままfull stackをsynth/deployしない。
 
 ```bash
 AWS_PROFILE=<profile> pnpm --filter @oshi-schedule/infra cdk diff \

@@ -17,6 +17,7 @@ application、Docker、CDK、GitHub Actions、Amplify build、smoke scriptは実
 - [ ] OAuth client、YouTube key、allowed email、encryption keyを安全に用意
 - [ ] `pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm test:e2e`が成功
 - [ ] Docker/API/worker/migration、CDK test/synth、YAML/shell検証が成功
+- [ ] 実CLI形式の`bootstrapOnly=true` synthでVPC/ECRだけが含まれ、RDS/ECS/ALB/Amplify/Scheduler/Budgetが0件であることを機械確認
 
 ## 構築順
 
