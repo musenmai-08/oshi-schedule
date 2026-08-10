@@ -1,0 +1,31 @@
+infra/test/oshi-schedule-stack.test.ts
+  s_3a50bad78ea1cd::t_d9edfeddc01eaf 4,7-16,19-26,58-68,70-78,82-111
+  s_3a50bad78ea1cd::t_e19d147a4a7dc9 17-18
+docs/operations/staging-setup.md
+  s_3a50bad78ea1cd::t_f0b8e59741c3d1 20
+docs/operations/aws-bootstrap.md
+  s_3a50bad78ea1cd::t_f0b8e59741c3d1 33-34,65,102
+  s_3a50bad78ea1cd::t_e7fdd3ce4e078d 103
+infra/lib/config.ts
+  s_3a50bad78ea1cd::t_d9edfeddc01eaf 45-50,67,92-102
+  s_3a50bad78ea1cd::t_e19d147a4a7dc9 40-44,68-72
+infra/test/config.test.ts
+  s_3a50bad78ea1cd::t_d9edfeddc01eaf 3-22,34,38-62
+  s_3a50bad78ea1cd::t_93ace669f2c74e 63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "92193c6778c039702e2e903178a12f27a3b65f74",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
