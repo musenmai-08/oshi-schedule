@@ -88,6 +88,16 @@ jobs:
             exit 1
           }
           echo 'staging digest verified'
+      - uses: aws-actions/amazon-ecr-login@v2
+      - name: Scan staging-verified image before promotion
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.STAGING_ECR_REPOSITORY }}@${{ env.IMAGE_DIGEST }}
+          format: table
+          exit-code: '1'
+          ignore-unfixed: false
+          severity: HIGH,CRITICAL
+          trivyignores: .trivyignore
       - name: Verify pre-deployment RDS snapshot
         run: |
           status="$(aws rds describe-db-snapshots --region "$AWS_REGION" \

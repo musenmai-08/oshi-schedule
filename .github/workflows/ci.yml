@@ -59,6 +59,8 @@ jobs:
           cache: pnpm
           package-manager-cache: false
       - run: pnpm install --frozen-lockfile
+      - name: Validate expiring Trivy exceptions
+        run: pnpm validate:trivy-ignore
       - name: Apply migrations to integration database
         run: pnpm exec prisma migrate deploy
       - name: Check migration status and schema drift
@@ -88,6 +90,15 @@ jobs:
           pnpm --filter @oshi-schedule/infra synth
       - name: Build production container
         run: docker build --tag oshi-schedule:ci .
+      - name: Scan production container
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: oshi-schedule:ci
+          format: table
+          exit-code: '1'
+          ignore-unfixed: false
+          severity: HIGH,CRITICAL
+          trivyignores: .trivyignore
 
   e2e:
     runs-on: ubuntu-latest

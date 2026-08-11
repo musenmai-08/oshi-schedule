@@ -74,6 +74,7 @@ jobs:
           exit-code: '1'
           ignore-unfixed: false
           severity: HIGH,CRITICAL
+          trivyignores: .trivyignore
       - name: Push image and resolve digest
         id: pushed
         env:

@@ -37,3 +37,7 @@ OAuth 同意画面、ブランド検証、最小scope候補（`calendar.app.crea
 ## 脆弱性報告
 
 公開 issue に機密情報を書かず、運営者の非公開連絡先へ再現手順と影響を報告する。MVP 公開前に連絡先を README とサイトへ掲載する。
+
+## Container脆弱性例外
+
+修正版のないDebian package CVEだけを、CVE単位・期限付き・根拠付きで一時的にリスク受容する。修正可能なCVE、Node/application依存、理由や期限のない例外、`--ignore-unfixed`による一括除外は禁止する。現在の例外、mitigation、承認、失効後の再評価手順は[Container vulnerability exception registry](./container-vulnerability-exceptions.md)で管理する。
