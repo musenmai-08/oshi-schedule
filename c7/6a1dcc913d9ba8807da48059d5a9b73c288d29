@@ -1,0 +1,20 @@
+docs/security/container-vulnerability-exceptions.md
+  s_3a50bad78ea1cd::t_e3f0f39c254e97 88-93
+  s_3a50bad78ea1cd::t_c7de5b34cbf127 12-13,16-17,28,42,45-47,55-56,58-62,80-87,94,101-108,113-116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "c76a1dcc913d9ba8807da48059d5a9b73c288d29",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
