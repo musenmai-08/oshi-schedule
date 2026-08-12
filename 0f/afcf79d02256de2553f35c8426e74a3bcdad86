@@ -1,0 +1,37 @@
+docs/decisions/0007-defer-shared-rate-limit-store.md
+  s_3a50bad78ea1cd::t_0b9c0de3be6792 13,24
+docs/decisions/0006-start-api-with-one-task.md
+  s_3a50bad78ea1cd::t_0b9c0de3be6792 13
+docs/decisions/0008-use-http-api-and-async-sync.md
+  s_3a50bad78ea1cd::t_7be6b2f7324e5f 1-23
+docs/operations/cost-estimate.md
+  s_3a50bad78ea1cd::t_89072076c4979f 12-21,25-29,38-41,49-51,53-54
+  s_3a50bad78ea1cd::t_83423a0a6bd8e1 1,3,5-8,10,23,31-37,43,45,47,52,56-67,69-72
+  s_3a50bad78ea1cd::t_0bd440863d4882 30,42
+docs/decisions/0004-use-rds-for-mysql.md
+  s_3a50bad78ea1cd::t_3872bc32ee2d42 28
+docs/decisions/0002-run-api-on-ecs-fargate.md
+  s_3a50bad78ea1cd::t_0b9c0de3be6792 5,9,13,23
+docs/decisions/0005-separate-staging-and-production.md
+  s_3a50bad78ea1cd::t_3872bc32ee2d42 5,13,23,27
+README.md
+  s_3a50bad78ea1cd::t_7a0c10833b29b4 148,157
+docs/security/security-policy.md
+  s_3a50bad78ea1cd::t_0b9c0de3be6792 13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "0fafcf79d02256de2553f35c8426e74a3bcdad86",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
