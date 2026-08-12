@@ -1,0 +1,64 @@
+docs/operations/staging-cost-control.md
+  s_3a50bad78ea1cd::t_3260abacc4c583 95
+  s_3a50bad78ea1cd::t_bfbc1e10ce7c7c 97-98
+  s_3a50bad78ea1cd::t_21865938f66262 107
+  s_3a50bad78ea1cd::t_ee304e30cbd319 125
+  s_3a50bad78ea1cd::t_d9a870c0129756 15-18,33-36,57,72-77,83-93,99-106,108-111,117
+  s_3a50bad78ea1cd::t_8a6cf411c8201f 94
+  s_3a50bad78ea1cd::t_5d304e3307fd45 126
+scripts/aws/staging-auto-sleep/deadline.mjs
+  s_3a50bad78ea1cd::t_69e65810386a3c 5
+  s_3a50bad78ea1cd::t_9917f8987a8046 1-4,6-72
+scripts/aws/staging-operations.mjs
+  s_3a50bad78ea1cd::t_9e4ad74e4ddf8b 9-17,86,143-167,179,184,325,348,364-380,575,585,602,611-612,630-636,642,647,655,671
+  s_3a50bad78ea1cd::t_b87c50825583c7 658-660
+  s_3a50bad78ea1cd::t_2f041a2b989870 190
+  s_3a50bad78ea1cd::t_cbfc277c234819 518
+infra/lib/oshi-schedule-stack.ts
+  s_3a50bad78ea1cd::t_f260fbf15c1193 1-2,52,54-55,57-58
+  s_3a50bad78ea1cd::t_7afc7883b6eae4 56
+  s_3a50bad78ea1cd::t_9e3e1772fb5601 23,53,493-527,535-552,560-602,676,940-945
+  s_3a50bad78ea1cd::t_3a7faf74a21193 528-534
+  s_3a50bad78ea1cd::t_e9b03bacd20afe 553-559
+docs/operations/staging-setup.md
+  s_3a50bad78ea1cd::t_d9a870c0129756 14,38-39,52
+scripts/aws/staging-operations.test.mjs
+  s_3a50bad78ea1cd::t_a34480601e042a 8-9,21,37,46,110-117,130-131,191-198,207-209,216,285,301-326
+  s_3a50bad78ea1cd::t_69e65810386a3c 269-271
+scripts/aws/staging-auto-sleep.test.mjs
+  s_3a50bad78ea1cd::t_7c04b60366c996 1-163,170-179,182-201,205-219
+  s_3a50bad78ea1cd::t_a2cf2fb24745de 180-181
+  s_3a50bad78ea1cd::t_69e65810386a3c 164-169
+  s_3a50bad78ea1cd::t_1fab73af2c32f4 202-204
+scripts/aws/staging-auto-sleep/sleep-core.mjs
+  s_3a50bad78ea1cd::t_9917f8987a8046 1-17
+infra/test/oshi-schedule-stack.test.ts
+  s_3a50bad78ea1cd::t_d2d0a49d7b78f0 183-184
+  s_3a50bad78ea1cd::t_f32164674bae61 315-323,325-334
+  s_3a50bad78ea1cd::t_e9b03bacd20afe 324
+  s_3a50bad78ea1cd::t_3a7faf74a21193 335-336
+  s_3a50bad78ea1cd::t_41c3db3a664d6d 341-345
+  s_3a50bad78ea1cd::t_007aa39665223d 85-86,99,122-123,277-304,308-314,337-340,346-352,355-358,361-364,416-417
+  s_3a50bad78ea1cd::t_69e65810386a3c 305-307,353-354,359-360
+scripts/aws/staging-auto-sleep/index.mjs
+  s_3a50bad78ea1cd::t_9917f8987a8046 1-2,5-54,58-128,136-152
+  s_3a50bad78ea1cd::t_ad11a07835e104 3-4
+  s_3a50bad78ea1cd::t_a2cf2fb24745de 55-57
+  s_3a50bad78ea1cd::t_69e65810386a3c 129-135
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "dc5a9f96b4e9bb30600fe3f8fedb6b9b248660be",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
