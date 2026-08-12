@@ -97,7 +97,19 @@ describe('OshiScheduleStack', () => {
     template.resourceCountIs('AWS::Scheduler::Schedule', 1);
     template.resourceCountIs('AWS::Budgets::Budget', 1);
     template.hasResourceProperties('AWS::Budgets::Budget', {
-      Budget: Match.objectLike({ BudgetLimit: { Amount: 40, Unit: 'USD' } }),
+      Budget: Match.objectLike({
+        BudgetLimit: { Amount: 40, Unit: 'USD' },
+        CostFilters: { TagKeyValue: ['user:Environment$staging'] },
+      }),
+      NotificationsWithSubscribers: Match.arrayWith([
+        Match.objectLike({
+          Notification: Match.objectLike({
+            NotificationType: 'FORECASTED',
+            Threshold: 80,
+            ThresholdType: 'PERCENTAGE',
+          }),
+        }),
+      ]),
     });
     for (const output of [
       'EnvironmentName',
@@ -113,6 +125,42 @@ describe('OshiScheduleStack', () => {
     ]) {
       template.hasOutput(output, {});
     }
+  });
+
+  it('connects the staging domain to the main Amplify source branch without application secrets', () => {
+    const template = renderFromCliContext(fullStagingContext);
+    template.resourceCountIs('AWS::Amplify::App', 1);
+    template.resourceCountIs('AWS::Amplify::Branch', 1);
+    template.resourceCountIs('AWS::Amplify::Domain', 1);
+    template.hasResourceProperties('AWS::Amplify::Branch', { BranchName: 'main' });
+    template.hasResourceProperties('AWS::Amplify::Domain', {
+      DomainName: 'example.invalid',
+      SubDomainSettings: [{ BranchName: 'main', Prefix: 'staging' }],
+    });
+
+    const app = Object.values(template.findResources('AWS::Amplify::App'))[0];
+    expect(app).toBeDefined();
+    const environmentNames = (app!.Properties?.EnvironmentVariables as Array<{ Name: string }>).map(
+      ({ Name }) => Name,
+    );
+    expect(environmentNames.sort()).toEqual(
+      [
+        'AMPLIFY_MONOREPO_APP_ROOT',
+        'NEXT_PUBLIC_API_URL',
+        'NEXT_PUBLIC_DEMO_MODE',
+        'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
+        'NEXT_PUBLIC_SUPABASE_URL',
+        '_CUSTOM_IMAGE',
+      ].sort(),
+    );
+    expect(environmentNames).not.toEqual(
+      expect.arrayContaining([
+        'GOOGLE_CLIENT_SECRET',
+        'SUPABASE_SERVICE_ROLE_KEY',
+        'TOKEN_ENCRYPTION_KEYS',
+        'YOUTUBE_API_KEY',
+      ]),
+    );
   });
 
   it('does not expose full-stack operation outputs during bootstrap-only synth', () => {
@@ -171,7 +219,9 @@ describe('OshiScheduleStack', () => {
     const template = render();
     template.hasResourceProperties('AWS::ECS::Service', {
       DesiredCount: 1,
-      DeploymentConfiguration: Match.objectLike({ DeploymentCircuitBreaker: { Enable: true, Rollback: true } }),
+      DeploymentConfiguration: Match.objectLike({
+        DeploymentCircuitBreaker: { Enable: true, Rollback: true },
+      }),
       NetworkConfiguration: {
         AwsvpcConfiguration: Match.objectLike({ AssignPublicIp: 'ENABLED' }),
       },
@@ -196,7 +246,9 @@ describe('OshiScheduleStack', () => {
     }
     const securityGroups = template.findResources('AWS::EC2::SecurityGroup');
     const worker = Object.values(securityGroups).find(
-      (resource) => resource.Properties?.GroupDescription === 'Worker and migration tasks have no inbound rules',
+      (resource) =>
+        resource.Properties?.GroupDescription ===
+        'Worker and migration tasks have no inbound rules',
     );
     expect(worker).toBeDefined();
     expect(worker?.Properties?.SecurityGroupIngress).toBeUndefined();
@@ -223,7 +275,9 @@ describe('OshiScheduleStack', () => {
       String(resource.Properties?.Family).endsWith('-migration'),
     );
     expect(migration).toBeDefined();
-    const secrets = migration?.Properties?.ContainerDefinitions?.[0]?.Secrets as Array<{ Name: string }>;
+    const secrets = migration?.Properties?.ContainerDefinitions?.[0]?.Secrets as Array<{
+      Name: string;
+    }>;
     expect(secrets.map(({ Name }) => Name).sort()).toEqual(['DB_PASSWORD', 'DB_USER']);
   });
 
@@ -240,6 +294,10 @@ describe('OshiScheduleStack', () => {
       UpdateReplacePolicy: 'Retain',
       Properties: Match.objectLike({ DeletionProtection: true }),
     });
+  });
+
+  it('uses main as the production Amplify source branch', () => {
+    render('production').hasResourceProperties('AWS::Amplify::Branch', { BranchName: 'main' });
   });
 
   it('restricts GitHub OIDC to the configured main branch', () => {

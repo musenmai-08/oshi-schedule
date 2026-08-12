@@ -45,6 +45,7 @@ export class OshiScheduleStack extends Stack {
     const { config } = props;
     const prefix = `oshi-schedule-${config.environmentName}`;
     const isProduction = config.environmentName === 'production';
+    const deploymentBranch = 'main';
     const webOrigin = config.webDomainName
       ? `https://${config.webDomainName}`
       : 'https://domain-required.invalid';
@@ -100,7 +101,11 @@ export class OshiScheduleStack extends Stack {
       description: 'Public ingress to the application load balancer',
       allowAllOutbound: true,
     });
-    albSecurityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(80), 'HTTP redirect or TLS-required response');
+    albSecurityGroup.addIngressRule(
+      ec2.Peer.anyIpv4(),
+      ec2.Port.tcp(80),
+      'HTTP redirect or TLS-required response',
+    );
     albSecurityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(443), 'HTTPS');
 
     const apiSecurityGroup = new ec2.SecurityGroup(this, 'ApiSecurityGroup', {
@@ -120,7 +125,11 @@ export class OshiScheduleStack extends Stack {
       allowAllOutbound: false,
     });
     databaseSecurityGroup.addIngressRule(apiSecurityGroup, ec2.Port.tcp(3306), 'API to MySQL');
-    databaseSecurityGroup.addIngressRule(workerSecurityGroup, ec2.Port.tcp(3306), 'Worker and migration to MySQL');
+    databaseSecurityGroup.addIngressRule(
+      workerSecurityGroup,
+      ec2.Port.tcp(3306),
+      'Worker and migration to MySQL',
+    );
 
     const databaseEngine = rds.DatabaseInstanceEngine.mysql({
       version: rds.MysqlEngineVersion.VER_8_4_10,
@@ -153,7 +162,9 @@ export class OshiScheduleStack extends Stack {
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
       securityGroups: [databaseSecurityGroup],
       cloudwatchLogsExports: ['error', 'slowquery'],
-      cloudwatchLogsRetention: isProduction ? logs.RetentionDays.ONE_MONTH : logs.RetentionDays.TWO_WEEKS,
+      cloudwatchLogsRetention: isProduction
+        ? logs.RetentionDays.ONE_MONTH
+        : logs.RetentionDays.TWO_WEEKS,
     });
     database.applyRemovalPolicy(isProduction ? RemovalPolicy.RETAIN : RemovalPolicy.SNAPSHOT);
 
@@ -178,10 +189,14 @@ export class OshiScheduleStack extends Stack {
         parameterName: `/${prefix}/runtime/youtube-daily-quota-budget`,
         stringValue: '8000',
       }),
-      YOUTUBE_DAILY_SEARCH_QUOTA_BUDGET: new ssm.StringParameter(this, 'SearchQuotaBudgetParameter', {
-        parameterName: `/${prefix}/runtime/youtube-daily-search-quota-budget`,
-        stringValue: '80',
-      }),
+      YOUTUBE_DAILY_SEARCH_QUOTA_BUDGET: new ssm.StringParameter(
+        this,
+        'SearchQuotaBudgetParameter',
+        {
+          parameterName: `/${prefix}/runtime/youtube-daily-search-quota-budget`,
+          stringValue: '80',
+        },
+      ),
     };
     const referencedParameters = {
       ALLOWED_EMAILS: ssm.StringParameter.fromStringParameterAttributes(
@@ -253,13 +268,22 @@ export class OshiScheduleStack extends Stack {
     const applicationSecrets: Record<string, ecs.Secret> = {
       ...databaseSecrets,
       ...Object.fromEntries(
-        Object.entries(runtimeParameters).map(([name, parameter]) => [name, ecs.Secret.fromSsmParameter(parameter)]),
+        Object.entries(runtimeParameters).map(([name, parameter]) => [
+          name,
+          ecs.Secret.fromSsmParameter(parameter),
+        ]),
       ),
       ...Object.fromEntries(
-        Object.entries(referencedParameters).map(([name, parameter]) => [name, ecs.Secret.fromSsmParameter(parameter)]),
+        Object.entries(referencedParameters).map(([name, parameter]) => [
+          name,
+          ecs.Secret.fromSsmParameter(parameter),
+        ]),
       ),
       ...Object.fromEntries(
-        Object.entries(referencedSecrets).map(([name, secret]) => [name, ecs.Secret.fromSecretsManager(secret)]),
+        Object.entries(referencedSecrets).map(([name, secret]) => [
+          name,
+          ecs.Secret.fromSecretsManager(secret),
+        ]),
       ),
     };
 
@@ -331,8 +355,17 @@ export class OshiScheduleStack extends Stack {
       targets: [apiService.loadBalancerTarget({ containerName: 'api', containerPort: 4000 })],
     });
 
-    if (config.certificateArn && config.apiDomainName && config.hostedZoneId && config.hostedZoneName) {
-      const certificate = acm.Certificate.fromCertificateArn(this, 'ApiCertificate', config.certificateArn);
+    if (
+      config.certificateArn &&
+      config.apiDomainName &&
+      config.hostedZoneId &&
+      config.hostedZoneName
+    ) {
+      const certificate = acm.Certificate.fromCertificateArn(
+        this,
+        'ApiCertificate',
+        config.certificateArn,
+      );
       const httpsListener = loadBalancer.addListener('HttpsListener', {
         port: 443,
         protocol: elbv2.ApplicationProtocol.HTTPS,
@@ -342,7 +375,11 @@ export class OshiScheduleStack extends Stack {
       httpsListener.setAttribute('routing.http.drop_invalid_header_fields.enabled', 'true');
       loadBalancer.addListener('HttpListener', {
         port: 80,
-        defaultAction: elbv2.ListenerAction.redirect({ protocol: 'HTTPS', port: '443', permanent: true }),
+        defaultAction: elbv2.ListenerAction.redirect({
+          protocol: 'HTTPS',
+          port: '443',
+          permanent: true,
+        }),
       });
       const zone = route53.HostedZone.fromHostedZoneAttributes(this, 'HostedZone', {
         hostedZoneId: config.hostedZoneId,
@@ -563,8 +600,7 @@ export class OshiScheduleStack extends Stack {
       assumedBy: new iam.WebIdentityPrincipal(githubProviderArn, {
         StringEquals: { 'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com' },
         StringLike: {
-          'token.actions.githubusercontent.com:sub':
-            `repo:${config.githubOwner}/${config.githubRepository}:ref:refs/heads/main`,
+          'token.actions.githubusercontent.com:sub': `repo:${config.githubOwner}/${config.githubRepository}:ref:refs/heads/${deploymentBranch}`,
         },
       }),
       maxSessionDuration: Duration.hours(1),
@@ -573,7 +609,11 @@ export class OshiScheduleStack extends Stack {
     if (isProduction) {
       githubRole.addToPolicy(
         new iam.PolicyStatement({
-          actions: ['ecr:BatchCheckLayerAvailability', 'ecr:BatchGetImage', 'ecr:GetDownloadUrlForLayer'],
+          actions: [
+            'ecr:BatchCheckLayerAvailability',
+            'ecr:BatchGetImage',
+            'ecr:GetDownloadUrlForLayer',
+          ],
           resources: [
             Arn.format(
               {
@@ -627,8 +667,24 @@ export class OshiScheduleStack extends Stack {
         resources: [
           cluster.clusterArn,
           apiService.serviceArn,
-          Arn.format({ service: 'ecs', resource: 'task-definition', resourceName: `${prefix}-*`, arnFormat: ArnFormat.SLASH_RESOURCE_NAME }, this),
-          Arn.format({ service: 'ecs', resource: 'task', resourceName: `${cluster.clusterName}/*`, arnFormat: ArnFormat.SLASH_RESOURCE_NAME }, this),
+          Arn.format(
+            {
+              service: 'ecs',
+              resource: 'task-definition',
+              resourceName: `${prefix}-*`,
+              arnFormat: ArnFormat.SLASH_RESOURCE_NAME,
+            },
+            this,
+          ),
+          Arn.format(
+            {
+              service: 'ecs',
+              resource: 'task',
+              resourceName: `${cluster.clusterName}/*`,
+              arnFormat: ArnFormat.SLASH_RESOURCE_NAME,
+            },
+            this,
+          ),
         ],
       }),
     );
@@ -706,15 +762,24 @@ export class OshiScheduleStack extends Stack {
       environmentVariables: [
         { name: '_CUSTOM_IMAGE', value: 'amplify:al2023' },
         { name: 'AMPLIFY_MONOREPO_APP_ROOT', value: 'apps/web' },
-        { name: 'NEXT_PUBLIC_API_URL', value: config.apiDomainName ? `https://${config.apiDomainName}` : 'REQUIRED_AT_DEPLOY' },
+        {
+          name: 'NEXT_PUBLIC_API_URL',
+          value: config.apiDomainName ? `https://${config.apiDomainName}` : 'REQUIRED_AT_DEPLOY',
+        },
         { name: 'NEXT_PUBLIC_DEMO_MODE', value: 'false' },
-        { name: 'NEXT_PUBLIC_SUPABASE_URL', value: config.nextPublicSupabaseUrl ?? 'REQUIRED_AT_DEPLOY' },
-        { name: 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', value: config.nextPublicSupabasePublishableKey ?? 'REQUIRED_AT_DEPLOY' },
+        {
+          name: 'NEXT_PUBLIC_SUPABASE_URL',
+          value: config.nextPublicSupabaseUrl ?? 'REQUIRED_AT_DEPLOY',
+        },
+        {
+          name: 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
+          value: config.nextPublicSupabasePublishableKey ?? 'REQUIRED_AT_DEPLOY',
+        },
       ],
     });
     const amplifyBranch = new amplify.CfnBranch(this, 'AmplifyBranch', {
       appId: amplifyApp.attrAppId,
-      branchName: config.environmentName,
+      branchName: deploymentBranch,
       stage: isProduction ? 'PRODUCTION' : 'BETA',
       enableAutoBuild: false,
       enablePullRequestPreview: false,
@@ -759,8 +824,12 @@ export class OshiScheduleStack extends Stack {
     if (config.webDomainName) {
       new CfnOutput(this, 'WebUrl', { value: `https://${config.webDomainName}` });
     }
-    new CfnOutput(this, 'WorkerTaskDefinitionArn', { value: workerTaskDefinition.taskDefinitionArn });
-    new CfnOutput(this, 'MigrationTaskDefinitionArn', { value: migrationTaskDefinition.taskDefinitionArn });
+    new CfnOutput(this, 'WorkerTaskDefinitionArn', {
+      value: workerTaskDefinition.taskDefinitionArn,
+    });
+    new CfnOutput(this, 'MigrationTaskDefinitionArn', {
+      value: migrationTaskDefinition.taskDefinitionArn,
+    });
     new CfnOutput(this, 'AmplifyAppId', { value: amplifyApp.attrAppId });
     new CfnOutput(this, 'AmplifyBranchName', { value: amplifyBranch.branchName });
     new CfnOutput(this, 'GitHubActionsRoleArn', { value: githubRole.roleArn });

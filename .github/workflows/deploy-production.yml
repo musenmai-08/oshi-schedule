@@ -76,6 +76,7 @@ jobs:
             AMPLIFY_APP_ID AMPLIFY_BRANCH WEB_URL API_URL BACKUP_SNAPSHOT_ID; do
             test -n "${!name}" || { echo "Missing production input or variable: $name" >&2; exit 1; }
           done
+          [[ "$AMPLIFY_BRANCH" == main ]] || { echo 'PRODUCTION_AMPLIFY_BRANCH must be main' >&2; exit 1; }
       - name: Verify digest is currently deployed to staging
         id: verified
         run: |

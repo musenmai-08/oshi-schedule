@@ -102,6 +102,8 @@ staging workflowはRepository Variable `STAGING_DEPLOY_ENABLED=true`が設定さ
 
 Repositoryのdefault branchは`main`とする。GitHub UIはdefault branch上のworkflowを基準に手動実行候補を表示するため、別branchがdefaultのままなら`deploy-production.yml`が追跡済みかつYAML妥当でも表示されない場合がある。OIDC subjectとpush triggerは`main`限定を維持し、誤ったdefault branchへコードを合わせない。
 
+Amplifyのsource branchもstaging/productionともに`main`とする。環境分離はAmplify App、GitHub Environment、AWS stack、domainで行い、存在しない`staging` Git branchを環境名から推測して作らない。
+
 ## rollback
 
 ### code/image

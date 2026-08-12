@@ -54,6 +54,8 @@ STAGING_WEB_URL
 STAGING_API_URL
 ```
 
+`STAGING_AMPLIFY_BRANCH`は`main`に固定する。productionの`PRODUCTION_AMPLIFY_BRANCH`も`main`であり、workflowは別の値を拒否する。`staging`と`production`はGitHub Environment／AWS環境名であってsource branch名ではない。
+
 productionは同じsuffixの`PRODUCTION_*`に加え、staging稼働digest照合用の`STAGING_ECR_REPOSITORY`、`STAGING_ECS_CLUSTER`、`STAGING_ECS_API_SERVICE`を使う。
 
 ## Secretの境界
@@ -68,7 +70,7 @@ OIDC trustは`repo:<owner>/<repository>:ref:refs/heads/main`とaudience `sts.ama
 2. mainのCI validate/E2Eが両方成功したことを確認する。失敗中はAWS bootstrapへ進まない。
 3. [AWS bootstrap](aws-bootstrap.md)でfull staging stackとOIDC roleを作る。
 4. CDK outputに基づくRepository Variablesを設定する。
-5. GitHubとAmplifyを管理画面で接続する。
+5. GitHubとAmplifyを管理画面で接続し、source branchに`main`を選ぶ。
 6. staging deployをmanualで一度成功させる。
 7. 最後に`STAGING_DEPLOY_ENABLED=true`を設定する。
 

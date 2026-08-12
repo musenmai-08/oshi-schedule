@@ -50,13 +50,13 @@ production と staging は同じ論理構成を別stackとして使う。初期�
 
 ### コンポーネント責務
 
-| コンポーネント | staging                                     | production                                  | 責務                                                 |
-| -------------- | ------------------------------------------- | ------------------------------------------- | ---------------------------------------------------- |
-| Web            | Amplify app（staging branch）               | 独立 Amplify app                            | Next.js SSR、middleware、CSP、Supabase PKCE callback |
-| API            | Fargate service、desired count 1            | Fargate service、beta は desired count 1    | Express API、認証、手動同期、Google credential 管理  |
-| worker         | Scheduler → Fargate RunTask                 | 独立 Scheduler → Fargate RunTask            | 1時間ごとの同期。一回実行後に終了                    |
-| MySQL          | RDS for MySQL 8.4.10、Single-AZ、独立 instance | RDS for MySQL 8.4.10、Single-AZ、独立 instance | 永続データ、lease、fencing、migration                |
-| image          | staging ECRのimmutable digest                 | 同じmanifestをproduction ECRへ昇格          | API と worker を同一 image、別 command で実行        |
+| コンポーネント | staging                                           | production                                     | 責務                                                 |
+| -------------- | ------------------------------------------------- | ---------------------------------------------- | ---------------------------------------------------- |
+| Web            | Amplify app（source: main、environment: staging） | 独立 Amplify app（source: main）               | Next.js SSR、middleware、CSP、Supabase PKCE callback |
+| API            | Fargate service、desired count 1                  | Fargate service、beta は desired count 1       | Express API、認証、手動同期、Google credential 管理  |
+| worker         | Scheduler → Fargate RunTask                       | 独立 Scheduler → Fargate RunTask               | 1時間ごとの同期。一回実行後に終了                    |
+| MySQL          | RDS for MySQL 8.4.10、Single-AZ、独立 instance    | RDS for MySQL 8.4.10、Single-AZ、独立 instance | 永続データ、lease、fencing、migration                |
+| image          | staging ECRのimmutable digest                     | 同じmanifestをproduction ECRへ昇格             | API と worker を同一 image、別 command で実行        |
 
 Web はコンテナ化しない。API と worker は同じ source、Prisma Client、migration を含む同一 imageを使い、APIは`node api/dist/server.js`、workerは`node worker/dist/index.js`をcommandにする。migrationは同じimageの一回限りECS taskから`api/node_modules/.bin/prisma migrate deploy --schema=/opt/oshi-schedule/prisma/schema.prisma`を実行する。RDS managed secretのusername/passwordはentrypointがprocess memory上でTLS必須の`DATABASE_URL`へ構成し、imageやCloudFormationへ完全URLを保存しない。
 

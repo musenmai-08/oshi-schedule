@@ -19,16 +19,19 @@ GitHubのdefault branchが`main`、`staging`/`production` Environmentが作成�
 
 stagingの`stagingMonthlyBudgetUsd`既定値は40、productionの`productionMonthlyBudgetUsd`既定値は75であり、staging用の40をproductionへ流用しない。deploy時の`monthlyBudgetUsd`は対象環境の値を明示的に上書きする。Budgetは通知基準であってhard spending limitや自動停止ではない。
 
+staging Budgetはユーザー定義cost allocation tag `Environment=staging`で絞り込む。full deploy前にBilling ConsoleのCost allocation tagsで`Environment`が`Active`であることを確認する。未有効または反映待ちの状態では、40 USD Budgetがstaging費用を正しく追跡する前提を満たさない。
+
 ## 1. identityと静的検証
 
 ```bash
-source ~/.nvm/nvm.sh
-nvm use 22.23.1
+pnpm aws:node
 aws sts get-caller-identity --profile <profile>
-pnpm --filter @oshi-schedule/infra typecheck
-pnpm --filter @oshi-schedule/infra test
-pnpm --filter @oshi-schedule/infra synth
+bash scripts/aws/with-project-node.sh pnpm --filter @oshi-schedule/infra typecheck
+bash scripts/aws/with-project-node.sh pnpm --filter @oshi-schedule/infra test
+pnpm aws:cdk synth --quiet
 ```
+
+`scripts/aws/with-project-node.sh`はroot `.nvmrc`を正とし、NVM配下のNode.js 22.23.1をPATH先頭へ固定する。`~/.vite-plus/bin/node`など別のshimが先頭にあってもそちらを使わず、22.23.1を選択できなければAWS command実行前に失敗する。GitHub Actionsでは`actions/setup-node`が用意した同一versionを利用できる。
 
 最後の`synth`はdomainなしでも成功し、TLS未設定のALB listenerは503固定応答になる。これは検査用であり完成したHTTP stagingではない。full deployでは必ず`deployReady=true`を指定し、domain/certificate/public Web設定が欠ければconfig validationで停止させる。
 
@@ -53,10 +56,10 @@ minor更新時はAWSのsupported versionと終了日、東京regionのlive catal
 CDK toolkit bootstrap自体がAWS resourceを作る。account/regionを再確認してから一度だけ実行する。
 
 ```bash
-AWS_PROFILE=<profile> pnpm --filter @oshi-schedule/infra cdk bootstrap \
+AWS_PROFILE=<profile> pnpm aws:cdk bootstrap \
   aws://<account-id>/<region>
 
-AWS_PROFILE=<profile> pnpm --filter @oshi-schedule/infra cdk deploy \
+AWS_PROFILE=<profile> pnpm aws:cdk deploy \
   -c environment=staging \
   -c bootstrapOnly=true \
   -c deployReady=true \
@@ -104,7 +107,7 @@ deploy前に`cdk diff`を読み、RDS/ALB/ECS/Budgetとremoval policyを確認�
 `deployReady=true`かつ`bootstrapOnly=false`では、domain/certificate、通知先、GitHub、公開Supabase設定、既存immutable image tagを必須にする。入力不足または不正boolean contextのままfull stackをsynth/deployしない。
 
 ```bash
-AWS_PROFILE=<profile> pnpm --filter @oshi-schedule/infra cdk diff \
+AWS_PROFILE=<profile> pnpm aws:cdk diff \
   -c environment=staging -c deployReady=true -c bootstrapOnly=false \
   -c awsAccount=<account-id> -c awsRegion=<region> \
   -c hostedZoneId=<zone-id> -c hostedZoneName=<zone-name> \
@@ -113,15 +116,15 @@ AWS_PROFILE=<profile> pnpm --filter @oshi-schedule/infra cdk diff \
   -c monthlyBudgetUsd=<usd> -c githubOwner=<owner> -c githubRepository=<repo> \
   -c nextPublicSupabaseUrl=<staging-supabase-url> \
   -c nextPublicSupabasePublishableKey=<publishable-key> \
-  -c imageTag=<existing-immutable-tag>
+  -c imageTag=<existing-image-digest>
 ```
 
-同じcontextで`cdk deploy`するのはdiff、費用、Secret/Parameter、backup方針をユーザーが承認した後だけである。productionはさらに`-c environment=production -c confirmProduction=DEPLOY_PRODUCTION`を要求し、staging構築時には実行しない。
+`imageTag`というcontext名は互換性のため維持するが、値には検証済みの`sha256:...` digestを渡し、Task Definitionをdigest固定する。同じcontextで`cdk deploy`するのはdiff、費用、Secret/Parameter、backup方針をユーザーが承認した後だけである。productionはさらに`-c environment=production -c confirmProduction=DEPLOY_PRODUCTION`を要求し、staging構築時には実行しない。
 
 ## 5. deploy後
 
 1. SNS email subscriptionを承認する。
-2. Amplify ConsoleでGitHub App接続と対象branchを選ぶ。OAuth tokenをCDK/GitHub Secretへコピーしない。
+2. Amplify ConsoleでGitHub App接続とsource branch `main`を選ぶ。staging/productionは環境名でありGit branch名ではない。OAuth tokenをCDK/GitHub Secretへコピーしない。
 3. Supabase Site/Redirect URLとGoogle Cloud authorized originをstaging FQDNへ設定する。Google provider redirect URIはSupabase callbackのままにする。
 4. one-off migration taskを成功させてからAPIを更新する。
 5. `scripts/smoke-staging.sh`を実行し、最後にSchedulerを有効化する。

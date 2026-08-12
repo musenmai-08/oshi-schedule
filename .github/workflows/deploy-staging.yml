@@ -58,6 +58,7 @@ jobs:
             AMPLIFY_APP_ID AMPLIFY_BRANCH WEB_URL API_URL; do
             test -n "${!name}" || { echo "Missing repository variable: $name" >&2; exit 1; }
           done
+          [[ "$AMPLIFY_BRANCH" == main ]] || { echo 'STAGING_AMPLIFY_BRANCH must be main' >&2; exit 1; }
       - uses: aws-actions/amazon-ecr-login@v2
       - name: Build immutable image
         id: image

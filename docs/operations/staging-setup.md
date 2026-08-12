@@ -10,8 +10,10 @@ application、Docker、CDK、GitHub Actions、Amplify build、smoke scriptは実
 - [ ] AWS Pricing CalculatorでRDS、ALB、Fargate、public IPv4、Amplify、Logs、Secrets、ECR/S3、Route 53、backupを確認
 - [ ] domain/TLD、Route 53 hosted zone、staging Web/API FQDNを確定
 - [x] alert emailとstaging monthly Budget 40 USDを確定
+- [ ] Billingのユーザー定義cost allocation tag `Environment`が`Active`
 - [ ] RDS class/storage/retention/deletion protectionを最終承認
 - [ ] GitHub default branchを`main`へ変更し、`staging`/`production` Environmentを作成
+- [ ] Amplify source branchと`STAGING_AMPLIFY_BRANCH`/`PRODUCTION_AMPLIFY_BRANCH`がすべて`main`
 - [ ] GitHub ActionsでCI validate/E2Eが成功し、3 workflowがActions画面に表示されることを確認
 - [ ] GitHub owner/repository、staging/production Environment方針を確定
 - [ ] staging Supabase/Google Cloud projectをproductionと分離
@@ -26,7 +28,7 @@ application、Docker、CDK、GitHub Actions、Amplify build、smoke scriptは実
 2. image scan後のimmutable SHA tagをECRへpushする。
 3. Secrets Manager、SSM、Route 53、ACMの入力を準備する。
 4. `deployReady=true`のfull `cdk diff`をreviewし、ユーザー承認後だけdeployする。
-5. AmplifyとGitHubを管理画面で接続し、custom domainを検証する。
+5. AmplifyとGitHubを管理画面で接続し、source branch `main`とcustom domainを検証する。
 6. Supabase Site URL/Redirect URLとGoogle Cloud authorized originをstaging URLへ変更する。
 7. one-off migration、API stable、worker revision、Amplify、smokeの順で確認する。
 8. SNS subscriptionを承認し、alarm/Budgetを確認する。
