@@ -38,7 +38,7 @@
 | backup        | RDS backup event、retention設定監査                     | backup失敗または24時間成功なし                 | snapshot/PITR状態を確認                      |
 | cost          | AWS Budget actual/forecast                              | 月予算の50/80/100/120%                         | 80%で原因確認、100%で非必須staging停止を判断 |
 
-CDKはAPI CPU、ALB 5xx、RDS free storage、worker exit非0の4 alarmとSNS、月額forecast 80%のBudget通知を作成する。`SyncTargetResult`、再認証数、quota残量、worker heartbeat、target latency/healthの追加alarmは現行DB/logから読めるがcustom metric送信は未実装であり、staging baseline取得後の追加課題とする。高cardinalityのuser/channel IDをmetric dimensionに使わない。
+CDKはAPI CPU、ALB 5xx、RDS free storage、worker exit非0の4 alarmとSNS、月額forecast 80%のBudget通知を作成する。stagingのBudget既定値は40 USD（forecast通知点は32 USD）、productionの実装既定値は75 USDである。Budgetはhard limitではなくresourceを自動停止しない。`SyncTargetResult`、再認証数、quota残量、worker heartbeat、target latency/healthの追加alarmは現行DB/logから読めるがcustom metric送信は未実装であり、staging baseline取得後の追加課題とする。高cardinalityのuser/channel IDをmetric dimensionに使わない。
 
 ## worker監視
 

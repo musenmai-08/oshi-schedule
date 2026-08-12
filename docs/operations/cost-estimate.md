@@ -2,7 +2,7 @@
 
 ## 見積の扱い
 
-- 料金確認日: **2026-08-04**
+- 料金確認日: **2026-08-12**
 - 通貨: USD、税・為替・domain年額を除く。日本円換算は契約時の為替を使う。
 - region: AWS/GCPは東京を前提にするが、公式price pageの表示、契約、使用量で変わるため金額はquoteではなくplanning rangeである。
 - 730時間/月、stagingとproductionを常設、少量traffic/log/build、workerは各環境で1時間ごとに平均2〜5分、APIは初期0.25 vCPU/0.5 GiB相当を仮定する。
@@ -25,6 +25,20 @@
 | YouTube             | [quota overview](https://developers.google.com/youtube/v3/getting-started)、[`search.list`](https://developers.google.com/youtube/v3/docs/search/list)                                                                                                        | defaultは一般quota 10,000 units/dayに加えsearch用100 queries/day。30 channel毎時はそのままでは不可                          |
 
 料金ページはregionや使用量を対話的に計算するものがあり、東京の単価を本文へ固定しない。以下は安全側に丸めた範囲である。
+
+## staging低コスト運用の概算
+
+stagingはALB、ALB用Public IPv4、RDS storage、Secrets Manager、Route 53、ECRを維持し、利用終了時にECS APIを0、RDSをstopped、Worker Schedulerをdisabledにする。RDS停止中もstorageとbackup、ALBとIPv4、Secret、DNS、image/log storage等は課金される。
+
+| 稼働パターン              | 月額概算 | 前提                                                           |
+| ------------------------- | -------: | -------------------------------------------------------------- |
+| A. API/RDS常時稼働        |  $68〜90 | 730時間、API 1 task、RDS available、Worker/traffic/buildは少量 |
+| B. 平日8時間              |  $40〜55 | 月約176時間だけAPI/RDS起動、Workerは検証時のみ                 |
+| C. 必要時のみ（月40時間） |  $35〜48 | API/RDSは月40時間、その他の維持費は継続                        |
+
+内訳は、ALB/LCU、Public IPv4、Secrets Manager、Route 53、ECRが休止中も残り、RDS instance compute、Fargate API/worker、Amplify/CloudWatchが稼働・利用時間に応じて加算される。東京region、税、為替、実traffic、log retention、build回数で変動するplanning rangeでありquoteではない。
+
+staging Budget既定値は40 USDで、現行CDKはforecast 80%で通知する。40 USDは低利用月の異常を早期検知する基準として妥当だが、hard spending limitではなく、Bの上側やAでは通常利用でも超過する。通知時は[staging低コスト運用](staging-cost-control.md)で状態を確認する。
 
 ## 3案比較
 

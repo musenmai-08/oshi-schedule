@@ -17,6 +17,8 @@ GitHubのdefault branchが`main`、`staging`/`production` Environmentが作成�
 
 実値のSecretはissue、commit、CloudFormation context、CLI outputへ書かない。
 
+stagingの`stagingMonthlyBudgetUsd`既定値は40、productionの`productionMonthlyBudgetUsd`既定値は75であり、staging用の40をproductionへ流用しない。deploy時の`monthlyBudgetUsd`は対象環境の値を明示的に上書きする。Budgetは通知基準であってhard spending limitや自動停止ではない。
+
 ## 1. identityと静的検証
 
 ```bash
@@ -124,6 +126,7 @@ AWS_PROFILE=<profile> pnpm --filter @oshi-schedule/infra cdk diff \
 4. one-off migration taskを成功させてからAPIを更新する。
 5. `scripts/smoke-staging.sh`を実行し、最後にSchedulerを有効化する。
 6. `STAGING_DEPLOY_ENABLED=true`は初回手動deployとsmoke成功後にだけGitHub Repository Variableへ設定する。
+7. 初回受入確認が完了したら`pnpm staging:sleep`を実行する。以後は[staging低コスト運用](staging-cost-control.md)に従う。
 
 ## destroy
 

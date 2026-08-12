@@ -9,7 +9,8 @@ application、Docker、CDK、GitHub Actions、Amplify build、smoke scriptは実
 - [ ] AWS account ID/region/profileと請求先を確定
 - [ ] AWS Pricing CalculatorでRDS、ALB、Fargate、public IPv4、Amplify、Logs、Secrets、ECR/S3、Route 53、backupを確認
 - [ ] domain/TLD、Route 53 hosted zone、staging Web/API FQDNを確定
-- [ ] alert email、monthly budget、RDS class/storage/retention/deletion protectionを承認
+- [x] alert emailとstaging monthly Budget 40 USDを確定
+- [ ] RDS class/storage/retention/deletion protectionを最終承認
 - [ ] GitHub default branchを`main`へ変更し、`staging`/`production` Environmentを作成
 - [ ] GitHub ActionsでCI validate/E2Eが成功し、3 workflowがActions画面に表示されることを確認
 - [ ] GitHub owner/repository、staging/production Environment方針を確定
@@ -31,6 +32,7 @@ application、Docker、CDK、GitHub Actions、Amplify build、smoke scriptは実
 8. SNS subscriptionを承認し、alarm/Budgetを確認する。
 9. workerを一度だけcontrolled runしてからhourly scheduleを有効化する。
 10. GitHub Variablesを設定し、最後にstaging自動deploy gateを有効化する。
+11. 受入確認後に`pnpm staging:sleep`を実行し、通常の低コスト状態へ移行する。
 
 ## 完了条件
 
@@ -45,3 +47,4 @@ application、Docker、CDK、GitHub Actions、Amplify build、smoke scriptは実
 - smoke全項目とalarm通知経路が確認済み
 
 初回構築後は[deployment](deployment.md)、[monitoring](monitoring.md)、[backup](backup-and-recovery.md)を運用runbookとする。
+日常の起動・停止は[staging低コスト運用](staging-cost-control.md)に従う。
