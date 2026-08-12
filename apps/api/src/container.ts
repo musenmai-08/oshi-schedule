@@ -7,6 +7,7 @@ import type {
   CalendarGateway,
   Clock,
   Store,
+  SyncJobDispatcher,
   TokenCipher,
   YouTubeGateway,
 } from './application/models.js';
@@ -22,6 +23,10 @@ import { AesTokenCipher } from './infrastructure/encryption/aes-token-cipher.js'
 import { FakeCalendarGateway } from './infrastructure/google-calendar/fake-calendar-gateway.js';
 import { GoogleCalendarGateway } from './infrastructure/google-calendar/google-calendar-gateway.js';
 import { logger } from './infrastructure/logging/logger.js';
+import {
+  LocalSyncJobDispatcher,
+  SqsSyncJobDispatcher,
+} from './infrastructure/sync/sync-job-dispatcher.js';
 import { FakeYouTubeGateway } from './infrastructure/youtube/fake-youtube-gateway.js';
 import { YouTubeDataGateway } from './infrastructure/youtube/youtube-data-gateway.js';
 import type { Env } from './infrastructure/env.js';
@@ -45,6 +50,7 @@ export interface ContainerOverrides {
   cipher?: TokenCipher;
   clock?: Clock;
   authAdmin?: AuthAdmin;
+  dispatcher?: SyncJobDispatcher;
   resources?: RuntimeResources;
 }
 
@@ -121,6 +127,11 @@ export function createContainer(env: Env, overrides: ContainerOverrides = {}): C
     snapshotWaitMs: Math.min(env.SYNC_LEASE_MS, 30_000),
     snapshotPollMs: 250,
   });
+  const dispatcher =
+    overrides.dispatcher ??
+    (env.SYNC_JOB_QUEUE_URL
+      ? new SqsSyncJobDispatcher(env.SYNC_JOB_QUEUE_URL)
+      : new LocalSyncJobDispatcher((syncRunId) => sync.runTargeted(syncRunId), logger));
   const service = new OshiService(
     store,
     youtube,
@@ -129,6 +140,7 @@ export function createContainer(env: Env, overrides: ContainerOverrides = {}): C
     clock,
     authAdmin,
     sync,
+    dispatcher,
     env.ACCOUNT_DELETION_LEASE_MS,
   );
   return {

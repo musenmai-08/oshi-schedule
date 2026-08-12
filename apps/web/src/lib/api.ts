@@ -4,6 +4,8 @@ import type {
   ChannelRegistrationResult,
   ChannelSummary,
   MeView,
+  SyncRunAccepted,
+  SyncRunView,
   SubscriptionView,
 } from '@oshi-schedule/shared';
 import { publicEnv } from './env';
@@ -41,6 +43,30 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (response.status === 204) return undefined as T;
   return ((await response.json()) as ApiSuccess<T>).data;
 }
+export async function pollSyncRun(
+  id: string,
+  {
+    intervalMs = 3_000,
+    maxAttempts = 40,
+    wait = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+    read = () => apiClient.syncRun(id),
+    onUpdate,
+  }: {
+    intervalMs?: number;
+    maxAttempts?: number;
+    wait?: (milliseconds: number) => Promise<unknown>;
+    read?: () => Promise<SyncRunView>;
+    onUpdate?: (run: SyncRunView) => void;
+  } = {},
+) {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const run = await read();
+    onUpdate?.(run);
+    if (run.status !== 'QUEUED' && run.status !== 'RUNNING') return run;
+    if (attempt + 1 < maxAttempts) await wait(intervalMs);
+  }
+  return null;
+}
 export const apiClient = {
   me: () => api<MeView>('/api/v1/me'),
   channels: () => api<SubscriptionView[]>('/api/v1/channels'),
@@ -57,7 +83,8 @@ export const apiClient = {
   status: (id: string, status: 'ACTIVE' | 'PAUSED') =>
     api(`/api/v1/channels/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
   remove: (id: string) => api<void>(`/api/v1/channels/${id}`, { method: 'DELETE' }),
-  sync: (id: string) => api(`/api/v1/channels/${id}/sync`, { method: 'POST' }),
+  sync: (id: string) => api<SyncRunAccepted>(`/api/v1/channels/${id}/sync`, { method: 'POST' }),
+  syncRun: (id: string) => api<SyncRunView>(`/api/v1/sync-runs/${id}`),
   deleteAccount: () =>
     api<void>('/api/v1/account', {
       method: 'DELETE',

@@ -1,10 +1,7 @@
 import { config as loadDotenv } from 'dotenv';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
-import {
-  decodeEncryptionKey,
-  isPredictableEncryptionKey,
-} from './encryption/aes-token-cipher.js';
+import { decodeEncryptionKey, isPredictableEncryptionKey } from './encryption/aes-token-cipher.js';
 import { calculateYouTubeDailyQuotaBounds } from './youtube/youtube-quota.js';
 
 export const ROOT_ENV_PATH = fileURLToPath(new URL('../../../../.env', import.meta.url));
@@ -34,6 +31,7 @@ const schema = z
     SUPABASE_URL: z.string().url().optional(),
     SUPABASE_JWT_AUDIENCE: z.string().default('authenticated'),
     SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
+    SYNC_JOB_QUEUE_URL: z.string().url().optional(),
     YOUTUBE_API_KEY: z.string().optional(),
     GOOGLE_CLIENT_ID: z.string().optional(),
     GOOGLE_CLIENT_SECRET: z.string().optional(),
@@ -118,6 +116,8 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     ] as const) {
       if (!env[key]) throw new Error(`Missing required environment variable: ${key}`);
     }
+    if (env.NODE_ENV === 'production' && !env.SYNC_JOB_QUEUE_URL)
+      throw new Error('Missing required environment variable: SYNC_JOB_QUEUE_URL');
     if (env.APP_MODE === 'fake') throw new Error('Fake mode is forbidden in production');
     for (const entry of env.TOKEN_ENCRYPTION_KEYS.split(',')) {
       const separator = entry.indexOf(':');

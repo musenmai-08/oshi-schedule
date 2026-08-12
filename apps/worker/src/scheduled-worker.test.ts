@@ -3,10 +3,28 @@ import {
   executeScheduledWorker,
   executeScheduledWorkerLifecycle,
   formatScheduledWorkerLog,
+  selectWorkerExecution,
   summarizeScheduledResults,
 } from './scheduled-worker.js';
 
 describe('scheduled worker outcome', () => {
+  it('selects exactly one targeted sync when SYNC_RUN_ID is present', async () => {
+    const runScheduled = vi.fn(async () => [{ status: 'SUCCESS' }]);
+    const runTargeted = vi.fn(async () => ({ status: 'SUCCESS' }));
+    const result = await selectWorkerExecution('  run-id  ', runScheduled, runTargeted)();
+    expect(result).toEqual([{ status: 'SUCCESS' }]);
+    expect(runTargeted).toHaveBeenCalledWith('run-id');
+    expect(runScheduled).not.toHaveBeenCalled();
+  });
+
+  it('retains scheduled mode when no targeted ID is provided', async () => {
+    const runScheduled = vi.fn(async () => [{ status: 'SUCCESS' }]);
+    const runTargeted = vi.fn(async () => ({ status: 'SUCCESS' }));
+    await selectWorkerExecution(' ', runScheduled, runTargeted)();
+    expect(runScheduled).toHaveBeenCalledOnce();
+    expect(runTargeted).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['all success', ['SUCCESS', 'SUCCESS'], 0],
     ['with skipped', ['SUCCESS', 'SKIPPED'], 0],

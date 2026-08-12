@@ -2,14 +2,21 @@
 
 ## パイプライン
 
-チャンネル登録は Subscription のDB確定とトランザクション終了後、この同じパイプラインを1回呼ぶ。登録中に外部API呼出しを行わず、同期失敗時も Subscription は保持する。
+チャンネル登録はSubscriptionと`INITIAL` SyncRunを確定してSQSへrun IDだけを送る。HTTP request内では外部APIを呼ばず、201/202後はstatus APIで進行を確認する。手動同期も同じ経路を使い、同期失敗時もSubscriptionは保持する。
 
 ```mermaid
 sequenceDiagram
-  participant S as Sync orchestrator
+  participant A as API
+  participant Q as SQS / EventBridge Pipes
+  participant S as Targeted worker
   participant Y as YouTube gateway
   participant D as Repository
   participant G as Calendar gateway
+  A->>D: SyncRun QUEUEDを作成/active runを再利用
+  A->>Q: syncRunIdだけを送信
+  A-->>A: 201または202を即時応答
+  Q->>S: Fargate task + SYNC_RUN_ID
+  S->>D: QUEUED/stale RUNNINGをatomic claim
   S->>D: 有効な共有チャンネルを取得
   S->>Y: channel ごとに upcoming を1回取得
   Y-->>S: 正規化前動画
@@ -57,11 +64,19 @@ quota不足は `YOUTUBE_QUOTA_DEFERRED` と次回reset時刻へ変換する。Yo
 
 ## 実行制御
 
+### 非同期job lifecycle
+
+初回・手動同期は既存`SyncRun`/`SyncTargetResult`をjobとして再利用し、`QUEUED -> RUNNING -> SUCCESS | FAILED | DEFERRED`で遷移する。subscription行を`FOR UPDATE`したtransaction内でactive runを検索するため、API連打でも同一subscriptionに新しいactive jobを増やさない。workerはrun IDを条件付きUPDATEしてatomic claimし、terminal runの重複deliveryは`SKIPPED`にする。RUNNINGのheartbeatが30分古ければ再claimでき、SyncLease fencingと決定的Calendar event IDが二重更新を防ぐ。
+
+採用dispatchはStandard SQS（managed encryption、14日DLQ）からEventBridge Pipesで既存worker Task Definitionをone-off起動する方式である。messageは`syncRunId`だけで、Pipeのcontainer overrideが`SYNC_RUN_ID`へ渡す。常時worker serviceは追加しない。scheduled modeは環境変数なし、targeted modeは指定runだけを処理する。同じTask Definition/imageを共有する。
+
+SQS/Pipesはat-least-onceでありexactly-onceではない。PipeがRunTaskを受理した後のapplication failureはSQS redeliveryだけに依存せず、SyncRunのFAILED状態、30分stale recovery、手動retry、次回scheduled workerのQUEUED/stale回収で復旧する。DB作成後のSendMessage失敗は`SYNC_DISPATCH_FAILED`としてrun/target/subscriptionをFAILEDにし、永久QUEUEDを残さない。transactional outboxは現状の低頻度用途には導入しない。
+
 自動同期は原則 60 分、手動は subscription 単位 5 分の DB 保存時刻を使う。API と worker をまたぐ二重実行は `SyncLease` のownerと単調増加version（fencing token）で防ぐ。取得・期限比較・更新はDB時刻を使い、外部呼出しの前後でowner/versionを確認する。stale ownerの更新・解放・snapshot確定は条件付きtransactionで拒否し、crash後は期限切れを新versionで再取得する。channel lease所有者は取得開始状態を保存し、Broadcast更新と成功時刻・snapshotVersion増分を1 transactionで確定する。後続workerは新しい完了versionをbounded pollし、そのsnapshotを自分のsubscriptionへCalendar展開する。待機中に完了しなければDEFERREDでありSUCCESSにしない。各ユーザーのCalendar失敗は他ユーザーから隔離する。
 
-登録直後の初回同期も同じlease、quota予約、snapshot、差分同期、決定的event ID、同期履歴を使う。手動用quota保護ルールに従うが `lastManualSyncAt` は更新しない。quota不足または完了snapshot待ちは `DEFERRED`、その他の例外は `FAILED` とし、登録応答はどちらも201で同期状態を返す。
+登録直後の初回同期も同じlease、quota予約、snapshot、差分同期、決定的event ID、同期履歴を使う。手動用quota保護ルールに従うが `lastManualSyncAt` は更新しない。quota不足または完了snapshot待ちは `DEFERRED`、その他の例外は `FAILED` とし、status APIで最終状態を返す。
 
-各実行は `SyncRun`、各 subscription は `SyncTargetResult` に RUNNING から最終状態を保存する。定期実行は 1 利用者の失敗を隔離し、全体を SUCCESS/PARTIAL_FAILED/FAILED へ集約する。24時間超のRUNNINGは次の定期実行でFAILEDへ回収し、完了履歴は90日保持する。error logにはrunId/subscriptionId/safe error codeを含める。外部呼び出しは設定timeoutを使い、恒久失効と一時障害を区別する。OAuth token endpointの429/5xx/network failureは秒単位のexponential backoff+jitterと`Retry-After`を使って最大3回だけ試行し、`invalid_grant`だけを再認証要求にする。Google Calendarは削除イベントをHTTP 200かつ`status=cancelled`の墓石として返す場合があるため、これは不存在として扱い、次回同期で同じ配信を復旧する。
+初回・手動実行は`SyncRun`、subscriptionは`SyncTargetResult`へQUEUEDから最終状態まで保存する。定期実行は従来どおり1利用者の失敗を隔離し、全体をSUCCESS/PARTIAL_FAILED/FAILEDへ集約する。24時間超の一般RUNNINGはmaintenance、targeted runは30分heartbeatで回収し、完了履歴は90日保持する。error logにはrunId/subscriptionId/safe error codeを含める。外部呼び出しは設定timeoutを使い、恒久失効と一時障害を区別する。OAuth token endpointの429/5xx/network failureは秒単位のexponential backoff+jitterと`Retry-After`を使って最大3回だけ試行し、`invalid_grant`だけを再認証要求にする。Google Calendarは削除イベントをHTTP 200かつ`status=cancelled`の墓石として返す場合があるため、これは不存在として扱い、次回同期で同じ配信を復旧する。
 
 定期workerは対象ごとの結果を `total/success/skipped/deferred/failed` だけに集計して構造化ログへ出し、利用者・subscription・Calendar・tokenをサマリーへ含めない。SUCCESS/SKIPPED/DEFERREDと対象0件は終了コード0、FAILEDが1件以上または未処理例外・DB/設定不正は終了コード1とし、schedulerが部分失敗も検知できるようにする。
 

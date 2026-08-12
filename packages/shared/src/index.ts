@@ -38,16 +38,53 @@ export interface SubscriptionView extends ChannelSummary {
   status: SubscriptionStatus;
   lastFetchedAt: string | null;
   lastCalendarSyncAt: string | null;
-  lastSyncStatus: 'SUCCESS' | 'FAILED' | 'RUNNING' | 'SKIPPED' | 'DEFERRED' | null;
+  lastSyncStatus: 'QUEUED' | 'SUCCESS' | 'FAILED' | 'RUNNING' | 'SKIPPED' | 'DEFERRED' | null;
   lastErrorMessage: string | null;
 }
 
 export interface ChannelRegistrationResult {
-  id: string;
-  status: SubscriptionStatus;
-  initialSync: {
-    status: 'SUCCESS' | 'DEFERRED' | 'FAILED';
+  subscription: {
+    id: string;
+    status: SubscriptionStatus;
+  };
+  sync: {
+    id: string;
+    subscriptionId: string;
+    status: 'QUEUED' | 'RUNNING' | 'FAILED';
     errorCode?: string;
+  };
+}
+
+export type SyncRunStatus =
+  | 'QUEUED'
+  | 'RUNNING'
+  | 'SUCCESS'
+  | 'FAILED'
+  | 'DEFERRED'
+  | 'PARTIAL_SUCCESS'
+  | 'PARTIAL_FAILED'
+  | 'SKIPPED';
+
+export interface SyncRunAccepted {
+  id: string;
+  subscriptionId: string;
+  status: 'QUEUED' | 'RUNNING';
+}
+
+export interface SyncRunView {
+  id: string;
+  subscriptionId: string;
+  trigger: 'INITIAL' | 'MANUAL';
+  status: SyncRunStatus;
+  queuedAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  error: { code: string; message: string | null } | null;
+  result: {
+    youtubeFetch: 'NOT_STARTED' | 'SUCCESS' | 'DEFERRED' | 'FAILED' | 'SKIPPED';
+    databaseUpdate: 'NOT_STARTED' | 'SUCCESS' | 'DEFERRED' | 'FAILED' | 'SKIPPED';
+    calendarSync: 'NOT_STARTED' | 'SUCCESS' | 'DEFERRED' | 'FAILED' | 'SKIPPED';
+    snapshotVersion: number | null;
   };
 }
 

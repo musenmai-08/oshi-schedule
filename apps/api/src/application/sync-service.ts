@@ -1,6 +1,6 @@
 import { MANUAL_SYNC_COOLDOWN_SECONDS, SYNC_LOOKAHEAD_DAYS } from '@oshi-schedule/shared';
 import { createHash, randomUUID } from 'node:crypto';
-import { AppError } from '../domain/errors.js';
+import { AppError, StoreConstraintError } from '../domain/errors.js';
 import {
   buildCalendarEvent,
   managedFieldsHash,
@@ -20,6 +20,7 @@ import type {
 
 const STALE_SYNC_RUN_MILLISECONDS = 24 * 60 * 60_000;
 const SYNC_RUN_RETENTION_MILLISECONDS = 90 * 24 * 60 * 60_000;
+const TARGETED_RUN_STALE_MILLISECONDS = 30 * 60_000;
 
 const deterministicEventId = (userId: string, youtubeVideoId: string) =>
   `oshi${createHash('sha256').update(`${userId}:${youtubeVideoId}`).digest('hex')}`;
@@ -42,20 +43,90 @@ export class SyncService {
       new Promise((resolve) => setTimeout(resolve, milliseconds)),
   ) {}
 
-  private async renewLease(lease: LeaseOwnership) {
+  private async renewLease(lease: LeaseOwnership, runId?: string) {
     const now = this.clock.now();
     const renewed = await this.store.renewSyncLease(lease, now, this.syncLeaseMs);
     if (!renewed) throw new AppError('SYNC_LEASE_LOST', '同期の排他権を失いました', 409, true);
+    if (runId) await this.store.heartbeatSyncRun(runId, now);
   }
 
-  private channelIsFresh(
-    channel: Awaited<ReturnType<Store['findChannelById']>>,
-    now: Date,
-  ) {
+  async queueSubscription(userId: string, subscriptionId: string, initial = false) {
+    const target = await this.store.getSubscription(userId, subscriptionId);
+    if (!target) throw new AppError('NOT_FOUND', '対象が見つかりません', 404);
+    if (target.subscription.status === 'PAUSED')
+      throw new AppError('SUBSCRIPTION_PAUSED', '一時停止中です', 409);
+    const now = this.clock.now();
+    try {
+      return await this.store.enqueueSyncRun(
+        userId,
+        subscriptionId,
+        now,
+        new Date(now.getTime() - MANUAL_SYNC_COOLDOWN_SECONDS * 1_000),
+        initial ? 'INITIAL' : 'MANUAL',
+      );
+    } catch (error) {
+      if (error instanceof StoreConstraintError && error.reason === 'SYNC_COOLDOWN')
+        throw new AppError('SYNC_COOLDOWN', '前回の同期から5分後に再実行できます', 429);
+      if (error instanceof StoreConstraintError && error.reason === 'SUBSCRIPTION_NOT_FOUND')
+        throw new AppError('NOT_FOUND', '対象が見つかりません', 404);
+      throw error;
+    }
+  }
+
+  async runTargeted(runId: string) {
+    const now = this.clock.now();
+    const run = await this.store.claimSyncRun(
+      runId,
+      now,
+      new Date(now.getTime() - TARGETED_RUN_STALE_MILLISECONDS),
+    );
+    if (!run) return { status: 'SKIPPED' as const };
+    try {
+      return await this.syncSubscription(
+        run.requestedById,
+        run.subscriptionId,
+        run.type === 'MANUAL',
+        run.id,
+        'MANUAL',
+        true,
+      );
+    } catch (error) {
+      const latest = await this.store.getSyncRunForUser(run.id, run.requestedById);
+      if (latest?.status === 'RUNNING') {
+        const errorCode = error instanceof AppError ? error.code : 'SYNC_FAILED';
+        await this.store.finishSyncTarget(
+          run.id,
+          run.subscriptionId,
+          { status: 'FAILED', message: '同期に失敗しました', errorCode },
+          this.clock.now(),
+        );
+        await this.store.finishSyncRun(run.id, 'FAILED', this.clock.now(), errorCode);
+      }
+      throw error;
+    }
+  }
+
+  async runPendingManual(limit = 10) {
+    const now = this.clock.now();
+    const runIds = await this.store.listRecoverableSyncRunIds(
+      new Date(now.getTime() - TARGETED_RUN_STALE_MILLISECONDS),
+      limit,
+    );
+    const results: Array<{ status: string }> = [];
+    for (const runId of runIds) {
+      try {
+        results.push(await this.runTargeted(runId));
+      } catch {
+        results.push({ status: 'FAILED' });
+      }
+    }
+    return results;
+  }
+
+  private channelIsFresh(channel: Awaited<ReturnType<Store['findChannelById']>>, now: Date) {
     const succeededAt = channel?.lastFetchSucceededAt ?? channel?.lastFetchedAt;
     return Boolean(
-      succeededAt &&
-        now.getTime() - succeededAt.getTime() < MANUAL_SYNC_COOLDOWN_SECONDS * 1000,
+      succeededAt && now.getTime() - succeededAt.getTime() < MANUAL_SYNC_COOLDOWN_SECONDS * 1000,
     );
   }
 
@@ -87,6 +158,7 @@ export class SyncService {
     manual = true,
     existingRunId?: string,
     quotaMode: YouTubeQuotaMode = manual ? 'MANUAL' : 'SCHEDULED',
+    finishExistingRun = false,
   ) {
     const target = await this.store.getSubscription(userId, subscriptionId);
     if (!target) throw new AppError('NOT_FOUND', '対象が見つかりません', 404);
@@ -113,7 +185,7 @@ export class SyncService {
         errorCode: 'SYNC_ALREADY_RUNNING',
       };
       await this.store.finishSyncTarget(runId, subscriptionId, result, now);
-      if (!existingRunId)
+      if (!existingRunId || finishExistingRun)
         await this.store.finishSyncRun(runId, 'FAILED', now, 'SYNC_ALREADY_RUNNING');
       throw new AppError('SYNC_ALREADY_RUNNING', '同期を実行中です', 409);
     }
@@ -183,7 +255,7 @@ export class SyncService {
                     409,
                     true,
                   );
-                await this.renewLease(acquired);
+                await this.renewLease(acquired, runId);
                 const merged = new Map(
                   [...upcoming, ...refreshed.items].map((item) => [item.youtubeVideoId, item]),
                 );
@@ -195,7 +267,12 @@ export class SyncService {
                   channelLease,
                 );
                 if (committedVersion === null)
-                  throw new AppError('SYNC_LEASE_LOST', 'YouTube取得の排他権を失いました', 409, true);
+                  throw new AppError(
+                    'SYNC_LEASE_LOST',
+                    'YouTube取得の排他権を失いました',
+                    409,
+                    true,
+                  );
                 snapshotVersion = committedVersion;
                 phases.youtubeFetch = 'SUCCESS';
                 phases.databaseUpdate = 'SUCCESS';
@@ -270,21 +347,21 @@ export class SyncService {
           }
         }
       }
-      await this.renewLease(acquired);
+      await this.renewLease(acquired, runId);
       const resolvedUser = await this.store.findUserById(target.subscription.userId);
       if (!resolvedUser) throw new AppError('USER_NOT_FOUND', '利用者が見つかりません', 404);
       if (resolvedUser.reauthRequired)
         throw new AppError('GOOGLE_REAUTH_REQUIRED', 'Googleの再連携が必要です', 401);
       calendarStarted = true;
       const calendarId = await this.calendar.ensureCalendar(resolvedUser);
-      await this.renewLease(acquired);
+      await this.renewLease(acquired, runId);
       const broadcasts = await this.store.listBroadcastsForSync(
         target.channel.id,
         now,
         target.subscription.lastCalendarSyncAt,
       );
       for (const broadcast of broadcasts) {
-        await this.renewLease(acquired);
+        await this.renewLease(acquired, runId);
         const event = buildCalendarEvent(broadcast, target.channel.title);
         const hash = managedFieldsHash(event);
         const mapping = await this.store.getMapping(resolvedUser.id, broadcast.id);
@@ -303,7 +380,7 @@ export class SyncService {
           event,
           !mapping,
         );
-        await this.renewLease(acquired);
+        await this.renewLease(acquired, runId);
         await this.store.saveMapping({
           userId: resolvedUser.id,
           broadcastId: broadcast.id,
@@ -321,10 +398,10 @@ export class SyncService {
             snapshotVersion,
           }
         : { status: 'SUCCESS' as const, message: null, phases, snapshotVersion };
-      await this.renewLease(acquired);
+      await this.renewLease(acquired, runId);
       await this.store.saveSyncResult(subscriptionId, result, now, manual);
       await this.store.finishSyncTarget(runId, subscriptionId, result, now);
-      if (!existingRunId)
+      if (!existingRunId || finishExistingRun)
         await this.store.finishSyncRun(runId, fetchDeferred ? 'DEFERRED' : 'SUCCESS', now);
       return {
         status: fetchDeferred ? ('DEFERRED' as const) : ('SUCCESS' as const),
@@ -368,7 +445,7 @@ export class SyncService {
         },
         now,
       );
-      if (!existingRunId)
+      if (!existingRunId || finishExistingRun)
         await this.store.finishSyncRun(
           runId,
           'FAILED',
@@ -415,14 +492,14 @@ export class SyncService {
       results.length === 0
         ? 'SUCCESS'
         : failed === results.length
-        ? 'FAILED'
-        : failed > 0
-          ? 'PARTIAL_FAILED'
-          : deferred === results.length && deferred > 0
-            ? 'DEFERRED'
-            : deferred > 0
-              ? 'PARTIAL_SUCCESS'
-              : 'SUCCESS',
+          ? 'FAILED'
+          : failed > 0
+            ? 'PARTIAL_FAILED'
+            : deferred === results.length && deferred > 0
+              ? 'DEFERRED'
+              : deferred > 0
+                ? 'PARTIAL_SUCCESS'
+                : 'SUCCESS',
       this.clock.now(),
       failed ? 'SYNC_TARGET_FAILED' : undefined,
     );

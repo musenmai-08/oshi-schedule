@@ -21,7 +21,7 @@ test('チャンネルの登録から同期・停止・削除まで操作でき�
   await page.getByRole('button', { name: '検索' }).click();
   await expect(page.getByText('@playwright', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'このチャンネルを登録' }).click();
-  await expect(page.getByText('チャンネルを登録し、初回同期が完了しました')).toBeVisible();
+  await expect(page.getByText('初回同期が完了しました')).toBeVisible();
   await expect(page.getByText('playwright チャンネル')).toBeVisible();
   await page.getByLabel('playwright チャンネルを一時停止').click();
   await expect(page.getByText('一時停止', { exact: true })).toBeVisible();

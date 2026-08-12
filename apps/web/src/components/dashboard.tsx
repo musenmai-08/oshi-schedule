@@ -27,11 +27,16 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import type { ChannelSummary, SubscriptionView } from '@oshi-schedule/shared';
+import type {
+  ChannelSummary,
+  SubscriptionView,
+  SyncRunAccepted,
+  SyncRunStatus,
+} from '@oshi-schedule/shared';
 import { MAX_CHANNELS_PER_USER, channelHandleSchema } from '@oshi-schedule/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ApiClientError, apiClient } from '@/lib/api';
+import { ApiClientError, apiClient, pollSyncRun } from '@/lib/api';
 import {
   dashboardConnectionNotice,
   type GoogleConnectionState,
@@ -92,6 +97,7 @@ export function Dashboard({
   const [error, setError] = useState<string | null>(null);
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [syncStates, setSyncStates] = useState<Record<string, SyncRunStatus>>({});
 
   const loadConnection = useCallback(async () => {
     setConnection({ status: 'loading' });
@@ -170,19 +176,62 @@ export function Dashboard({
       setPreview(null);
       setHandle('');
       await load();
-      if (result.initialSync.status === 'SUCCESS') {
-        setNotice('チャンネルを登録し、初回同期が完了しました');
-      } else if (result.initialSync.status === 'DEFERRED') {
-        setNotice(
-          'チャンネルを登録しました。初回同期は延期されたため、「今すぐ同期」から再実行できます',
-        );
+      if (result.sync.status === 'FAILED') {
+        setError('チャンネルを登録しましたが、初回同期を開始できませんでした。再試行してください');
       } else {
-        setError(
-          'チャンネルを登録しましたが、初回同期に失敗しました。「今すぐ同期」から再実行してください',
+        setNotice('チャンネルを登録しました。初回同期を待機しています');
+        void watchSync(
+          {
+            id: result.sync.id,
+            subscriptionId: result.sync.subscriptionId,
+            status: result.sync.status,
+          },
+          true,
         );
       }
     } catch (caught) {
       setDialogError(channelDialogErrorMessage(caught, 'register'));
+    } finally {
+      setBusy(null);
+    }
+  };
+  const watchSync = async (accepted: SyncRunAccepted, initial = false) => {
+    setSyncStates((current) => ({ ...current, [accepted.subscriptionId]: accepted.status }));
+    try {
+      const completed = await pollSyncRun(accepted.id, {
+        onUpdate: (run) =>
+          setSyncStates((current) => ({ ...current, [accepted.subscriptionId]: run.status })),
+      });
+      if (!completed) {
+        setNotice('同期は続行中です。しばらくしてから画面を再読み込みしてください');
+        return;
+      }
+      await load();
+      if (completed.status === 'SUCCESS')
+        setNotice(initial ? '初回同期が完了しました' : '同期が完了しました');
+      else if (completed.status === 'DEFERRED')
+        setNotice('同期は延期されました。時間を置いて再試行できます');
+      else if (completed.status === 'FAILED')
+        setError('同期に失敗しました。「今すぐ同期」から再試行してください');
+    } catch {
+      setError('同期状態を確認できませんでした。画面を再読み込みしてください');
+    } finally {
+      setSyncStates((current) => {
+        const next = { ...current };
+        delete next[accepted.subscriptionId];
+        return next;
+      });
+    }
+  };
+  const requestSync = async (subscriptionId: string) => {
+    setBusy(`sync-${subscriptionId}`);
+    setError(null);
+    try {
+      const accepted = await apiClient.sync(subscriptionId);
+      setNotice(accepted.status === 'RUNNING' ? '同期中です' : '同期を受け付けました');
+      void watchSync(accepted);
+    } catch (caught) {
+      setError(caught instanceof ApiClientError ? caught.message : '同期を開始できませんでした');
     } finally {
       setBusy(null);
     }
@@ -291,139 +340,151 @@ export function Dashboard({
         </Card>
       ) : (
         <Stack spacing={2}>
-          {channels.map((channel) => (
-            <Card
-              key={channel.subscriptionId}
-              sx={{ opacity: channel.status === 'PAUSED' ? 0.72 : 1 }}
-            >
-              <CardContent>
-                <Stack
-                  direction={{ xs: 'column', md: 'row' }}
-                  spacing={2.5}
-                  alignItems={{ xs: 'stretch', md: 'center' }}
-                >
-                  <Stack direction="row" spacing={2} alignItems="center" flex={1}>
-                    <Avatar src={channel.thumbnailUrl} alt="" sx={{ width: 64, height: 64 }} />
-                    <Box minWidth={0}>
-                      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                        <Typography variant="h6" noWrap>
-                          {channel.title}
-                        </Typography>
-                        <Chip
-                          size="small"
-                          color={channel.status === 'ACTIVE' ? 'success' : 'default'}
-                          label={channel.status === 'ACTIVE' ? '同期中' : '一時停止'}
-                        />
-                      </Stack>
-                      <Typography color="text.secondary">{channel.handle}</Typography>
-                    </Box>
-                  </Stack>
+          {channels.map((channel) => {
+            const syncState = syncStates[channel.subscriptionId] ?? channel.lastSyncStatus;
+            const syncActive = syncState === 'QUEUED' || syncState === 'RUNNING';
+            return (
+              <Card
+                key={channel.subscriptionId}
+                sx={{ opacity: channel.status === 'PAUSED' ? 0.72 : 1 }}
+              >
+                <CardContent>
                   <Stack
-                    direction={{ xs: 'column', sm: 'row' }}
-                    spacing={3}
-                    sx={{ minWidth: { md: 350 } }}
+                    direction={{ xs: 'column', md: 'row' }}
+                    spacing={2.5}
+                    alignItems={{ xs: 'stretch', md: 'center' }}
                   >
-                    <Box>
-                      <Typography variant="caption" color="text.secondary">
-                        最終取得
-                      </Typography>
-                      <Typography variant="body2">{formatDate(channel.lastFetchedAt)}</Typography>
-                    </Box>
-                    <Box>
-                      <Typography variant="caption" color="text.secondary">
-                        カレンダー反映
-                      </Typography>
-                      <Typography variant="body2">
-                        {formatDate(channel.lastCalendarSyncAt)}
-                      </Typography>
-                    </Box>
-                  </Stack>
-                  <Stack direction="row" justifyContent="flex-end">
-                    <Tooltip title="今すぐ同期">
-                      <span>
-                        <IconButton
-                          aria-label={`${channel.title}を今すぐ同期`}
-                          disabled={busy !== null || channel.status === 'PAUSED'}
-                          onClick={() =>
-                            void act(
-                              `sync-${channel.subscriptionId}`,
-                              () => apiClient.sync(channel.subscriptionId),
-                              '同期が完了しました',
-                            )
-                          }
-                        >
-                          {busy === `sync-${channel.subscriptionId}` ? (
-                            <CircularProgress size={22} />
-                          ) : (
-                            <SyncRoundedIcon />
-                          )}
-                        </IconButton>
-                      </span>
-                    </Tooltip>
-                    <Tooltip title={channel.status === 'ACTIVE' ? '一時停止' : '再開'}>
-                      <span>
-                        <IconButton
-                          aria-label={
-                            channel.status === 'ACTIVE'
-                              ? `${channel.title}を一時停止`
-                              : `${channel.title}を再開`
-                          }
-                          disabled={busy !== null}
-                          onClick={() =>
-                            void act(
-                              `status-${channel.subscriptionId}`,
-                              () =>
-                                apiClient.status(
-                                  channel.subscriptionId,
-                                  channel.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE',
-                                ),
+                    <Stack direction="row" spacing={2} alignItems="center" flex={1}>
+                      <Avatar src={channel.thumbnailUrl} alt="" sx={{ width: 64, height: 64 }} />
+                      <Box minWidth={0}>
+                        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                          <Typography variant="h6" noWrap>
+                            {channel.title}
+                          </Typography>
+                          <Chip
+                            size="small"
+                            color={
+                              syncActive
+                                ? 'info'
+                                : channel.status === 'ACTIVE'
+                                  ? 'success'
+                                  : 'default'
+                            }
+                            label={
+                              syncState === 'QUEUED'
+                                ? '待機中'
+                                : syncState === 'RUNNING'
+                                  ? '同期中'
+                                  : channel.status === 'ACTIVE'
+                                    ? '有効'
+                                    : '一時停止'
+                            }
+                          />
+                        </Stack>
+                        <Typography color="text.secondary">{channel.handle}</Typography>
+                      </Box>
+                    </Stack>
+                    <Stack
+                      direction={{ xs: 'column', sm: 'row' }}
+                      spacing={3}
+                      sx={{ minWidth: { md: 350 } }}
+                    >
+                      <Box>
+                        <Typography variant="caption" color="text.secondary">
+                          最終取得
+                        </Typography>
+                        <Typography variant="body2">{formatDate(channel.lastFetchedAt)}</Typography>
+                      </Box>
+                      <Box>
+                        <Typography variant="caption" color="text.secondary">
+                          カレンダー反映
+                        </Typography>
+                        <Typography variant="body2">
+                          {formatDate(channel.lastCalendarSyncAt)}
+                        </Typography>
+                      </Box>
+                    </Stack>
+                    <Stack direction="row" justifyContent="flex-end">
+                      <Tooltip title="今すぐ同期">
+                        <span>
+                          <IconButton
+                            aria-label={`${channel.title}を今すぐ同期`}
+                            disabled={busy !== null || channel.status === 'PAUSED' || syncActive}
+                            onClick={() => void requestSync(channel.subscriptionId)}
+                          >
+                            {busy === `sync-${channel.subscriptionId}` || syncActive ? (
+                              <CircularProgress size={22} />
+                            ) : (
+                              <SyncRoundedIcon />
+                            )}
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                      <Tooltip title={channel.status === 'ACTIVE' ? '一時停止' : '再開'}>
+                        <span>
+                          <IconButton
+                            aria-label={
                               channel.status === 'ACTIVE'
-                                ? '一時停止しました'
-                                : '同期を再開しました',
-                            )
-                          }
-                        >
-                          {channel.status === 'ACTIVE' ? (
-                            <PauseRoundedIcon />
-                          ) : (
-                            <PlayArrowRoundedIcon />
-                          )}
-                        </IconButton>
-                      </span>
-                    </Tooltip>
-                    <Tooltip title="登録解除">
-                      <span>
-                        <IconButton
-                          aria-label={`${channel.title}の登録を解除`}
-                          color="error"
-                          disabled={busy !== null}
-                          onClick={() => {
-                            if (
-                              window.confirm(
-                                `${channel.title} の登録を解除しますか？未来の予定はカレンダーから削除されます。`,
-                              )
-                            )
+                                ? `${channel.title}を一時停止`
+                                : `${channel.title}を再開`
+                            }
+                            disabled={busy !== null}
+                            onClick={() =>
                               void act(
-                                `delete-${channel.subscriptionId}`,
-                                () => apiClient.remove(channel.subscriptionId),
-                                '登録を解除しました',
-                              );
-                          }}
-                        >
-                          <DeleteOutlineRoundedIcon />
-                        </IconButton>
-                      </span>
-                    </Tooltip>
+                                `status-${channel.subscriptionId}`,
+                                () =>
+                                  apiClient.status(
+                                    channel.subscriptionId,
+                                    channel.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE',
+                                  ),
+                                channel.status === 'ACTIVE'
+                                  ? '一時停止しました'
+                                  : '同期を再開しました',
+                              )
+                            }
+                          >
+                            {channel.status === 'ACTIVE' ? (
+                              <PauseRoundedIcon />
+                            ) : (
+                              <PlayArrowRoundedIcon />
+                            )}
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                      <Tooltip title="登録解除">
+                        <span>
+                          <IconButton
+                            aria-label={`${channel.title}の登録を解除`}
+                            color="error"
+                            disabled={busy !== null}
+                            onClick={() => {
+                              if (
+                                window.confirm(
+                                  `${channel.title} の登録を解除しますか？未来の予定はカレンダーから削除されます。`,
+                                )
+                              )
+                                void act(
+                                  `delete-${channel.subscriptionId}`,
+                                  () => apiClient.remove(channel.subscriptionId),
+                                  '登録を解除しました',
+                                );
+                            }}
+                          >
+                            <DeleteOutlineRoundedIcon />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    </Stack>
                   </Stack>
-                </Stack>
-                {channel.lastErrorMessage && (
-                  <Alert severity="warning" sx={{ mt: 2 }}>
-                    {channel.lastErrorMessage}
-                  </Alert>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                  {channel.lastErrorMessage && (
+                    <Alert severity="warning" sx={{ mt: 2 }}>
+                      {channel.lastErrorMessage}
+                    </Alert>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
         </Stack>
       )}
       <Button

@@ -36,10 +36,12 @@ enum ConnectionStatus {
 
 enum SyncRunType {
   SCHEDULED
+  INITIAL
   MANUAL
 }
 
 enum SyncStatus {
+  QUEUED
   RUNNING
   SUCCESS
   PARTIAL_SUCCESS
@@ -226,7 +228,9 @@ model SyncRun {
   type          SyncRunType
   status        SyncStatus         @default(RUNNING)
   requestedById String?
-  startedAt     DateTime           @default(now()) @db.DateTime(3)
+  queuedAt      DateTime           @default(now()) @db.DateTime(3)
+  startedAt     DateTime?          @db.DateTime(3)
+  heartbeatAt   DateTime?          @db.DateTime(3)
   completedAt   DateTime?          @db.DateTime(3)
   channelsTotal Int                @default(0)
   usersTotal    Int                @default(0)
@@ -236,6 +240,7 @@ model SyncRun {
   targetResults SyncTargetResult[]
 
   @@index([type, status, startedAt])
+  @@index([status, queuedAt])
 }
 
 /// 同期対象ごとの部分成功・失敗。
@@ -247,7 +252,8 @@ model SyncTargetResult {
   status       SyncStatus
   errorCode    String?    @db.VarChar(64)
   errorMessage String?    @db.VarChar(255)
-  startedAt    DateTime   @default(now()) @db.DateTime(3)
+  queuedAt     DateTime   @default(now()) @db.DateTime(3)
+  startedAt    DateTime?  @db.DateTime(3)
   completedAt  DateTime?  @db.DateTime(3)
   youtubeFetchStatus SyncPhaseStatus @default(NOT_STARTED)
   databaseUpdateStatus SyncPhaseStatus @default(NOT_STARTED)

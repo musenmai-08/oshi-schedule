@@ -9,6 +9,7 @@ import type {
   Store,
   SubscriptionRecord,
   SyncResult,
+  SyncRunRecord,
   UserRecord,
   DeletionStep,
   LeaseOwnership,
@@ -32,15 +33,22 @@ export class MemoryStore implements Store {
     id: string;
     status: string;
     type: string;
-    startedAt: Date;
+    requestedById: string | null;
+    queuedAt: Date;
+    startedAt: Date | null;
+    heartbeatAt: Date | null;
     completedAt: Date | null;
+    errorCode: string | null;
   }> = [];
   readonly syncTargets: Array<{
     runId: string;
     subscriptionId: string;
     status: string;
-    startedAt: Date;
+    queuedAt: Date;
+    startedAt: Date | null;
     completedAt: Date | null;
+    errorCode: string | null;
+    errorMessage: string | null;
     youtubeFetchStatus: string;
     databaseUpdateStatus: string;
     calendarSyncStatus: string;
@@ -278,7 +286,11 @@ export class MemoryStore implements Store {
     if (!this.ownsLease(lease, at)) return false;
     const channel = this.channels.find((item) => item.id === channelId);
     if (!channel) return false;
-    Object.assign(channel, { fetchStartedAt: at, lastFetchStatus: 'RUNNING' as const, nextFetchAt: null });
+    Object.assign(channel, {
+      fetchStartedAt: at,
+      lastFetchStatus: 'RUNNING' as const,
+      nextFetchAt: null,
+    });
     return true;
   }
   async commitChannelSnapshot(
@@ -463,21 +475,172 @@ export class MemoryStore implements Store {
   }
   async startSyncRun(
     type: 'MANUAL' | 'SCHEDULED',
-    _requestedById: string | null,
+    requestedById: string | null,
     _targets: number,
     at: Date,
   ) {
     const id = this.cuid();
-    this.syncRuns.push({ id, type, status: 'RUNNING', startedAt: at, completedAt: null });
+    this.syncRuns.push({
+      id,
+      type,
+      status: 'RUNNING',
+      requestedById,
+      queuedAt: at,
+      startedAt: at,
+      heartbeatAt: at,
+      completedAt: null,
+      errorCode: null,
+    });
     return id;
   }
+  private manualRun(runId: string): SyncRunRecord | null {
+    const run = this.syncRuns.find((item) => item.id === runId);
+    const target = this.syncTargets.find((item) => item.runId === runId);
+    if (!run || (run.type !== 'INITIAL' && run.type !== 'MANUAL') || !run.requestedById || !target)
+      return null;
+    return {
+      id: run.id,
+      subscriptionId: target.subscriptionId,
+      requestedById: run.requestedById,
+      type: run.type,
+      status: run.status as SyncRunRecord['status'],
+      queuedAt: run.queuedAt,
+      startedAt: run.startedAt,
+      completedAt: run.completedAt,
+      heartbeatAt: run.heartbeatAt,
+      errorCode: run.errorCode,
+      errorMessage: target.errorMessage,
+      youtubeFetchStatus: target.youtubeFetchStatus as SyncRunRecord['youtubeFetchStatus'],
+      databaseUpdateStatus: target.databaseUpdateStatus as SyncRunRecord['databaseUpdateStatus'],
+      calendarSyncStatus: target.calendarSyncStatus as SyncRunRecord['calendarSyncStatus'],
+      snapshotVersion: target.snapshotVersion,
+    };
+  }
+  async enqueueSyncRun(
+    userId: string,
+    subscriptionId: string,
+    at: Date,
+    cooldownBefore: Date,
+    trigger: 'INITIAL' | 'MANUAL',
+  ) {
+    const subscription = this.subscriptions.find(
+      (item) => item.id === subscriptionId && item.userId === userId,
+    );
+    if (!subscription) throw new StoreConstraintError('SUBSCRIPTION_NOT_FOUND');
+    const active = this.syncTargets.find((target) => {
+      const run = this.syncRuns.find((item) => item.id === target.runId);
+      return (
+        target.subscriptionId === subscriptionId &&
+        (target.status === 'QUEUED' || target.status === 'RUNNING') &&
+        (run?.type === 'INITIAL' || run?.type === 'MANUAL') &&
+        run.requestedById === userId
+      );
+    });
+    if (active) {
+      const run = this.manualRun(active.runId);
+      if (!run) throw new Error('active sync run is incomplete');
+      return { run, created: false };
+    }
+    if (
+      trigger === 'MANUAL' &&
+      subscription.lastManualSyncAt &&
+      subscription.lastManualSyncAt > cooldownBefore
+    )
+      throw new StoreConstraintError('SYNC_COOLDOWN');
+    const id = this.cuid();
+    this.syncRuns.push({
+      id,
+      type: trigger,
+      status: 'QUEUED',
+      requestedById: userId,
+      queuedAt: at,
+      startedAt: null,
+      heartbeatAt: null,
+      completedAt: null,
+      errorCode: null,
+    });
+    this.syncTargets.push({
+      runId: id,
+      subscriptionId,
+      status: 'QUEUED',
+      queuedAt: at,
+      startedAt: null,
+      completedAt: null,
+      errorCode: null,
+      errorMessage: null,
+      youtubeFetchStatus: 'NOT_STARTED',
+      databaseUpdateStatus: 'NOT_STARTED',
+      calendarSyncStatus: 'NOT_STARTED',
+      snapshotVersion: null,
+    });
+    subscription.lastSyncStatus = 'QUEUED';
+    subscription.lastErrorMessage = null;
+    const run = this.manualRun(id);
+    if (!run) throw new Error('queued sync run is incomplete');
+    return { run, created: true };
+  }
+  async getSyncRunForUser(runId: string, userId: string) {
+    const run = this.manualRun(runId);
+    return run?.requestedById === userId ? run : null;
+  }
+  async claimSyncRun(runId: string, at: Date, staleBefore: Date) {
+    const run = this.syncRuns.find(
+      (item) => item.id === runId && (item.type === 'INITIAL' || item.type === 'MANUAL'),
+    );
+    if (!run) return null;
+    const heartbeat = run.heartbeatAt ?? run.startedAt ?? run.queuedAt;
+    if (run.status !== 'QUEUED' && !(run.status === 'RUNNING' && heartbeat < staleBefore))
+      return null;
+    run.status = 'RUNNING';
+    run.startedAt ??= at;
+    run.heartbeatAt = at;
+    run.completedAt = null;
+    run.errorCode = null;
+    const target = this.syncTargets.find((item) => item.runId === runId);
+    if (target) {
+      target.status = 'RUNNING';
+      target.startedAt = at;
+      target.completedAt = null;
+      target.errorCode = null;
+      target.errorMessage = null;
+    }
+    return this.manualRun(runId);
+  }
+  async heartbeatSyncRun(runId: string, at: Date) {
+    const run = this.syncRuns.find((item) => item.id === runId && item.status === 'RUNNING');
+    if (run) run.heartbeatAt = at;
+  }
+  async listRecoverableSyncRunIds(staleBefore: Date, limit: number) {
+    return this.syncRuns
+      .filter((run) => {
+        const heartbeat = run.heartbeatAt ?? run.startedAt ?? run.queuedAt;
+        return (
+          (run.type === 'INITIAL' || run.type === 'MANUAL') &&
+          (run.status === 'QUEUED' || (run.status === 'RUNNING' && heartbeat < staleBefore))
+        );
+      })
+      .sort((left, right) => left.queuedAt.getTime() - right.queuedAt.getTime())
+      .slice(0, limit)
+      .map(({ id }) => id);
+  }
   async startSyncTarget(runId: string, subscriptionId: string, at: Date) {
+    const existing = this.syncTargets.find(
+      (item) => item.runId === runId && item.subscriptionId === subscriptionId,
+    );
+    if (existing) {
+      existing.status = 'RUNNING';
+      existing.startedAt = at;
+      return;
+    }
     this.syncTargets.push({
       runId,
       subscriptionId,
       status: 'RUNNING',
+      queuedAt: at,
       startedAt: at,
       completedAt: null,
+      errorCode: null,
+      errorMessage: null,
       youtubeFetchStatus: 'NOT_STARTED',
       databaseUpdateStatus: 'NOT_STARTED',
       calendarSyncStatus: 'NOT_STARTED',
@@ -491,6 +654,8 @@ export class MemoryStore implements Store {
     if (target) {
       target.status = result.status;
       target.completedAt = at;
+      target.errorCode = result.errorCode ?? null;
+      target.errorMessage = result.message;
       target.youtubeFetchStatus = result.phases?.youtubeFetch ?? target.youtubeFetchStatus;
       target.databaseUpdateStatus = result.phases?.databaseUpdate ?? target.databaseUpdateStatus;
       target.calendarSyncStatus = result.phases?.calendarSync ?? target.calendarSyncStatus;
@@ -501,17 +666,24 @@ export class MemoryStore implements Store {
     runId: string,
     status: 'SUCCESS' | 'PARTIAL_SUCCESS' | 'PARTIAL_FAILED' | 'DEFERRED' | 'FAILED',
     at: Date,
+    errorCode?: string,
   ) {
     const run = this.syncRuns.find((item) => item.id === runId);
     if (run) {
       run.status = status;
       run.completedAt = at;
+      run.heartbeatAt = at;
+      run.errorCode = errorCode ?? null;
     }
   }
   async maintainSyncRuns(staleBefore: Date, retainAfter: Date, at: Date) {
     const staleIds = new Set(
       this.syncRuns
-        .filter((run) => run.status === 'RUNNING' && run.startedAt < staleBefore)
+        .filter(
+          (run) =>
+            run.status === 'RUNNING' &&
+            (run.heartbeatAt ?? run.startedAt ?? run.queuedAt) < staleBefore,
+        )
         .map((run) => run.id),
     );
     for (const run of this.syncRuns) {

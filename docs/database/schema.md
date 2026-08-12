@@ -25,6 +25,6 @@ YouTubeQuotaUsageはquota timezoneの日付文字列（`YYYY-MM-DD`）と `GENER
 
 YouTubeChannelは`fetchStartedAt/fetchCompletedAt/lastFetchSucceededAt/snapshotVersion/lastFetchStatus/nextFetchAt`を保持する。channel leaseをfenceしたtransactionだけがBroadcast群と成功snapshotVersionを同時確定する。既存`lastFetchedAt`行は追加migrationで成功version 1へ安全に移行する。
 
-SyncRun/SyncTargetResult は開始時にRUNNINGを保存し、SUCCESS/PARTIAL_SUCCESS/DEFERRED/部分失敗/全失敗を完了時刻と安全なerror codeで確定する。対象結果は`youtubeFetchStatus/databaseUpdateStatus/calendarSyncStatus`と使用snapshotVersionも保存する。定期同期の開始時に24時間超のRUNNINGをFAILEDへ回収し、完了から90日を過ぎた実行履歴を削除する。Broadcast履歴はこのretentionの対象にしない。
+SyncRun/SyncTargetResultは初回・手動同期のdurable jobも兼ねる。`INITIAL`/`MANUAL`はqueuedAtを持つQUEUEDで作成し、workerがstartedAt/heartbeatAtを更新してRUNNINGへatomic claimする。SUCCESS/DEFERRED/FAILEDと完了時刻・安全なerror code、`youtubeFetchStatus/databaseUpdateStatus/calendarSyncStatus`、snapshotVersionを保存する。active runはsubscriptionごとにtransactionでdedupeし、30分staleのtargeted runを回収する。定期runは従来どおりRUNNING開始、24時間stale回収、完了90日retentionとする。Broadcast履歴はこのretentionの対象にしない。
 
 履歴 Broadcast は物理保持し、将来 retention job を追加する。全 DateTime は MySQL `DATETIME(3)` で UTC として扱う。3件上限の作成はUser行を `FOR UPDATE` したserializable transaction内でcountとinsertを行い、重複は `(userId,channelId)` 制約でも防ぐ。

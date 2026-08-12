@@ -7,7 +7,11 @@ export function createRuntime() {
   return {
     env,
     container,
-    runScheduled: () => container.service.sync.runScheduled(),
+    runScheduled: async () => [
+      ...(await container.service.sync.runPendingManual()),
+      ...(await container.service.sync.runScheduled()),
+    ],
+    runTargeted: (syncRunId: string) => container.service.sync.runTargeted(syncRunId),
     disconnect: () => container.resources.disconnect(),
   };
 }

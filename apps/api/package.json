@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "main": "dist/server.js",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "exports": {
     "./runtime": {
       "types": "./dist/runtime.d.ts",
@@ -21,6 +23,7 @@
   },
   "dependencies": {
     "@oshi-schedule/shared": "workspace:*",
+    "@aws-sdk/client-sqs": "^3.0.0",
     "@prisma/client": "6.19.3",
     "cors": "2.8.6",
     "dotenv": "17.4.2",

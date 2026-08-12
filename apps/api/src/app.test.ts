@@ -16,7 +16,9 @@ const env = loadEnv({
   WEB_ORIGIN: 'http://localhost:3001',
 });
 const store = new MemoryStore();
-const container = createContainer(env, { store });
+const dispatched: string[] = [];
+const dispatcher = { dispatch: async (syncRunId: string) => void dispatched.push(syncRunId) };
+const container = createContainer(env, { store, dispatcher });
 const app = createApp(env, container);
 const auth = { authorization: 'Bearer demo-token' };
 
@@ -54,12 +56,19 @@ async function createInitialSyncApp() {
   const localStore = new MemoryStore();
   const youtube = new InitialSyncYouTube();
   const calendar = new InitialSyncCalendar();
-  const localApp = createApp(env, createContainer(env, { store: localStore, youtube, calendar }));
+  const localDispatched: string[] = [];
+  const localContainer = createContainer(env, {
+    store: localStore,
+    youtube,
+    calendar,
+    dispatcher: { dispatch: async (syncRunId) => void localDispatched.push(syncRunId) },
+  });
+  const localApp = createApp(env, localContainer);
   await request(localApp)
     .post('/api/v1/onboarding')
     .set(auth)
     .send({ providerRefreshToken: 'fake-refresh-token' });
-  return { localApp, localStore, youtube, calendar };
+  return { localApp, localStore, youtube, calendar, localContainer, localDispatched };
 }
 
 async function resolveAndRegister(handle: string) {
@@ -73,6 +82,7 @@ async function resolveAndRegister(handle: string) {
 describe('API', () => {
   beforeEach(async () => {
     store.reset();
+    dispatched.length = 0;
     await request(app)
       .post('/api/v1/onboarding')
       .set(auth)
@@ -133,6 +143,29 @@ describe('API', () => {
     expect(trust('10.0.0.1', 0)).toBe(true);
     expect(trust('10.0.0.2', 1)).toBe(false);
   });
+  it('does not let a client-controlled leftmost forwarded address evade rate-limit identity', async () => {
+    const oneHopApp = createApp(
+      loadEnv({
+        NODE_ENV: 'test',
+        APP_MODE: 'fake',
+        ALLOWED_EMAILS: 'developer@example.com',
+        WEB_ORIGIN: 'http://localhost:3001',
+        TRUST_PROXY_HOPS: '1',
+      }),
+      container,
+    );
+    const first = await request(oneHopApp)
+      .get('/api/v1/me')
+      .set(auth)
+      .set('x-forwarded-for', '192.0.2.1, 198.51.100.10');
+    const second = await request(oneHopApp)
+      .get('/api/v1/me')
+      .set(auth)
+      .set('x-forwarded-for', '192.0.2.2, 198.51.100.10');
+    expect(Number(second.headers['ratelimit-remaining'])).toBe(
+      Number(first.headers['ratelimit-remaining']) - 1,
+    );
+  });
   it('rejects a non invited email', async () => {
     const response = await request(app)
       .get('/api/v1/me')
@@ -146,8 +179,9 @@ describe('API', () => {
     expect((await resolveAndRegister('@third')).status).toBe(201);
     expect((await resolveAndRegister('@fourth')).status).toBe(422);
   });
-  it('syncs once immediately after registration and keeps retry idempotent', async () => {
-    const { localApp, youtube, calendar } = await createInitialSyncApp();
+  it('queues initial sync without waiting and keeps duplicate delivery idempotent', async () => {
+    const { localApp, youtube, calendar, localContainer, localDispatched } =
+      await createInitialSyncApp();
     const resolved = await request(localApp)
       .post('/api/v1/channels/resolve')
       .set(auth)
@@ -157,18 +191,61 @@ describe('API', () => {
       .set(auth)
       .send({ youtubeChannelId: resolved.body.data.youtubeChannelId as string });
     expect(created.status).toBe(201);
-    expect(created.body.data.initialSync.status).toBe('SUCCESS');
+    expect(created.body.data.sync.status).toBe('QUEUED');
+    expect(localDispatched).toEqual([created.body.data.sync.id]);
+    expect(youtube.listCalls).toBe(0);
+    expect(calendar.events.size).toBe(0);
+
+    const queued = await request(localApp)
+      .get(`/api/v1/sync-runs/${created.body.data.sync.id}`)
+      .set(auth);
+    expect(queued.body.data.status).toBe('QUEUED');
+    await localContainer.service.sync.runTargeted(created.body.data.sync.id);
     expect(youtube.listCalls).toBe(1);
     expect(calendar.events.size).toBe(1);
-
     expect(
-      (await request(localApp).post(`/api/v1/channels/${created.body.data.id}/sync`).set(auth))
-        .status,
-    ).toBe(200);
+      (await request(localApp).get(`/api/v1/sync-runs/${created.body.data.sync.id}`).set(auth)).body
+        .data.status,
+    ).toBe('SUCCESS');
+    expect((await localContainer.service.sync.runTargeted(created.body.data.sync.id)).status).toBe(
+      'SKIPPED',
+    );
     expect(calendar.events.size).toBe(1);
   });
+  it('records dispatch failure without losing the created subscription', async () => {
+    const localStore = new MemoryStore();
+    const localContainer = createContainer(env, {
+      store: localStore,
+      dispatcher: { dispatch: async () => Promise.reject(new Error('queue unavailable')) },
+    });
+    const localApp = createApp(env, localContainer);
+    await request(localApp)
+      .post('/api/v1/onboarding')
+      .set(auth)
+      .send({ providerRefreshToken: 'fake-refresh-token' });
+    const resolved = await request(localApp)
+      .post('/api/v1/channels/resolve')
+      .set(auth)
+      .send({ handle: '@dispatch-failure' });
+    const created = await request(localApp)
+      .post('/api/v1/channels')
+      .set(auth)
+      .send({ youtubeChannelId: resolved.body.data.youtubeChannelId as string });
+    expect(created.status).toBe(201);
+    expect(created.body.data.sync).toMatchObject({
+      status: 'FAILED',
+      errorCode: 'SYNC_DISPATCH_FAILED',
+    });
+    const channels = (await request(localApp).get('/api/v1/channels').set(auth)).body.data;
+    expect(channels).toHaveLength(1);
+    expect(channels[0].lastSyncStatus).toBe('FAILED');
+    expect(
+      (await request(localApp).get(`/api/v1/sync-runs/${created.body.data.sync.id}`).set(auth)).body
+        .data,
+    ).toMatchObject({ status: 'FAILED', error: { code: 'SYNC_DISPATCH_FAILED' } });
+  });
   it('keeps the subscription when initial sync fails and permits an immediate retry', async () => {
-    const { localApp, calendar } = await createInitialSyncApp();
+    const { localApp, calendar, localContainer } = await createInitialSyncApp();
     calendar.failUpsert = true;
     const resolved = await request(localApp)
       .post('/api/v1/channels/resolve')
@@ -179,23 +256,23 @@ describe('API', () => {
       .set(auth)
       .send({ youtubeChannelId: resolved.body.data.youtubeChannelId as string });
     expect(created.status).toBe(201);
-    expect(created.body.data.initialSync).toMatchObject({
-      status: 'FAILED',
-      errorCode: 'GOOGLE_EVENT_CREATE_FAILED',
-    });
+    await expect(
+      localContainer.service.sync.runTargeted(created.body.data.sync.id),
+    ).rejects.toThrow('予定を作成できません');
     const channels = await request(localApp).get('/api/v1/channels').set(auth);
     expect(channels.body.data).toHaveLength(1);
     expect(channels.body.data[0].lastSyncStatus).toBe('FAILED');
 
     calendar.failUpsert = false;
-    expect(
-      (await request(localApp).post(`/api/v1/channels/${created.body.data.id}/sync`).set(auth))
-        .status,
-    ).toBe(200);
+    const retry = await request(localApp)
+      .post(`/api/v1/channels/${created.body.data.subscription.id}/sync`)
+      .set(auth);
+    expect(retry.status).toBe(202);
+    await localContainer.service.sync.runTargeted(retry.body.data.id);
     expect(calendar.events.size).toBe(1);
   });
   it('keeps registration deferred when quota is unavailable', async () => {
-    const { localApp, youtube } = await createInitialSyncApp();
+    const { localApp, youtube, localContainer } = await createInitialSyncApp();
     youtube.deferred = true;
     const resolved = await request(localApp)
       .post('/api/v1/channels/resolve')
@@ -206,19 +283,21 @@ describe('API', () => {
       .set(auth)
       .send({ youtubeChannelId: resolved.body.data.youtubeChannelId as string });
     expect(created.status).toBe(201);
-    expect(created.body.data.initialSync.status).toBe('DEFERRED');
+    const result = await localContainer.service.sync.runTargeted(created.body.data.sync.id);
+    expect(result.status).toBe('DEFERRED');
     expect((await request(localApp).get('/api/v1/channels').set(auth)).body.data).toHaveLength(1);
   });
   it('shares a fresh channel snapshot while syncing each user calendar separately', async () => {
-    const { localApp, youtube, calendar } = await createInitialSyncApp();
+    const { localApp, youtube, calendar, localContainer } = await createInitialSyncApp();
     const firstResolved = await request(localApp)
       .post('/api/v1/channels/resolve')
       .set(auth)
       .send({ handle: '@shared' });
-    await request(localApp)
+    const firstCreated = await request(localApp)
       .post('/api/v1/channels')
       .set(auth)
       .send({ youtubeChannelId: firstResolved.body.data.youtubeChannelId as string });
+    await localContainer.service.sync.runTargeted(firstCreated.body.data.sync.id);
 
     const secondAuth = { authorization: 'Bearer test:second:second@example.com' };
     await request(localApp)
@@ -234,14 +313,15 @@ describe('API', () => {
       .set(secondAuth)
       .send({ youtubeChannelId: secondResolved.body.data.youtubeChannelId as string });
 
-    expect(secondCreated.body.data.initialSync.status).toBe('SUCCESS');
+    await localContainer.service.sync.runTargeted(secondCreated.body.data.sync.id);
+    expect(secondCreated.body.data.sync.status).toBe('QUEUED');
     expect(youtube.listCalls).toBe(1);
     expect(calendar.events.size).toBe(2);
     expect(calendar.userIds.size).toBe(2);
   });
   it('pauses, resumes, syncs and deletes a subscription', async () => {
     const created = await resolveAndRegister('@flow');
-    const id = created.body.data.id as string;
+    const id = created.body.data.subscription.id as string;
     expect(
       (await request(app).patch(`/api/v1/channels/${id}`).set(auth).send({ status: 'PAUSED' })).body
         .data.status,
@@ -250,11 +330,11 @@ describe('API', () => {
       (await request(app).patch(`/api/v1/channels/${id}`).set(auth).send({ status: 'ACTIVE' })).body
         .data.status,
     ).toBe('ACTIVE');
-    expect((await request(app).post(`/api/v1/channels/${id}/sync`).set(auth)).status).toBe(200);
-    const cooldown = await request(app).post(`/api/v1/channels/${id}/sync`).set(auth);
-    expect(cooldown.status).toBe(429);
-    expect(cooldown.type).toBe('application/json');
-    expect(cooldown.body.error.code).toBe('SYNC_COOLDOWN');
+    const first = await request(app).post(`/api/v1/channels/${id}/sync`).set(auth);
+    expect(first.status).toBe(202);
+    const duplicate = await request(app).post(`/api/v1/channels/${id}/sync`).set(auth);
+    expect(duplicate.status).toBe(202);
+    expect(duplicate.body.data.id).toBe(first.body.data.id);
     expect((await request(app).delete(`/api/v1/channels/${id}`).set(auth)).status).toBe(204);
   });
   it('validates CUID path parameters and distinguishes a missing valid CUID', async () => {
@@ -273,7 +353,7 @@ describe('API', () => {
   });
   it('does not expose another user subscription', async () => {
     const created = await resolveAndRegister('@private');
-    const id = created.body.data.id as string;
+    const id = created.body.data.subscription.id as string;
     await request(app)
       .post('/api/v1/onboarding')
       .set('authorization', 'Bearer test:second:second@example.com')
@@ -283,6 +363,14 @@ describe('API', () => {
       .set('authorization', 'Bearer test:second:second@example.com')
       .send({ status: 'PAUSED' });
     expect(response.status).toBe(404);
+    const syncRunId = created.body.data.sync.id as string;
+    expect(
+      (
+        await request(app)
+          .get(`/api/v1/sync-runs/${syncRunId}`)
+          .set('authorization', 'Bearer test:second:second@example.com')
+      ).status,
+    ).toBe(404);
   });
   it('requires confirmation and deletes an account', async () => {
     expect(

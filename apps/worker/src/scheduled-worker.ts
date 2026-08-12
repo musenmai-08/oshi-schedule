@@ -12,6 +12,15 @@ export interface ScheduledWorkerOutcome {
   errorCode?: 'WORKER_UNHANDLED_ERROR' | 'WORKER_DISCONNECT_FAILED';
 }
 
+export function selectWorkerExecution(
+  syncRunId: string | undefined,
+  runScheduled: () => Promise<ReadonlyArray<{ status: string }>>,
+  runTargeted: (syncRunId: string) => Promise<{ status: string }>,
+) {
+  const normalizedId = syncRunId?.trim();
+  return normalizedId ? async () => [await runTargeted(normalizedId)] : runScheduled;
+}
+
 export async function executeScheduledWorkerLifecycle(
   runScheduled: () => Promise<ReadonlyArray<{ status: string }>>,
   disconnect: () => Promise<void>,

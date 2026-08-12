@@ -116,12 +116,26 @@ export function createApiRouter(container: Container): ExpressRouter {
   router.post(
     '/channels/:subscriptionId/sync',
     asyncRoute(async (request, response) => {
-      const user = await container.service.me(response.locals.identity);
-      const result = await container.service.sync.syncSubscription(
-        user.id,
-        parse(entityIdSchema, request.params.subscriptionId),
+      success(
+        response,
+        await container.service.requestSync(
+          response.locals.identity,
+          parse(entityIdSchema, request.params.subscriptionId),
+        ),
+        202,
       );
-      success(response, result);
+    }),
+  );
+  router.get(
+    '/sync-runs/:syncRunId',
+    asyncRoute(async (request, response) => {
+      success(
+        response,
+        await container.service.syncRun(
+          response.locals.identity,
+          parse(entityIdSchema, request.params.syncRunId),
+        ),
+      );
     }),
   );
   router.get(

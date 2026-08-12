@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 推しスケジュール API
-  version: 1.1.0
+  version: 1.3.0
 servers:
   - url: http://localhost:4000
 components:
@@ -11,6 +11,11 @@ components:
     SubscriptionId:
       in: path
       name: subscriptionId
+      required: true
+      schema: { $ref: '#/components/schemas/Cuid' }
+    SyncRunId:
+      in: path
+      name: syncRunId
       required: true
       schema: { $ref: '#/components/schemas/Cuid' }
   schemas:
@@ -50,16 +55,61 @@ components:
       properties: { youtubeChannelId: { type: string, minLength: 1 } }
     ChannelRegistrationResult:
       type: object
-      required: [id, status, initialSync]
+      required: [subscription, sync]
+      properties:
+        subscription:
+          type: object
+          required: [id, status]
+          properties:
+            id: { $ref: '#/components/schemas/Cuid' }
+            status: { type: string, enum: [ACTIVE, PAUSED] }
+        sync:
+          type: object
+          required: [id, subscriptionId, status]
+          properties:
+            id: { $ref: '#/components/schemas/Cuid' }
+            subscriptionId: { $ref: '#/components/schemas/Cuid' }
+            status: { type: string, enum: [QUEUED, RUNNING, FAILED] }
+            errorCode: { type: string }
+    SyncRunAccepted:
+      type: object
+      required: [id, subscriptionId, status]
       properties:
         id: { $ref: '#/components/schemas/Cuid' }
-        status: { type: string, enum: [ACTIVE, PAUSED] }
-        initialSync:
+        subscriptionId: { $ref: '#/components/schemas/Cuid' }
+        status: { type: string, enum: [QUEUED, RUNNING] }
+    SyncRun:
+      type: object
+      required:
+        [id, subscriptionId, trigger, status, queuedAt, startedAt, finishedAt, error, result]
+      properties:
+        id: { $ref: '#/components/schemas/Cuid' }
+        subscriptionId: { $ref: '#/components/schemas/Cuid' }
+        trigger: { type: string, enum: [INITIAL, MANUAL] }
+        status:
+          type: string
+          enum:
+            [QUEUED, RUNNING, SUCCESS, FAILED, DEFERRED, PARTIAL_SUCCESS, PARTIAL_FAILED, SKIPPED]
+        queuedAt: { type: string, format: date-time }
+        startedAt: { type: [string, 'null'], format: date-time }
+        finishedAt: { type: [string, 'null'], format: date-time }
+        error:
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [code, message]
+              properties:
+                code: { type: string }
+                message: { type: [string, 'null'] }
+        result:
           type: object
-          required: [status]
+          required: [youtubeFetch, databaseUpdate, calendarSync, snapshotVersion]
           properties:
-            status: { type: string, enum: [SUCCESS, DEFERRED, FAILED] }
-            errorCode: { type: string }
+            youtubeFetch: { type: string, enum: [NOT_STARTED, SUCCESS, DEFERRED, FAILED, SKIPPED] }
+            databaseUpdate:
+              { type: string, enum: [NOT_STARTED, SUCCESS, DEFERRED, FAILED, SKIPPED] }
+            calendarSync: { type: string, enum: [NOT_STARTED, SUCCESS, DEFERRED, FAILED, SKIPPED] }
+            snapshotVersion: { type: [integer, 'null'], minimum: 0 }
     UpdateSubscription:
       type: object
       required: [status]
@@ -186,7 +236,7 @@ paths:
         content: { application/json: { schema: { $ref: '#/components/schemas/CreateChannel' } } }
       responses:
         '201':
-          description: subscription created; initial sync result is reported separately
+          description: subscription created and initial sync job accepted without waiting for execution
           content:
             application/json:
               schema:
@@ -231,20 +281,37 @@ paths:
     parameters: [{ $ref: '#/components/parameters/SubscriptionId' }]
     post:
       responses:
-        '200':
-          description: Calendar sync completed; YouTube acquisition may be deferred
+        '202':
+          description: manual sync job accepted without waiting for execution
           content:
             application/json:
               schema:
                 type: object
                 required: [data, requestId]
                 properties:
-                  data: { $ref: '#/components/schemas/SyncResult' }
+                  data: { $ref: '#/components/schemas/SyncRunAccepted' }
                   requestId: { type: string }
         '400': { $ref: '#/components/responses/BadRequest' }
         '404': { description: not found or not owned }
-        '409': { description: paused or already running }
+        '409': { description: subscription is paused }
         '429': { description: cooldown }
+        '503': { description: durable job recorded but dispatch failed; request may be retried }
+  /api/v1/sync-runs/{syncRunId}:
+    parameters: [{ $ref: '#/components/parameters/SyncRunId' }]
+    get:
+      responses:
+        '200':
+          description: owned asynchronous sync job status and result summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, requestId]
+                properties:
+                  data: { $ref: '#/components/schemas/SyncRun' }
+                  requestId: { type: string }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { description: not found or not owned }
   /api/v1/sync-status:
     get: { responses: { '200': { description: latest per-subscription status } } }
   /api/v1/google/reconnect:

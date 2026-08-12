@@ -29,7 +29,7 @@ export interface SubscriptionRecord {
   status: SubscriptionStatus;
   lastCalendarSyncAt: Date | null;
   lastManualSyncAt: Date | null;
-  lastSyncStatus: 'SUCCESS' | 'FAILED' | 'RUNNING' | 'SKIPPED' | 'DEFERRED' | null;
+  lastSyncStatus: 'QUEUED' | 'SUCCESS' | 'FAILED' | 'RUNNING' | 'SKIPPED' | 'DEFERRED' | null;
   lastErrorMessage: string | null;
 }
 export interface BroadcastRecord extends NormalizedBroadcast {
@@ -46,7 +46,7 @@ export interface MappingRecord {
   managedFieldsHash: string;
 }
 export interface SyncResult {
-  status: 'RUNNING' | 'SUCCESS' | 'FAILED' | 'SKIPPED' | 'DEFERRED';
+  status: 'QUEUED' | 'RUNNING' | 'SUCCESS' | 'FAILED' | 'SKIPPED' | 'DEFERRED';
   message: string | null;
   errorCode?: string | null;
   phases?: {
@@ -57,6 +57,35 @@ export interface SyncResult {
   snapshotVersion?: number | null;
 }
 export type SyncPhaseStatus = 'NOT_STARTED' | 'SUCCESS' | 'DEFERRED' | 'FAILED' | 'SKIPPED';
+export type SyncRunStatus =
+  | 'QUEUED'
+  | 'RUNNING'
+  | 'SUCCESS'
+  | 'PARTIAL_SUCCESS'
+  | 'PARTIAL_FAILED'
+  | 'DEFERRED'
+  | 'FAILED'
+  | 'SKIPPED';
+export interface SyncRunRecord {
+  id: string;
+  subscriptionId: string;
+  requestedById: string;
+  type: 'INITIAL' | 'MANUAL';
+  status: SyncRunStatus;
+  queuedAt: Date;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  heartbeatAt: Date | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  youtubeFetchStatus: SyncPhaseStatus;
+  databaseUpdateStatus: SyncPhaseStatus;
+  calendarSyncStatus: SyncPhaseStatus;
+  snapshotVersion: number | null;
+}
+export interface SyncJobDispatcher {
+  dispatch(syncRunId: string): Promise<void>;
+}
 export type ChannelFetchTerminalStatus = 'DEFERRED' | 'FAILED';
 export type DeletionStep =
   'CALENDAR_DELETED' | 'TOKEN_REVOKED' | 'DATA_DELETED' | 'AUTH_DELETED' | 'COMPLETED';
@@ -216,6 +245,17 @@ export interface Store {
     targets: number,
     at: Date,
   ): Promise<string>;
+  enqueueSyncRun(
+    userId: string,
+    subscriptionId: string,
+    at: Date,
+    cooldownBefore: Date,
+    trigger: 'INITIAL' | 'MANUAL',
+  ): Promise<{ run: SyncRunRecord; created: boolean }>;
+  getSyncRunForUser(runId: string, userId: string): Promise<SyncRunRecord | null>;
+  claimSyncRun(runId: string, at: Date, staleBefore: Date): Promise<SyncRunRecord | null>;
+  heartbeatSyncRun(runId: string, at: Date): Promise<void>;
+  listRecoverableSyncRunIds(staleBefore: Date, limit: number): Promise<string[]>;
   startSyncTarget(runId: string, subscriptionId: string, at: Date): Promise<void>;
   finishSyncTarget(
     runId: string,

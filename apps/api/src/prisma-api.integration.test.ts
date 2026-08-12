@@ -28,7 +28,10 @@ const env = loadEnv({
   ALLOWED_EMAILS: 'developer@example.com,second@example.com',
   WEB_ORIGIN: 'http://localhost:3001',
 });
-const app = createApp(env, createContainer(env, { store, authAdmin }));
+const app = createApp(
+  env,
+  createContainer(env, { store, authAdmin, dispatcher: { dispatch: async () => undefined } }),
+);
 const ownerAuth = { authorization: 'Bearer test:prisma-owner:developer@example.com' };
 const otherAuth = { authorization: 'Bearer test:prisma-other:second@example.com' };
 const quietLogger: AppLogger = { info: () => undefined, error: () => undefined };
@@ -84,7 +87,7 @@ describe.runIf(Boolean(databaseUrl))('API with Prisma/MySQL IDs and constraints'
 
   it('accepts an actual Prisma CUID for pause, resume, sync and delete', async () => {
     const created = await register('@prismaflow');
-    const id = created.body.data.id as string;
+    const id = created.body.data.subscription.id as string;
     expect(id).toMatch(/^c/);
     expect(
       (await request(app).patch(`/api/v1/channels/${id}`).set(ownerAuth).send({ status: 'PAUSED' }))
@@ -95,7 +98,7 @@ describe.runIf(Boolean(databaseUrl))('API with Prisma/MySQL IDs and constraints'
         .status,
     ).toBe(200);
     expect((await request(app).post(`/api/v1/channels/${id}/sync`).set(ownerAuth)).status).toBe(
-      200,
+      202,
     );
     expect(
       (await request(app).patch(`/api/v1/channels/${id}`).set(otherAuth).send({ status: 'PAUSED' }))
@@ -145,6 +148,20 @@ describe.runIf(Boolean(databaseUrl))('API with Prisma/MySQL IDs and constraints'
     expect(responses.map((response) => response.status).sort()).toEqual([201, 422]);
     const user = await prisma.user.findUnique({ where: { supabaseUserId: 'prisma-owner' } });
     expect(await prisma.userChannelSubscription.count({ where: { userId: user!.id } })).toBe(3);
+  });
+
+  it('atomically claims one queued SyncRun and enforces status ownership in MySQL', async () => {
+    const created = await register('@prismajob');
+    const runId = created.body.data.sync.id as string;
+    const at = new Date('2026-08-12T00:01:00Z');
+    const claims = await Promise.all([
+      store.claimSyncRun(runId, at, new Date(0)),
+      store.claimSyncRun(runId, at, new Date(0)),
+    ]);
+    expect(claims.filter(Boolean)).toHaveLength(1);
+    expect((await request(app).get(`/api/v1/sync-runs/${runId}`).set(ownerAuth)).status).toBe(200);
+    expect((await request(app).get(`/api/v1/sync-runs/${runId}`).set(otherAuth)).status).toBe(404);
+    expect(await store.claimSyncRun(runId, at, new Date(0))).toBeNull();
   });
 
   it('persists an account deletion tombstone across local data and Auth deletion failure', async () => {

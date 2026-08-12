@@ -8,6 +8,7 @@ import type {
   Store,
   SubscriptionRecord,
   SyncResult,
+  SyncRunRecord,
   YouTubeQuotaBucket,
   YouTubeQuotaMode,
 } from '../../application/models.js';
@@ -62,6 +63,7 @@ const toSubscription = (row: {
   lastManualSyncAt: row.lastManualSyncAt,
   lastSyncStatus:
     row.lastSyncStatus === 'SUCCESS' ||
+    row.lastSyncStatus === 'QUEUED' ||
     row.lastSyncStatus === 'FAILED' ||
     row.lastSyncStatus === 'RUNNING' ||
     row.lastSyncStatus === 'SKIPPED' ||
@@ -422,7 +424,9 @@ export class PrismaStore implements Store {
         if (existing)
           await transaction.scheduledBroadcast.update({ where: { id: existing.id }, data });
         else
-          await transaction.scheduledBroadcast.create({ data: { channelId, ...data, youtubeVideoId: item.youtubeVideoId } });
+          await transaction.scheduledBroadcast.create({
+            data: { channelId, ...data, youtubeVideoId: item.youtubeVideoId },
+          });
       }
       if (unavailableVideoIds.length)
         await transaction.scheduledBroadcast.updateMany({
@@ -703,23 +707,194 @@ export class PrismaStore implements Store {
       await this.prisma.syncRun.create({
         data: {
           type,
+          status: 'RUNNING',
           requestedById,
+          queuedAt: at,
           startedAt: at,
+          heartbeatAt: at,
           channelsTotal: targets,
           usersTotal: targets,
         },
       })
     ).id;
   }
+  private async readManualSyncRun(
+    client: Prisma.TransactionClient | PrismaClient,
+    runId: string,
+  ): Promise<SyncRunRecord | null> {
+    const row = await client.syncRun.findUnique({
+      where: { id: runId },
+      include: {
+        targetResults: {
+          where: { targetType: 'SUBSCRIPTION' },
+          orderBy: { queuedAt: 'asc' },
+          take: 1,
+        },
+      },
+    });
+    const target = row?.targetResults[0];
+    if (!row || (row.type !== 'INITIAL' && row.type !== 'MANUAL') || !row.requestedById || !target)
+      return null;
+    return {
+      id: row.id,
+      subscriptionId: target.targetId,
+      requestedById: row.requestedById,
+      type: row.type,
+      status: row.status,
+      queuedAt: row.queuedAt,
+      startedAt: row.startedAt,
+      completedAt: row.completedAt,
+      heartbeatAt: row.heartbeatAt,
+      errorCode: row.errorCode ?? target.errorCode,
+      errorMessage: target.errorMessage,
+      youtubeFetchStatus: target.youtubeFetchStatus,
+      databaseUpdateStatus: target.databaseUpdateStatus,
+      calendarSyncStatus: target.calendarSyncStatus,
+      snapshotVersion: target.snapshotVersion,
+    };
+  }
+  async enqueueSyncRun(
+    userId: string,
+    subscriptionId: string,
+    at: Date,
+    cooldownBefore: Date,
+    trigger: 'INITIAL' | 'MANUAL',
+  ) {
+    return this.prisma.$transaction(
+      async (transaction) => {
+        const owned = await transaction.$queryRaw<
+          Array<{ id: string; lastManualSyncAt: Date | null }>
+        >`
+          SELECT id, lastManualSyncAt FROM UserChannelSubscription
+          WHERE id = ${subscriptionId} AND userId = ${userId}
+          FOR UPDATE`;
+        if (!owned.length) throw new StoreConstraintError('SUBSCRIPTION_NOT_FOUND');
+        const active = await transaction.syncTargetResult.findFirst({
+          where: {
+            targetType: 'SUBSCRIPTION',
+            targetId: subscriptionId,
+            status: { in: ['QUEUED', 'RUNNING'] },
+            syncRun: { type: { in: ['INITIAL', 'MANUAL'] }, requestedById: userId },
+          },
+          orderBy: { queuedAt: 'asc' },
+          select: { syncRunId: true },
+        });
+        if (active) {
+          const run = await this.readManualSyncRun(transaction, active.syncRunId);
+          if (!run) throw new Error('active sync run is incomplete');
+          return { run, created: false };
+        }
+        if (
+          trigger === 'MANUAL' &&
+          owned[0]!.lastManualSyncAt &&
+          owned[0]!.lastManualSyncAt > cooldownBefore
+        )
+          throw new StoreConstraintError('SYNC_COOLDOWN');
+        const created = await transaction.syncRun.create({
+          data: {
+            type: trigger,
+            status: 'QUEUED',
+            requestedById: userId,
+            queuedAt: at,
+            channelsTotal: 1,
+            usersTotal: 1,
+            targetResults: {
+              create: {
+                targetType: 'SUBSCRIPTION',
+                targetId: subscriptionId,
+                status: 'QUEUED',
+                queuedAt: at,
+              },
+            },
+          },
+        });
+        const run = await this.readManualSyncRun(transaction, created.id);
+        if (!run) throw new Error('queued sync run is incomplete');
+        await transaction.userChannelSubscription.update({
+          where: { id: subscriptionId },
+          data: {
+            lastSyncStatus: 'QUEUED',
+            lastErrorCode: null,
+            lastErrorMessage: null,
+          },
+        });
+        return { run, created: true };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  }
+  async getSyncRunForUser(runId: string, userId: string) {
+    const run = await this.readManualSyncRun(this.prisma, runId);
+    return run?.requestedById === userId ? run : null;
+  }
+  async claimSyncRun(runId: string, at: Date, staleBefore: Date) {
+    return this.prisma.$transaction(async (transaction) => {
+      const claimed = await transaction.$executeRaw`
+        UPDATE SyncRun
+        SET status = 'RUNNING',
+            startedAt = COALESCE(startedAt, ${at}),
+            heartbeatAt = ${at},
+            completedAt = NULL,
+            errorCode = NULL
+        WHERE id = ${runId}
+          AND type IN ('INITIAL', 'MANUAL')
+          AND (
+            status = 'QUEUED'
+            OR (
+              status = 'RUNNING'
+              AND COALESCE(heartbeatAt, startedAt, queuedAt) < ${staleBefore}
+            )
+          )`;
+      if (claimed !== 1) return null;
+      await transaction.syncTargetResult.updateMany({
+        where: { syncRunId: runId, targetType: 'SUBSCRIPTION' },
+        data: {
+          status: 'RUNNING',
+          startedAt: at,
+          completedAt: null,
+          errorCode: null,
+          errorMessage: null,
+        },
+      });
+      return this.readManualSyncRun(transaction, runId);
+    });
+  }
+  async heartbeatSyncRun(runId: string, at: Date) {
+    await this.prisma.syncRun.updateMany({
+      where: { id: runId, status: 'RUNNING' },
+      data: { heartbeatAt: at },
+    });
+  }
+  async listRecoverableSyncRunIds(staleBefore: Date, limit: number) {
+    const rows = await this.prisma.syncRun.findMany({
+      where: {
+        type: { in: ['INITIAL', 'MANUAL'] },
+        OR: [{ status: 'QUEUED' }, { status: 'RUNNING', heartbeatAt: { lt: staleBefore } }],
+      },
+      orderBy: { queuedAt: 'asc' },
+      take: limit,
+      select: { id: true },
+    });
+    return rows.map(({ id }) => id);
+  }
   async startSyncTarget(runId: string, subscriptionId: string, at: Date) {
-    await this.prisma.syncTargetResult.create({
-      data: {
+    await this.prisma.syncTargetResult.upsert({
+      where: {
+        syncRunId_targetType_targetId: {
+          syncRunId: runId,
+          targetType: 'SUBSCRIPTION',
+          targetId: subscriptionId,
+        },
+      },
+      create: {
         syncRunId: runId,
         targetType: 'SUBSCRIPTION',
         targetId: subscriptionId,
         status: 'RUNNING',
+        queuedAt: at,
         startedAt: at,
       },
+      update: { status: 'RUNNING', startedAt: at },
     });
   }
   async finishSyncTarget(runId: string, subscriptionId: string, result: SyncResult, at: Date) {
@@ -757,13 +932,19 @@ export class PrismaStore implements Store {
   ) {
     await this.prisma.syncRun.update({
       where: { id: runId },
-      data: { status, completedAt: at, errorCode: errorCode ?? null },
+      data: { status, completedAt: at, heartbeatAt: at, errorCode: errorCode ?? null },
     });
   }
   async maintainSyncRuns(staleBefore: Date, retainAfter: Date, at: Date) {
     await this.prisma.$transaction(async (tx) => {
       const stale = await tx.syncRun.findMany({
-        where: { status: 'RUNNING', startedAt: { lt: staleBefore } },
+        where: {
+          status: 'RUNNING',
+          OR: [
+            { heartbeatAt: { lt: staleBefore } },
+            { heartbeatAt: null, startedAt: { lt: staleBefore } },
+          ],
+        },
         select: { id: true },
       });
       const staleIds = stale.map((run) => run.id);

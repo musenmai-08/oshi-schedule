@@ -14,6 +14,7 @@ const realEnv = {
   YOUTUBE_API_KEY: 'youtube-key',
   GOOGLE_CLIENT_ID: 'client-id',
   GOOGLE_CLIENT_SECRET: 'client-secret',
+  SYNC_JOB_QUEUE_URL: 'https://sqs.ap-northeast-1.amazonaws.com/111111111111/sync-jobs',
 };
 
 describe('loadEnv production encryption keys', () => {

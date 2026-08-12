@@ -7,6 +7,7 @@ import type {
   CalendarGateway,
   Clock,
   Store,
+  SyncJobDispatcher,
   TokenCipher,
   YouTubeGateway,
 } from './models.js';
@@ -21,6 +22,7 @@ export class OshiService {
     private readonly clock: Clock,
     private readonly authAdmin: AuthAdmin,
     readonly sync: SyncService,
+    private readonly dispatcher: SyncJobDispatcher,
     private readonly accountDeletionLeaseMs = 60_000,
   ) {}
 
@@ -88,26 +90,79 @@ export class OshiService {
 
   async registerAndSync(identity: AuthIdentity, youtubeChannelId: string) {
     const subscription = await this.register(identity, youtubeChannelId);
+    const queued = await this.sync.queueSubscription(subscription.userId, subscription.id, true);
+    const dispatched = !queued.created || (await this.dispatch(queued.run));
+    return {
+      subscription: { id: subscription.id, status: subscription.status },
+      sync: {
+        id: queued.run.id,
+        subscriptionId: subscription.id,
+        status: dispatched
+          ? queued.run.status === 'RUNNING'
+            ? ('RUNNING' as const)
+            : ('QUEUED' as const)
+          : ('FAILED' as const),
+        ...(!dispatched ? { errorCode: 'SYNC_DISPATCH_FAILED' } : {}),
+      },
+    };
+  }
+
+  private async dispatch(run: Awaited<ReturnType<Store['enqueueSyncRun']>>['run']) {
+    if (run.status !== 'QUEUED') return true;
     try {
-      const result = await this.sync.syncInitialSubscription(
-        subscription.userId,
-        subscription.id,
-      );
-      return {
-        id: subscription.id,
-        status: subscription.status,
-        initialSync: { status: result.status },
+      await this.dispatcher.dispatch(run.id);
+      return true;
+    } catch {
+      const at = this.clock.now();
+      const result = {
+        status: 'FAILED' as const,
+        message: '同期ジョブを開始できませんでした',
+        errorCode: 'SYNC_DISPATCH_FAILED',
       };
-    } catch (error) {
-      return {
-        id: subscription.id,
-        status: subscription.status,
-        initialSync: {
-          status: 'FAILED' as const,
-          ...(error instanceof AppError ? { errorCode: error.code } : {}),
-        },
-      };
+      await this.store.saveSyncResult(run.subscriptionId, result, at, false);
+      await this.store.finishSyncTarget(run.id, run.subscriptionId, result, at);
+      await this.store.finishSyncRun(run.id, 'FAILED', at, 'SYNC_DISPATCH_FAILED');
+      return false;
     }
+  }
+
+  async requestSync(identity: AuthIdentity, subscriptionId: string) {
+    const user = await this.requireActiveUser(identity);
+    const queued = await this.sync.queueSubscription(user.id, subscriptionId);
+    if (queued.created && !(await this.dispatch(queued.run)))
+      throw new AppError(
+        'SYNC_DISPATCH_FAILED',
+        '同期ジョブを開始できませんでした。もう一度お試しください',
+        503,
+        true,
+      );
+    return {
+      id: queued.run.id,
+      subscriptionId: queued.run.subscriptionId,
+      status: queued.run.status === 'RUNNING' ? ('RUNNING' as const) : ('QUEUED' as const),
+    };
+  }
+
+  async syncRun(identity: AuthIdentity, syncRunId: string) {
+    const user = await this.requireActiveUser(identity);
+    const run = await this.store.getSyncRunForUser(syncRunId, user.id);
+    if (!run) throw new AppError('NOT_FOUND', '対象が見つかりません', 404);
+    return {
+      id: run.id,
+      subscriptionId: run.subscriptionId,
+      trigger: run.type,
+      status: run.status,
+      queuedAt: run.queuedAt.toISOString(),
+      startedAt: run.startedAt?.toISOString() ?? null,
+      finishedAt: run.completedAt?.toISOString() ?? null,
+      error: run.errorCode ? { code: run.errorCode, message: run.errorMessage } : null,
+      result: {
+        youtubeFetch: run.youtubeFetchStatus,
+        databaseUpdate: run.databaseUpdateStatus,
+        calendarSync: run.calendarSyncStatus,
+        snapshotVersion: run.snapshotVersion,
+      },
+    };
   }
 
   async setStatus(identity: AuthIdentity, id: string, status: 'ACTIVE' | 'PAUSED') {
