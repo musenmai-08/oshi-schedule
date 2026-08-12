@@ -6,6 +6,15 @@ import process from 'node:process';
 import { setTimeout as delayFor } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
+import {
+  DEFAULT_WAKE_HOURS,
+  calculateWakeDeadline,
+  formatDeadlineJst,
+  formatRemaining,
+  inspectWakeDeadline,
+  parseWakeHours,
+} from './staging-auto-sleep/deadline.mjs';
+import { schedulerUpdatePayload } from './staging-auto-sleep/sleep-core.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -74,7 +83,7 @@ export const createAwsCli = ({ exec = execFileAsync } = {}) => ({
 
 const isMissing = (error) =>
   error instanceof AwsCommandError &&
-  /not found|does not exist|ValidationError|DBInstanceNotFound|ResourceNotFoundException/i.test(
+  /not found|does not exist|ValidationError|DBInstanceNotFound|ParameterNotFound|ResourceNotFoundException/i.test(
     error.stderr,
   );
 
@@ -131,7 +140,31 @@ const probe = async (callback) => {
   }
 };
 
-export const collectStatus = async (aws) => {
+const collectDeadline = async (aws, parameterName, now) => {
+  if (!parameterName) return { state: 'NOT_DEPLOYED' };
+  try {
+    const response = await aws.json(['ssm', 'get-parameter', '--name', parameterName]);
+    return inspectWakeDeadline(response.Parameter?.Value, now);
+  } catch (error) {
+    if (isMissing(error)) return { state: 'UNSET' };
+    return { state: 'ERROR', error: error.message };
+  }
+};
+
+const putDeadline = (aws, parameterName, value) =>
+  aws.json([
+    'ssm',
+    'put-parameter',
+    '--name',
+    parameterName,
+    '--type',
+    'String',
+    '--value',
+    value,
+    '--overwrite',
+  ]);
+
+export const collectStatus = async (aws, { now = new Date() } = {}) => {
   const stack = await getStack(aws);
   if (!stack) {
     return {
@@ -143,15 +176,18 @@ export const collectStatus = async (aws) => {
       scheduler: { state: 'NOT_DEPLOYED' },
       alb: { state: 'NOT_DEPLOYED' },
       amplify: { state: 'NOT_DEPLOYED' },
+      autoSleep: { state: 'NOT_DEPLOYED' },
     };
   }
 
   const outputs = outputMap(stack);
+  const autoSleep = await collectDeadline(aws, outputs.WakeExpiresAtParameterName, now);
   const fullOutputKeys = [
     'EcsClusterName',
     'ApiServiceName',
     'RdsInstanceIdentifier',
     'WorkerScheduleName',
+    'WakeExpiresAtParameterName',
     'LoadBalancerArn',
     'AmplifyAppId',
   ];
@@ -286,6 +322,7 @@ export const collectStatus = async (aws) => {
     scheduler,
     alb,
     amplify,
+    autoSleep,
     apiUrl: outputs.ApiUrl,
     webUrl: outputs.WebUrl,
     outputs,
@@ -308,6 +345,7 @@ export const formatStatus = (status) => {
             : 'PARTIAL';
   const lines = [
     `Environment: ${status.environment}`,
+    `Status: ${status.overall}`,
     `CloudFormation: ${status.stack.state}`,
     `API: ${apiState}`,
   ];
@@ -323,7 +361,23 @@ export const formatStatus = (status) => {
   lines.push(`Amplify: ${status.amplify.state}`);
   if (status.apiUrl) lines.push(`API URL: ${status.apiUrl}`);
   if (status.webUrl) lines.push(`Web URL: ${status.webUrl}`);
-  lines.push(`Overall: ${status.overall}`);
+  lines.push('Auto sleep:');
+  if (status.autoSleep?.expiresAt) {
+    lines.push(`  Expires at: ${formatDeadlineJst(status.autoSleep.expiresAt)}`);
+  }
+  if (status.autoSleep?.state === 'ACTIVE') {
+    lines.push(`  Remaining: ${formatRemaining(status.autoSleep.remainingMs)}`);
+  } else if (status.autoSleep?.state === 'EXPIRED') {
+    lines.push('  Deadline expired');
+  } else if (status.autoSleep?.state === 'INVALID') {
+    lines.push('  Invalid deadline');
+  } else if (status.autoSleep?.state === 'ERROR') {
+    lines.push('  Status unavailable');
+  } else if (status.autoSleep?.state === 'NOT_DEPLOYED') {
+    lines.push('  Not deployed');
+  } else {
+    lines.push('  Deadline not set');
+  }
   return lines.join('\n');
 };
 
@@ -338,24 +392,6 @@ const waitUntil = async ({ label, check, timeoutMs, pollMs, delay }) => {
   } while (Date.now() < deadline);
   throw new Error(`${label} timed out${last?.detail ? ` (${last.detail})` : ''}`);
 };
-
-const schedulerUpdatePayload = (schedule, state) =>
-  Object.fromEntries(
-    Object.entries({
-      Name: schedule.Name,
-      Description: schedule.Description,
-      ScheduleExpression: schedule.ScheduleExpression,
-      ScheduleExpressionTimezone: schedule.ScheduleExpressionTimezone,
-      FlexibleTimeWindow: schedule.FlexibleTimeWindow,
-      Target: schedule.Target,
-      State: state,
-      StartDate: schedule.StartDate,
-      EndDate: schedule.EndDate,
-      KmsKeyArn: schedule.KmsKeyArn,
-      GroupName: schedule.GroupName,
-      ActionAfterCompletion: schedule.ActionAfterCompletion,
-    }).filter(([, value]) => value !== undefined && value !== null),
-  );
 
 const ensureSchedulerDisabled = async (aws, name) => {
   if (!name) return 'NOT_DEPLOYED';
@@ -479,6 +515,7 @@ const requireFullDeployment = (status) => {
     'ApiServiceName',
     'RdsInstanceIdentifier',
     'WorkerScheduleName',
+    'WakeExpiresAtParameterName',
   ];
   if (!status.outputs || required.some((key) => !status.outputs[key])) {
     throw new Error('Staging full stack is NOT_DEPLOYED; no write was attempted');
@@ -535,6 +572,7 @@ const optionsFor = (options = {}) => ({
   ...waitDefaults,
   delay: delayFor,
   fetchImpl: globalThis.fetch,
+  now: () => new Date(),
   ...options,
 });
 
@@ -544,6 +582,7 @@ export const sleepStaging = async (aws, options = {}) => {
   requireFullDeployment(before);
   const outputs = before.outputs;
 
+  await putDeadline(aws, outputs.WakeExpiresAtParameterName, runtime.now().toISOString());
   await ensureSchedulerDisabled(aws, outputs.WorkerScheduleName);
   const service = await describeApi(aws, outputs);
   if (service.desiredCount !== 0) {
@@ -560,7 +599,7 @@ export const sleepStaging = async (aws, options = {}) => {
   }
   await waitForApi(aws, outputs, 0, runtime);
   await ensureRdsStopped(aws, outputs.RdsInstanceIdentifier, runtime);
-  return collectStatus(aws);
+  return collectStatus(aws, { now: runtime.now() });
 };
 
 export const wakeStaging = async (aws, options = {}) => {
@@ -569,6 +608,8 @@ export const wakeStaging = async (aws, options = {}) => {
   requireFullDeployment(before);
   const outputs = before.outputs;
 
+  const expiresAt = calculateWakeDeadline(options.hours ?? DEFAULT_WAKE_HOURS, runtime.now());
+  await putDeadline(aws, outputs.WakeExpiresAtParameterName, expiresAt);
   await ensureSchedulerDisabled(aws, outputs.WorkerScheduleName);
   await ensureRdsAvailable(aws, outputs.RdsInstanceIdentifier, runtime);
   const service = await describeApi(aws, outputs);
@@ -586,16 +627,24 @@ export const wakeStaging = async (aws, options = {}) => {
   }
   await waitForApi(aws, outputs, 1, runtime);
   await waitForReadiness(runtime.fetchImpl, outputs.ApiUrl, runtime);
-  return collectStatus(aws);
+  return collectStatus(aws, { now: runtime.now() });
+};
+
+export const parseCommandArguments = (command, args = []) => {
+  if (command === 'wake') return { hours: parseWakeHours(args) };
+  if (args.length > 0) throw new Error(`staging:${command} does not accept arguments`);
+  return {};
 };
 
 export const runCommand = async (
   command,
   { aws = createAwsCli(), log = console.log, ...options } = {},
+  args = [],
 ) => {
   if (!['status', 'sleep', 'wake'].includes(command)) {
     throw new Error('Usage: staging-operations.mjs <status|sleep|wake>');
   }
+  const commandOptions = parseCommandArguments(command, args);
   await assertStagingGuard(aws);
   try {
     const status =
@@ -603,9 +652,12 @@ export const runCommand = async (
         ? await collectStatus(aws)
         : command === 'sleep'
           ? await sleepStaging(aws, options)
-          : await wakeStaging(aws, options);
+          : await wakeStaging(aws, { ...options, ...commandOptions });
     log(formatStatus(status));
     if (['ERROR', 'PARTIAL', 'WAKING'].includes(status.overall)) process.exitCode = 1;
+    if (command === 'status' && ['ERROR', 'INVALID'].includes(status.autoSleep?.state)) {
+      process.exitCode = 1;
+    }
     return status;
   } catch (error) {
     error.stagingGuardPassed = true;
@@ -616,7 +668,7 @@ export const runCommand = async (
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isMain) {
   const aws = createAwsCli();
-  runCommand(process.argv[2], { aws }).catch(async (error) => {
+  runCommand(process.argv[2], { aws }, process.argv.slice(3)).catch(async (error) => {
     console.error(`Operation failed: ${error.message}`);
     if (error.stagingGuardPassed) {
       try {

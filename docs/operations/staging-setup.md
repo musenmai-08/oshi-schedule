@@ -11,6 +11,7 @@ application、Docker、CDK、GitHub Actions、Amplify build、smoke scriptは実
 - [ ] domain/TLD、Route 53 hosted zone、staging Web/API FQDNを確定
 - [x] alert emailとstaging monthly Budget 40 USDを確定
 - [ ] Billingのユーザー定義cost allocation tag `Environment`が`Active`
+- [ ] 自動sleepのSSM期限、毎時Scheduler、Lambda、Errors Alarmがstaging full synthにだけ存在することを確認
 - [ ] RDS class/storage/retention/deletion protectionを最終承認
 - [ ] GitHub default branchを`main`へ変更し、`staging`/`production` Environmentを作成
 - [ ] Amplify source branchと`STAGING_AMPLIFY_BRANCH`/`PRODUCTION_AMPLIFY_BRANCH`がすべて`main`
@@ -34,7 +35,8 @@ application、Docker、CDK、GitHub Actions、Amplify build、smoke scriptは実
 8. SNS subscriptionを承認し、alarm/Budgetを確認する。
 9. workerを一度だけcontrolled runしてからhourly scheduleを有効化する。
 10. GitHub Variablesを設定し、最後にstaging自動deploy gateを有効化する。
-11. 受入確認後に`pnpm staging:sleep`を実行し、通常の低コスト状態へ移行する。
+11. 受入確認では`pnpm staging:wake`（既定4時間、必要なら`--hours 1..24`）で利用期限を設定する。
+12. 確認終了後に`pnpm staging:sleep`を実行し、通常の低コスト状態へ移行する。自動sleepは停止忘れ時だけのsafety netとして扱う。
 
 ## 完了条件
 
@@ -47,6 +49,7 @@ application、Docker、CDK、GitHub Actions、Amplify build、smoke scriptは実
 - app Secretがimage、CloudFormation output、Amplify、GitHub logsへ出ていない
 - migration task exit 0の後だけAPIがdeployされる
 - smoke全項目とalarm通知経路が確認済み
+- stagingだけに自動sleepがあり、productionとbootstrap-onlyにはLambda/Scheduler/期限Parameter/Alarmがない
 
 初回構築後は[deployment](deployment.md)、[monitoring](monitoring.md)、[backup](backup-and-recovery.md)を運用runbookとする。
 日常の起動・停止は[staging低コスト運用](staging-cost-control.md)に従う。

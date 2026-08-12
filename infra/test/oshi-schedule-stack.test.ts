@@ -82,6 +82,8 @@ describe('OshiScheduleStack', () => {
     template.resourceCountIs('AWS::ElasticLoadBalancingV2::LoadBalancer', 0);
     template.resourceCountIs('AWS::Amplify::App', 0);
     template.resourceCountIs('AWS::Scheduler::Schedule', 0);
+    template.resourceCountIs('AWS::Lambda::Function', 0);
+    template.resourceCountIs('AWS::CloudWatch::Alarm', 0);
     template.resourceCountIs('AWS::Budgets::Budget', 0);
     template.resourceCountIs('AWS::SecretsManager::Secret', 0);
     template.resourceCountIs('AWS::SSM::Parameter', 0);
@@ -94,7 +96,7 @@ describe('OshiScheduleStack', () => {
     template.resourceCountIs('AWS::RDS::DBInstance', 1);
     template.resourceCountIs('AWS::ElasticLoadBalancingV2::LoadBalancer', 1);
     template.resourceCountIs('AWS::Amplify::App', 1);
-    template.resourceCountIs('AWS::Scheduler::Schedule', 1);
+    template.resourceCountIs('AWS::Scheduler::Schedule', 2);
     template.resourceCountIs('AWS::Budgets::Budget', 1);
     template.hasResourceProperties('AWS::Budgets::Budget', {
       Budget: Match.objectLike({
@@ -117,6 +119,8 @@ describe('OshiScheduleStack', () => {
       'ApiServiceName',
       'RdsInstanceIdentifier',
       'WorkerScheduleName',
+      'WakeExpiresAtParameterName',
+      'AutoSleepScheduleName',
       'LoadBalancerArn',
       'LoadBalancerDnsName',
       'ApiUrl',
@@ -176,6 +180,8 @@ describe('OshiScheduleStack', () => {
       'ApiServiceName',
       'RdsInstanceIdentifier',
       'WorkerScheduleName',
+      'WakeExpiresAtParameterName',
+      'AutoSleepScheduleName',
       'LoadBalancerArn',
       'ApiUrl',
       'WebUrl',
@@ -268,6 +274,94 @@ describe('OshiScheduleStack', () => {
     });
   });
 
+  it('creates an hourly staging-only automatic sleep safety net', () => {
+    const template = render('staging');
+    template.hasResourceProperties('AWS::Lambda::Function', {
+      FunctionName: 'oshi-schedule-staging-auto-sleep',
+      Runtime: 'nodejs22.x',
+      Handler: 'index.handler',
+      Timeout: 120,
+      MemorySize: 128,
+      Environment: {
+        Variables: Match.objectLike({
+          TARGET_ENVIRONMENT: 'staging',
+          EXPECTED_ACCOUNT_ID: '111111111111',
+          DEADLINE_PARAMETER_NAME: {
+            Ref: Match.stringLikeRegexp('WakeExpiresAtParameter'),
+          },
+        }),
+      },
+    });
+    template.hasResourceProperties('AWS::SSM::Parameter', {
+      Name: '/oshi-schedule-staging/runtime/wake-expires-at',
+      Type: 'String',
+      Value: 'UNSET',
+      Tier: 'Standard',
+    });
+    template.hasResourceProperties('AWS::Scheduler::Schedule', {
+      Name: 'oshi-schedule-staging-auto-sleep',
+      ScheduleExpression: 'rate(1 hour)',
+      State: 'ENABLED',
+      Target: Match.objectLike({
+        RetryPolicy: { MaximumEventAgeInSeconds: 3600, MaximumRetryAttempts: 2 },
+      }),
+    });
+    template.hasResourceProperties('AWS::CloudWatch::Alarm', {
+      AlarmName: 'oshi-schedule-staging-auto-sleep-failed',
+      MetricName: 'Errors',
+      Namespace: 'AWS/Lambda',
+      Threshold: 1,
+    });
+    const autoSleepPolicy = Object.entries(template.findResources('AWS::IAM::Policy')).find(
+      ([logicalId]) => logicalId.startsWith('AutoSleepFunctionServiceRoleDefaultPolicy'),
+    )?.[1];
+    expect(autoSleepPolicy).toBeDefined();
+    const policyText = JSON.stringify(autoSleepPolicy);
+    for (const action of [
+      'ssm:GetParameter',
+      'scheduler:GetSchedule',
+      'scheduler:UpdateSchedule',
+      'iam:PassRole',
+      'ecs:DescribeServices',
+      'ecs:UpdateService',
+      'rds:DescribeDBInstances',
+      'rds:StopDBInstance',
+    ]) {
+      expect(policyText).toContain(action);
+    }
+    expect(policyText).not.toContain('ecs:*');
+    expect(policyText).not.toContain('rds:*');
+    expect(policyText).not.toContain('ssm:*');
+    expect(policyText).not.toContain('ssm:GetParameters');
+    expect(policyText).not.toContain('ssm:GetParameterHistory');
+  });
+
+  it('does not create automatic sleep resources for production', () => {
+    const template = render('production');
+    expect(
+      Object.values(template.findResources('AWS::Lambda::Function')).some(
+        (resource) => resource.Properties?.FunctionName === 'oshi-schedule-production-auto-sleep',
+      ),
+    ).toBe(false);
+    expect(
+      Object.values(template.findResources('AWS::Scheduler::Schedule')).some(
+        (resource) => resource.Properties?.Name === 'oshi-schedule-production-auto-sleep',
+      ),
+    ).toBe(false);
+    expect(
+      Object.values(template.findResources('AWS::SSM::Parameter')).some(
+        (resource) =>
+          resource.Properties?.Name === '/oshi-schedule-production/runtime/wake-expires-at',
+      ),
+    ).toBe(false);
+    expect(
+      Object.values(template.findResources('AWS::CloudWatch::Alarm')).some(
+        (resource) =>
+          resource.Properties?.AlarmName === 'oshi-schedule-production-auto-sleep-failed',
+      ),
+    ).toBe(false);
+  });
+
   it('keeps migration credentials separate from external API secrets', () => {
     const template = render();
     const taskDefinitions = Object.values(template.findResources('AWS::ECS::TaskDefinition'));
@@ -319,8 +413,8 @@ describe('OshiScheduleStack', () => {
 
   it('creates operational logs, alarms, notifications, and a budget', () => {
     const template = render();
-    template.resourceCountIs('AWS::Logs::LogGroup', 3);
-    template.resourceCountIs('AWS::CloudWatch::Alarm', 4);
+    template.resourceCountIs('AWS::Logs::LogGroup', 4);
+    template.resourceCountIs('AWS::CloudWatch::Alarm', 5);
     template.resourceCountIs('AWS::SNS::Topic', 1);
     template.resourceCountIs('AWS::Budgets::Budget', 1);
   });

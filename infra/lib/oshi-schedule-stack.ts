@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import {
   Arn,
   ArnFormat,
@@ -18,6 +20,7 @@ import {
   aws_elasticloadbalancingv2 as elbv2,
   aws_events as events,
   aws_iam as iam,
+  aws_lambda as lambda,
   aws_logs as logs,
   aws_rds as rds,
   aws_route53 as route53,
@@ -46,6 +49,13 @@ export class OshiScheduleStack extends Stack {
     const prefix = `oshi-schedule-${config.environmentName}`;
     const isProduction = config.environmentName === 'production';
     const deploymentBranch = 'main';
+    const autoSleepCodePath = [
+      new URL('../../scripts/aws/staging-auto-sleep', import.meta.url),
+      new URL('../../../scripts/aws/staging-auto-sleep', import.meta.url),
+    ]
+      .map((url) => fileURLToPath(url))
+      .find(existsSync);
+    if (!autoSleepCodePath) throw new Error('Staging auto-sleep Lambda source was not found');
     const webOrigin = config.webDomainName
       ? `https://${config.webDomainName}`
       : 'https://domain-required.invalid';
@@ -480,6 +490,116 @@ export class OshiScheduleStack extends Stack {
       },
     });
 
+    const autoSleepAlarms: cloudwatch.Alarm[] = [];
+    let wakeExpiresAtParameter: ssm.StringParameter | undefined;
+    let autoSleepSchedule: scheduler.CfnSchedule | undefined;
+    if (!isProduction) {
+      wakeExpiresAtParameter = new ssm.StringParameter(this, 'WakeExpiresAtParameter', {
+        parameterName: `/${prefix}/runtime/wake-expires-at`,
+        description: 'UTC ISO 8601 deadline for the staging automatic sleep safety net',
+        stringValue: 'UNSET',
+        tier: ssm.ParameterTier.STANDARD,
+      });
+      const autoSleepLogGroup = new logs.LogGroup(this, 'AutoSleepLogGroup', {
+        logGroupName: `/aws/lambda/${prefix}-auto-sleep`,
+        retention: logs.RetentionDays.TWO_WEEKS,
+        removalPolicy: RemovalPolicy.DESTROY,
+      });
+      const autoSleepFunction = new lambda.Function(this, 'AutoSleepFunction', {
+        functionName: `${prefix}-auto-sleep`,
+        description: 'Stops expired staging compute as a missed-manual-sleep safety net',
+        runtime: lambda.Runtime.NODEJS_22_X,
+        architecture: lambda.Architecture.X86_64,
+        handler: 'index.handler',
+        code: lambda.Code.fromAsset(autoSleepCodePath),
+        memorySize: 128,
+        timeout: Duration.minutes(2),
+        logGroup: autoSleepLogGroup,
+        environment: {
+          TARGET_ENVIRONMENT: config.environmentName,
+          EXPECTED_ACCOUNT_ID: config.account ?? this.account,
+          DEADLINE_PARAMETER_NAME: wakeExpiresAtParameter.parameterName,
+          WORKER_SCHEDULE_NAME: workerSchedule.ref,
+          ECS_CLUSTER_NAME: cluster.clusterName,
+          ECS_API_SERVICE_NAME: apiService.serviceName,
+          RDS_INSTANCE_IDENTIFIER: database.instanceIdentifier,
+        },
+      });
+      autoSleepLogGroup.grantWrite(autoSleepFunction);
+      autoSleepFunction.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ['ssm:GetParameter'],
+          resources: [wakeExpiresAtParameter.parameterArn],
+        }),
+      );
+      autoSleepFunction.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ['scheduler:GetSchedule', 'scheduler:UpdateSchedule'],
+          resources: [
+            Arn.format(
+              {
+                service: 'scheduler',
+                resource: 'schedule',
+                resourceName: `default/${prefix}-hourly-worker`,
+                arnFormat: ArnFormat.SLASH_RESOURCE_NAME,
+              },
+              this,
+            ),
+          ],
+        }),
+      );
+      autoSleepFunction.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ['iam:PassRole'],
+          resources: [schedulerRole.roleArn],
+          conditions: { StringEquals: { 'iam:PassedToService': 'scheduler.amazonaws.com' } },
+        }),
+      );
+      autoSleepFunction.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ['ecs:DescribeServices', 'ecs:UpdateService'],
+          resources: [apiService.serviceArn],
+        }),
+      );
+      autoSleepFunction.addToRolePolicy(
+        new iam.PolicyStatement({ actions: ['rds:DescribeDBInstances'], resources: ['*'] }),
+      );
+      autoSleepFunction.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ['rds:StopDBInstance'],
+          resources: [database.instanceArn],
+        }),
+      );
+
+      const autoSleepSchedulerRole = new iam.Role(this, 'AutoSleepSchedulerRole', {
+        roleName: `${prefix}-auto-sleep-scheduler`,
+        assumedBy: new iam.ServicePrincipal('scheduler.amazonaws.com'),
+      });
+      autoSleepFunction.grantInvoke(autoSleepSchedulerRole);
+      autoSleepSchedule = new scheduler.CfnSchedule(this, 'AutoSleepSchedule', {
+        name: `${prefix}-auto-sleep`,
+        description: 'Checks the staging wake deadline once per hour and safely sleeps on expiry',
+        scheduleExpression: 'rate(1 hour)',
+        flexibleTimeWindow: { mode: 'OFF' },
+        state: 'ENABLED',
+        target: {
+          arn: autoSleepFunction.functionArn,
+          roleArn: autoSleepSchedulerRole.roleArn,
+          input: '{}',
+          retryPolicy: { maximumEventAgeInSeconds: 3600, maximumRetryAttempts: 2 },
+        },
+      });
+      autoSleepAlarms.push(
+        new cloudwatch.Alarm(this, 'AutoSleepFailureAlarm', {
+          alarmName: `${prefix}-auto-sleep-failed`,
+          metric: autoSleepFunction.metricErrors({ period: Duration.hours(1) }),
+          threshold: 1,
+          evaluationPeriods: 1,
+          treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+        }),
+      );
+    }
+
     notificationTopic.addToResourcePolicy(
       new iam.PolicyStatement({
         principals: [
@@ -553,6 +673,7 @@ export class OshiScheduleStack extends Stack {
         evaluationPeriods: 1,
         treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
       }),
+      ...autoSleepAlarms,
     ];
     for (const alarm of alarms) {
       alarm.addAlarmAction(new cloudwatchActions.SnsAction(notificationTopic));
@@ -816,6 +937,12 @@ export class OshiScheduleStack extends Stack {
     new CfnOutput(this, 'ApiServiceName', { value: apiService.serviceName });
     new CfnOutput(this, 'RdsInstanceIdentifier', { value: database.instanceIdentifier });
     new CfnOutput(this, 'WorkerScheduleName', { value: workerSchedule.ref });
+    if (wakeExpiresAtParameter && autoSleepSchedule) {
+      new CfnOutput(this, 'WakeExpiresAtParameterName', {
+        value: wakeExpiresAtParameter.parameterName,
+      });
+      new CfnOutput(this, 'AutoSleepScheduleName', { value: autoSleepSchedule.ref });
+    }
     new CfnOutput(this, 'LoadBalancerArn', { value: loadBalancer.loadBalancerArn });
     new CfnOutput(this, 'LoadBalancerDnsName', { value: loadBalancer.loadBalancerDnsName });
     if (config.apiDomainName) {

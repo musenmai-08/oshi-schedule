@@ -12,6 +12,10 @@
 
 ```bash
 pnpm staging:wake
+# 現在時刻から4時間利用
+
+pnpm staging:wake --hours 8
+# 現在時刻から8時間利用（1〜24の整数）
 ```
 
 状態確認：
@@ -25,6 +29,10 @@ pnpm staging:status
 ```bash
 pnpm staging:sleep
 ```
+
+`wake`は実行時刻を基準にUTCの利用期限を`/oshi-schedule-staging/runtime/wake-expires-at`へ保存する。すでに起動中でも再実行でき、その時点から指定時間へ期限を延長する。`--hours`省略時は4時間、上限は24時間で、0、負数、25以上、小数、文字列はAWS write前に拒否する。
+
+通常の終了操作は引き続き`staging:sleep`である。自動sleepは停止忘れに対するsafety netであり、利用終了まで待つための通常手段ではない。manual sleepは期限を削除せず現在時刻へ更新してexpired状態にする。
 
 通常の休止状態は次のとおり。
 
@@ -46,7 +54,7 @@ Worker Schedulerは`staging:wake`で有効化しない。YouTube quotaとFargate
 
 ## statusの判定
 
-`staging:status`は読み取り専用でCloudFormation、ECS API、RDS、Worker Scheduler、ALB、Amplify、公開URL、設定中のimage digestを確認する。秘密値は取得しない。
+`staging:status`は読み取り専用でCloudFormation、ECS API、RDS、Worker Scheduler、ALB、Amplify、公開URL、設定中のimage digestと自動sleep期限を確認する。期限はJST、残時間は時間・分で表示する。秘密値は取得しない。full deploy前または初期値`UNSET`では、期限未設定として安全に表示する。
 
 | Overall        | 意味                                                          |
 | -------------- | ------------------------------------------------------------- |
@@ -61,38 +69,60 @@ bootstrap-onlyの現在でも`staging:status`は失敗せず`NOT_DEPLOYED`を返
 
 ## sleepの順序と失敗時
 
-1. Worker Schedulerを`DISABLED`にする。既に無効または未作成なら冪等に扱う。
-2. ECS APIのdesired countを0にする。
-3. ECS APIのrunning/pending countが0になるまで、上限時間付きで待つ。
-4. RDSを停止し、`stopped`まで上限時間付きで待つ。
-5. 最終statusを表示する。
+1. 自動sleep期限を現在時刻へ更新し、expired状態を維持する。
+2. Worker Schedulerを`DISABLED`にする。既に無効または未作成なら冪等に扱う。
+3. ECS APIのdesired countを0にする。
+4. ECS APIのrunning/pending countが0になるまで、上限時間付きで待つ。
+5. RDSを停止し、`stopped`まで上限時間付きで待つ。
+6. 最終statusを表示する。
 
 途中で失敗した場合、成功済み操作は巻き戻さない。たとえばECS停止後にRDS停止が失敗した場合、APIを勝手に再起動せず非ゼロで終了する。表示されたstatusで残っているresourceを確認する。
 
 ## wakeの順序と失敗時
 
-1. Worker Schedulerを`DISABLED`に保つ。
-2. RDSを起動し、`available`まで上限時間付きで待つ。
-3. RDS成功後だけECS APIのdesired countを1にする。
-4. ECS serviceがstableになるまで上限時間付きで待つ。
-5. `https://api-staging.oshi-schedule.com/health`と`/ready`の両方が2xxになるまで確認する。
-6. 最終statusを表示する。
+1. 利用期限を「現在時刻＋指定時間」としてSSMへ保存する。
+2. Worker Schedulerを`DISABLED`に保つ。
+3. RDSを起動し、`available`まで上限時間付きで待つ。
+4. RDS成功後だけECS APIのdesired countを1にする。
+5. ECS serviceがstableになるまで上限時間付きで待つ。
+6. `https://api-staging.oshi-schedule.com/health`と`/ready`の両方が2xxになるまで確認する。
+7. 最終statusを表示する。
 
-RDS起動に失敗した場合はECSを起動しない。readinessだけ失敗した場合は、調査に必要な状態を残すためECS/RDSを勝手に停止せず非ゼロで終了する。
+RDS起動に失敗した場合はECSを起動しない。保存済み期限は削除せず、後続のsafety checkが停止方向へ処理できるようにする。readinessだけ失敗した場合は、調査に必要な状態を残すためECS/RDSを勝手に停止せず非ゼロで終了する。
+
+## 自動sleep safety net
+
+staging full stackだけにEventBridge Scheduler、[AWS Lambdaが正式提供する`nodejs22.x`](https://docs.aws.amazon.com/lambda/latest/dg/lambda-nodejs.html)、SSM Standard Parameter、CloudWatch Logs、Lambda Errors Alarmを作る。productionと`bootstrapOnly=true`には作らない。
+
+1時間ごとの単純なrate実行にはEventBridge Schedulerが直接Lambdaを起動する構成が最小である。EventBridge Ruleより用途が明確で、SSM Automationのrunbookや追加execution管理も不要なため、Scheduler + Lambdaを採用する。
+
+```text
+EventBridge Scheduler（rate(1 hour)）
+  → Lambda
+    → SSMのUTC期限を確認
+    → 期限内: NOOP_ACTIVE
+    → 期限切れ: Worker Scheduler無効化 → ECS desiredCount=0 → RDS stop request
+```
+
+Lambdaは長時間waitしない。ECSのdesiredCountを0へ更新すると既存taskはECSによって停止され、RDSにはstop requestを送る。各操作は冪等で、既に無効・0・stoppedならwriteしない。途中で失敗した場合は成功済み操作を巻き戻さず、安全な順序を崩す後続操作は行わない。`AUTO_SLEEP_PARTIAL`としてエラー終了するため、既存SNSへ接続したLambda Errors Alarmが通知する。
+
+Lambdaはenvironment `staging`とAWS account `741448960817`を実行時に検証する。SSM GetParameter、対象Worker ScheduleのGet/Update、対象ECS serviceのDescribe/Update、RDS Describeと対象DBのStopだけを許可し、production resourceを操作する権限を持たない。
+
+CloudWatch Logsには`NOOP_NO_DEADLINE`、`NOOP_ACTIVE`、`NOOP_ALREADY_SLEEPING`、`AUTO_SLEEP_TRIGGERED`、`AUTO_SLEEP_PARTIAL`、`AUTO_SLEEP_FAILED`のいずれかを構造化して記録する。Secret、credential、task environmentは記録しない。
 
 ## RDSの7日停止制約
 
 [Amazon RDSの公式仕様](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_StopInstance.html)では、手動停止は永久ではなく、停止から7日後も停止中の場合、必要なmaintenance updateを適用できる状態を保つためAWSがDB instanceを自動起動する。したがって`staging:sleep`を一度実行しただけでは、無期限の停止を保証できない。停止中はDB instance時間の課金は止まるが、[RDS for MySQL料金](https://aws.amazon.com/rds/mysql/pricing/)に記載のとおりstorageとbackupは引き続き課金される。
 
-自動起動後も`staging:sleep`は現在状態を読み、`available`へ戻ったRDSを安全に再停止できる。週1回以上の`staging:status`確認、利用終了時と請求アラート受信時の`sleep`再実行を当面の運用とする。
-
-毎日自動停止するEventBridge Scheduler + Lambdaは今回は追加しない。staging利用中の誤停止を避けるには「起動許可期限」や明示的なmaintenance tag/SSM flagが必要で、単純な時刻ベース停止は危険だからである。手動運用漏れが実測された場合に、低頻度のScheduler、最小権限Lambda、利用中ガード、通知、監査ログを備えたsafety stopを別工程で検討する。
+期限は自動sleep後も削除しない。AWSが7日後またはmaintenanceのためRDSを自動起動しても期限切れ状態が残り、1時間ごとのLambdaが`available`へ戻ったDBを再停止する。次に明示的な`staging:wake`を実行したときだけ新しい未来の期限へ更新される。
 
 ## Budgetと費用
 
 stagingの月額Budget既定値は`40 USD`である。これはhard spending limitではなく、resourceを自動停止するものでもない。現行CDKは月間予測額がBudgetの80%を超えた時点でSNS通知するため、40 USD設定ではforecast 32 USDが通知点になる。
 
 計画上の概算は、通常の低コスト運用で月35〜50 USD程度、常時稼働では月68〜90 USD程度である。実際の請求はRDS稼働時間、ALB/LCU、Public IPv4、Fargate、Amplify、CloudWatch、保存量と通信量で変わる。Budget 40 USDは早期検知には妥当だが、請求上限ではなく、検証時間が多い月は正常運用でも超える可能性がある。
+
+自動sleepは月約720回のScheduler/Lambda実行である。[EventBridge料金](https://aws.amazon.com/eventbridge/pricing/)のScheduler月1,400万invocation、[Lambda料金](https://aws.amazon.com/lambda/pricing/)の月100万request・40万GB秒、[CloudWatch料金](https://aws.amazon.com/cloudwatch/pricing/)のLogs 5 GB・標準Alarm metric 10個の各Free Tier、[無料のSSM Standard Parameter](https://docs.aws.amazon.com/systems-manager/latest/userguide/ps-default-tier.html)内に収まる想定なので、通常の追加費用は0 USDに近い。Free Tierを使い切った場合も、Schedulerは約0.00072 USD、Lambda/Logsはごく少額、標準Alarm 1個を含めて保守的に月0.15 USD未満を目安とする。料金はregion、ログ量、既存利用量、税で変わるため公開前にPricing Calculatorで再確認する。
 
 ## 初回full deploy
 
