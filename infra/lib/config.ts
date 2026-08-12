@@ -78,7 +78,13 @@ export const loadConfig = (app: App): DeploymentConfig => {
     alertEmail: optionalString(app, 'alertEmail'),
     nextPublicSupabaseUrl: optionalString(app, 'nextPublicSupabaseUrl'),
     nextPublicSupabasePublishableKey: optionalString(app, 'nextPublicSupabasePublishableKey'),
-    monthlyBudgetUsd: Number(app.node.tryGetContext('monthlyBudgetUsd') ?? 75),
+    monthlyBudgetUsd: Number(
+      app.node.tryGetContext('monthlyBudgetUsd') ??
+        app.node.tryGetContext(
+          environmentName === 'staging' ? 'stagingMonthlyBudgetUsd' : 'productionMonthlyBudgetUsd',
+        ) ??
+        (environmentName === 'staging' ? 40 : 75),
+    ),
     githubOwner: optionalString(app, 'githubOwner') ?? 'REQUIRED_GITHUB_OWNER',
     githubRepository: optionalString(app, 'githubRepository') ?? 'REQUIRED_GITHUB_REPOSITORY',
     imageTag: optionalString(app, 'imageTag') ?? 'bootstrap-required',

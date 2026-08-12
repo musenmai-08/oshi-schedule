@@ -30,7 +30,7 @@ const configFor = (environmentName: EnvironmentName): DeploymentConfig => ({
   region: 'ap-northeast-1',
   deployReady: false,
   bootstrapOnly: false,
-  monthlyBudgetUsd: 75,
+  monthlyBudgetUsd: environmentName === 'staging' ? 40 : 75,
   githubOwner: 'example-owner',
   githubRepository: 'oshi-schedule',
   imageTag: 'sha-0123456789abcdef',
@@ -85,6 +85,7 @@ describe('OshiScheduleStack', () => {
     template.resourceCountIs('AWS::Budgets::Budget', 0);
     template.resourceCountIs('AWS::SecretsManager::Secret', 0);
     template.resourceCountIs('AWS::SSM::Parameter', 0);
+    template.hasOutput('EnvironmentName', { Value: 'staging' });
   });
 
   it('synthesizes full staging resources from CLI string context', () => {
@@ -95,6 +96,45 @@ describe('OshiScheduleStack', () => {
     template.resourceCountIs('AWS::Amplify::App', 1);
     template.resourceCountIs('AWS::Scheduler::Schedule', 1);
     template.resourceCountIs('AWS::Budgets::Budget', 1);
+    template.hasResourceProperties('AWS::Budgets::Budget', {
+      Budget: Match.objectLike({ BudgetLimit: { Amount: 40, Unit: 'USD' } }),
+    });
+    for (const output of [
+      'EnvironmentName',
+      'EcsClusterName',
+      'ApiServiceName',
+      'RdsInstanceIdentifier',
+      'WorkerScheduleName',
+      'LoadBalancerArn',
+      'LoadBalancerDnsName',
+      'ApiUrl',
+      'WebUrl',
+      'AmplifyAppId',
+    ]) {
+      template.hasOutput(output, {});
+    }
+  });
+
+  it('does not expose full-stack operation outputs during bootstrap-only synth', () => {
+    const template = renderFromCliContext({
+      environment: 'staging',
+      deployReady: 'true',
+      bootstrapOnly: 'true',
+      awsAccount: '111111111111',
+      awsRegion: 'ap-northeast-1',
+    });
+    for (const output of [
+      'EcsClusterName',
+      'ApiServiceName',
+      'RdsInstanceIdentifier',
+      'WorkerScheduleName',
+      'LoadBalancerArn',
+      'ApiUrl',
+      'WebUrl',
+      'AmplifyAppId',
+    ]) {
+      expect(template.toJSON().Outputs?.[output]).toBeUndefined();
+    }
   });
 
   it('applies RDS and worker CLI boolean strings to the template', () => {

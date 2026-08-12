@@ -76,6 +76,7 @@ export class OshiScheduleStack extends Stack {
       removalPolicy: RemovalPolicy.RETAIN,
       emptyOnDelete: false,
     });
+    new CfnOutput(this, 'EnvironmentName', { value: config.environmentName });
     if (config.bootstrapOnly) {
       new CfnOutput(this, 'EcrRepositoryUri', { value: repository.repositoryUri });
       return;
@@ -416,7 +417,7 @@ export class OshiScheduleStack extends Stack {
     });
     workerTaskDefinition.grantRun(schedulerRole);
     schedulerDeadLetterQueue.grantSendMessages(schedulerRole);
-    new scheduler.CfnSchedule(this, 'WorkerSchedule', {
+    const workerSchedule = new scheduler.CfnSchedule(this, 'WorkerSchedule', {
       name: `${prefix}-hourly-worker`,
       description: 'Runs the idempotent leased synchronization worker once per hour',
       scheduleExpression: 'rate(1 hour)',
@@ -748,6 +749,16 @@ export class OshiScheduleStack extends Stack {
     new CfnOutput(this, 'EcrRepositoryUri', { value: repository.repositoryUri });
     new CfnOutput(this, 'EcsClusterName', { value: cluster.clusterName });
     new CfnOutput(this, 'ApiServiceName', { value: apiService.serviceName });
+    new CfnOutput(this, 'RdsInstanceIdentifier', { value: database.instanceIdentifier });
+    new CfnOutput(this, 'WorkerScheduleName', { value: workerSchedule.ref });
+    new CfnOutput(this, 'LoadBalancerArn', { value: loadBalancer.loadBalancerArn });
+    new CfnOutput(this, 'LoadBalancerDnsName', { value: loadBalancer.loadBalancerDnsName });
+    if (config.apiDomainName) {
+      new CfnOutput(this, 'ApiUrl', { value: `https://${config.apiDomainName}` });
+    }
+    if (config.webDomainName) {
+      new CfnOutput(this, 'WebUrl', { value: `https://${config.webDomainName}` });
+    }
     new CfnOutput(this, 'WorkerTaskDefinitionArn', { value: workerTaskDefinition.taskDefinitionArn });
     new CfnOutput(this, 'MigrationTaskDefinitionArn', { value: migrationTaskDefinition.taskDefinitionArn });
     new CfnOutput(this, 'AmplifyAppId', { value: amplifyApp.attrAppId });

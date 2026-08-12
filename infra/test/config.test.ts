@@ -28,6 +28,21 @@ describe('loadConfig', () => {
     expect(config.deployReady).toBe(false);
     expect(config.bootstrapOnly).toBe(false);
     expect(config.webDomainName).toBeUndefined();
+    expect(config.monthlyBudgetUsd).toBe(40);
+  });
+
+  it('does not apply the staging budget default to production', () => {
+    const app = new App({
+      context: { environment: 'production', confirmProduction: 'DEPLOY_PRODUCTION' },
+    });
+    expect(loadConfig(app).monthlyBudgetUsd).toBe(75);
+  });
+
+  it('supports an explicit environment budget override', () => {
+    const app = new App({
+      context: { environment: 'staging', monthlyBudgetUsd: 45 },
+    });
+    expect(loadConfig(app).monthlyBudgetUsd).toBe(45);
   });
 
   it('rejects deployReady when mandatory deployment inputs are absent', () => {
