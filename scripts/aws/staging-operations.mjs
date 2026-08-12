@@ -30,7 +30,7 @@ const waitDefaults = Object.freeze({
   pollMs: 15_000,
   ecsTimeoutMs: 15 * 60_000,
   rdsTimeoutMs: 20 * 60_000,
-  readinessTimeoutMs: 3 * 60_000,
+  readinessTimeoutMs: 10 * 60_000,
   requestTimeoutMs: 10_000,
 });
 
@@ -83,7 +83,7 @@ export const createAwsCli = ({ exec = execFileAsync } = {}) => ({
 
 const isMissing = (error) =>
   error instanceof AwsCommandError &&
-  /not found|does not exist|ValidationError|DBInstanceNotFound|ParameterNotFound|ResourceNotFoundException/i.test(
+  /not found|does not exist|ValidationError|DBInstanceNotFound|ParameterNotFound|ResourceNotFoundException|NotFoundException|NamespaceNotFound|ServiceNotFound/i.test(
     error.stderr,
   );
 
@@ -174,7 +174,10 @@ export const collectStatus = async (aws, { now = new Date() } = {}) => {
       api: { state: 'NOT_DEPLOYED' },
       rds: { state: 'NOT_DEPLOYED' },
       scheduler: { state: 'NOT_DEPLOYED' },
-      alb: { state: 'NOT_DEPLOYED' },
+      httpApi: { state: 'NOT_DEPLOYED' },
+      vpcLink: { state: 'NOT_DEPLOYED' },
+      cloudMap: { state: 'NOT_DEPLOYED' },
+      syncJobs: { state: 'NOT_DEPLOYED' },
       amplify: { state: 'NOT_DEPLOYED' },
       autoSleep: { state: 'NOT_DEPLOYED' },
     };
@@ -188,7 +191,12 @@ export const collectStatus = async (aws, { now = new Date() } = {}) => {
     'RdsInstanceIdentifier',
     'WorkerScheduleName',
     'WakeExpiresAtParameterName',
-    'LoadBalancerArn',
+    'HttpApiId',
+    'VpcLinkId',
+    'CloudMapNamespaceId',
+    'CloudMapServiceId',
+    'SyncJobQueueUrl',
+    'SyncJobPipeName',
     'AmplifyAppId',
   ];
   const presentFullOutputs = fullOutputKeys.filter((key) => outputs[key]);
@@ -255,17 +263,67 @@ export const collectStatus = async (aws, { now = new Date() } = {}) => {
       })
     : { state: 'NOT_DEPLOYED' };
 
-  const alb = outputs.LoadBalancerArn
+  const httpApi = outputs.HttpApiId
     ? await probe(async () => {
-        const response = await aws.json([
-          'elbv2',
-          'describe-load-balancers',
-          '--load-balancer-arns',
-          outputs.LoadBalancerArn,
-        ]);
-        return { state: response.LoadBalancers?.[0]?.State?.Code ?? 'NOT_DEPLOYED' };
+        const response = await aws.json(['apigatewayv2', 'get-api', '--api-id', outputs.HttpApiId]);
+        return {
+          state: response.ApiId && response.ProtocolType === 'HTTP' ? 'DEPLOYED' : 'NOT_DEPLOYED',
+        };
       })
     : { state: 'NOT_DEPLOYED' };
+
+  const vpcLink = outputs.VpcLinkId
+    ? await probe(async () => {
+        const response = await aws.json([
+          'apigatewayv2',
+          'get-vpc-link',
+          '--vpc-link-id',
+          outputs.VpcLinkId,
+        ]);
+        return { state: response.VpcLinkStatus ?? 'NOT_DEPLOYED' };
+      })
+    : { state: 'NOT_DEPLOYED' };
+
+  const cloudMap =
+    outputs.CloudMapNamespaceId && outputs.CloudMapServiceId
+      ? await probe(async () => {
+          const [namespace, service, instances] = await Promise.all([
+            aws.json(['servicediscovery', 'get-namespace', '--id', outputs.CloudMapNamespaceId]),
+            aws.json(['servicediscovery', 'get-service', '--id', outputs.CloudMapServiceId]),
+            aws.json([
+              'servicediscovery',
+              'list-instances',
+              '--service-id',
+              outputs.CloudMapServiceId,
+            ]),
+          ]);
+          return {
+            state: namespace.Namespace && service.Service ? 'DEPLOYED' : 'NOT_DEPLOYED',
+            registeredInstances: instances.Instances?.length ?? 0,
+          };
+        })
+      : { state: 'NOT_DEPLOYED' };
+
+  const syncJobs =
+    outputs.SyncJobQueueUrl && outputs.SyncJobPipeName
+      ? await probe(async () => {
+          const [queue, pipe] = await Promise.all([
+            aws.json([
+              'sqs',
+              'get-queue-attributes',
+              '--queue-url',
+              outputs.SyncJobQueueUrl,
+              '--attribute-names',
+              'ApproximateNumberOfMessages',
+            ]),
+            aws.json(['pipes', 'describe-pipe', '--name', outputs.SyncJobPipeName]),
+          ]);
+          return {
+            state: pipe.CurrentState ?? 'NOT_DEPLOYED',
+            queuedMessages: Number(queue.Attributes?.ApproximateNumberOfMessages ?? 0),
+          };
+        })
+      : { state: 'NOT_DEPLOYED' };
 
   const amplify = outputs.AmplifyAppId
     ? await probe(async () => {
@@ -274,7 +332,7 @@ export const collectStatus = async (aws, { now = new Date() } = {}) => {
       })
     : { state: 'NOT_DEPLOYED' };
 
-  const resources = [api, rds, scheduler, alb, amplify];
+  const resources = [api, rds, scheduler, httpApi, vpcLink, cloudMap, syncJobs, amplify];
   const hasError = resources.some(({ state }) => state === 'ERROR');
   const noneDeployed = presentFullOutputs.length === 0;
   const allOutputsPresent = presentFullOutputs.length === fullOutputKeys.length;
@@ -284,7 +342,12 @@ export const collectStatus = async (aws, { now = new Date() } = {}) => {
     api.runningCount === 0 &&
     api.pendingCount === 0 &&
     rds.state === 'stopped' &&
-    scheduler.state === 'DISABLED';
+    scheduler.state === 'DISABLED' &&
+    httpApi.state === 'DEPLOYED' &&
+    ['AVAILABLE', 'INACTIVE'].includes(vpcLink.state) &&
+    cloudMap.state === 'DEPLOYED' &&
+    syncJobs.state === 'RUNNING' &&
+    amplify.state === 'DEPLOYED';
   const running =
     allOutputsPresent &&
     api.desiredCount === 1 &&
@@ -292,14 +355,19 @@ export const collectStatus = async (aws, { now = new Date() } = {}) => {
     api.pendingCount === 0 &&
     rds.state === 'available' &&
     scheduler.state === 'DISABLED' &&
-    alb.state === 'active' &&
+    httpApi.state === 'DEPLOYED' &&
+    vpcLink.state === 'AVAILABLE' &&
+    cloudMap.state === 'DEPLOYED' &&
+    Number(cloudMap.registeredInstances) >= 1 &&
+    syncJobs.state === 'RUNNING' &&
     amplify.state === 'DEPLOYED';
   const waking =
     ['starting', 'backing-up', 'configuring-enhanced-monitoring', 'modifying'].includes(
       rds.state,
     ) ||
     Number(api.desiredCount) > Number(api.runningCount) ||
-    Number(api.pendingCount) > 0;
+    Number(api.pendingCount) > 0 ||
+    (api.desiredCount === 1 && ['PENDING', 'INACTIVE', 'UPDATING'].includes(vpcLink.state));
 
   const overall = hasError
     ? 'ERROR'
@@ -320,7 +388,10 @@ export const collectStatus = async (aws, { now = new Date() } = {}) => {
     api,
     rds,
     scheduler,
-    alb,
+    httpApi,
+    vpcLink,
+    cloudMap,
+    syncJobs,
     amplify,
     autoSleep,
     apiUrl: outputs.ApiUrl,
@@ -357,7 +428,14 @@ export const formatStatus = (status) => {
   if (status.api.imageDigest) lines.push(`  imageDigest: ${status.api.imageDigest}`);
   lines.push(`RDS: ${String(status.rds.state).toUpperCase()}`);
   lines.push(`Worker Scheduler: ${status.scheduler.state}`);
-  lines.push(`ALB: ${String(status.alb.state).toUpperCase()}`);
+  lines.push(`HTTP API: ${String(status.httpApi.state).toUpperCase()}`);
+  lines.push(`VPC Link: ${String(status.vpcLink.state).toUpperCase()}`);
+  lines.push(`Cloud Map: ${String(status.cloudMap.state).toUpperCase()}`);
+  if (status.cloudMap.registeredInstances !== undefined)
+    lines.push(`  registeredInstances: ${status.cloudMap.registeredInstances}`);
+  lines.push(`Sync jobs: ${String(status.syncJobs.state).toUpperCase()}`);
+  if (status.syncJobs.queuedMessages !== undefined)
+    lines.push(`  queuedMessages: ${status.syncJobs.queuedMessages}`);
   lines.push(`Amplify: ${status.amplify.state}`);
   if (status.apiUrl) lines.push(`API URL: ${status.apiUrl}`);
   if (status.webUrl) lines.push(`Web URL: ${status.webUrl}`);

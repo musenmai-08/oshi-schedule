@@ -10,6 +10,8 @@ import {
   Tags,
   Validations,
   aws_amplify as amplify,
+  aws_apigatewayv2 as apigatewayv2,
+  aws_apigatewayv2_integrations as apigatewayv2Integrations,
   aws_budgets as budgets,
   aws_certificatemanager as acm,
   aws_cloudwatch as cloudwatch,
@@ -17,21 +19,21 @@ import {
   aws_ec2 as ec2,
   aws_ecr as ecr,
   aws_ecs as ecs,
-  aws_elasticloadbalancingv2 as elbv2,
   aws_events as events,
   aws_iam as iam,
   aws_lambda as lambda,
   aws_logs as logs,
+  aws_pipes as pipes,
   aws_rds as rds,
   aws_route53 as route53,
   aws_route53_targets as route53Targets,
   aws_scheduler as scheduler,
   aws_secretsmanager as secretsmanager,
-  aws_s3 as s3,
   aws_sns as sns,
   aws_sns_subscriptions as subscriptions,
   aws_sqs as sqs,
   aws_ssm as ssm,
+  aws_servicediscovery as servicediscovery,
 } from 'aws-cdk-lib';
 import type { StackProps } from 'aws-cdk-lib';
 import type { Construct } from 'constructs';
@@ -106,24 +108,19 @@ export class OshiScheduleStack extends Stack {
       notificationTopic.addSubscription(new subscriptions.EmailSubscription(config.alertEmail));
     }
 
-    const albSecurityGroup = new ec2.SecurityGroup(this, 'AlbSecurityGroup', {
+    const vpcLinkSecurityGroup = new ec2.SecurityGroup(this, 'VpcLinkSecurityGroup', {
       vpc,
-      description: 'Public ingress to the application load balancer',
-      allowAllOutbound: true,
+      description: 'API Gateway VPC Link reaches only the API service',
+      allowAllOutbound: false,
     });
-    albSecurityGroup.addIngressRule(
-      ec2.Peer.anyIpv4(),
-      ec2.Port.tcp(80),
-      'HTTP redirect or TLS-required response',
-    );
-    albSecurityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(443), 'HTTPS');
 
     const apiSecurityGroup = new ec2.SecurityGroup(this, 'ApiSecurityGroup', {
       vpc,
-      description: 'API tasks accept traffic only from the ALB',
+      description: 'API tasks accept traffic only from the API Gateway VPC Link',
       allowAllOutbound: true,
     });
-    apiSecurityGroup.addIngressRule(albSecurityGroup, ec2.Port.tcp(4000), 'ALB to API');
+    vpcLinkSecurityGroup.addEgressRule(apiSecurityGroup, ec2.Port.tcp(4000), 'VPC Link to API');
+    apiSecurityGroup.addIngressRule(vpcLinkSecurityGroup, ec2.Port.tcp(4000), 'VPC Link to API');
     const workerSecurityGroup = new ec2.SecurityGroup(this, 'WorkerSecurityGroup', {
       vpc,
       description: 'Worker and migration tasks have no inbound rules',
@@ -263,6 +260,26 @@ export class OshiScheduleStack extends Stack {
       retention: isProduction ? logs.RetentionDays.ONE_MONTH : logs.RetentionDays.TWO_WEEKS,
       removalPolicy: isProduction ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY,
     });
+    const httpApiLogGroup = new logs.LogGroup(this, 'HttpApiLogGroup', {
+      logGroupName: `/aws/apigateway/${prefix}-http-api`,
+      retention: isProduction ? logs.RetentionDays.ONE_MONTH : logs.RetentionDays.TWO_WEEKS,
+      removalPolicy: isProduction ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY,
+    });
+
+    const syncJobDeadLetterQueue = new sqs.Queue(this, 'SyncJobDeadLetterQueue', {
+      queueName: `${prefix}-sync-jobs-dlq`,
+      encryption: sqs.QueueEncryption.SQS_MANAGED,
+      retentionPeriod: Duration.days(14),
+      enforceSSL: true,
+    });
+    const syncJobQueue = new sqs.Queue(this, 'SyncJobQueue', {
+      queueName: `${prefix}-sync-jobs`,
+      encryption: sqs.QueueEncryption.SQS_MANAGED,
+      retentionPeriod: Duration.days(4),
+      visibilityTimeout: Duration.minutes(15),
+      enforceSSL: true,
+      deadLetterQueue: { queue: syncJobDeadLetterQueue, maxReceiveCount: 3 },
+    });
 
     const image = ecs.ContainerImage.fromEcrRepository(repository, config.imageTag);
     const databaseEnvironment = {
@@ -317,11 +334,23 @@ export class OshiScheduleStack extends Stack {
         PORT: '4000',
         SHUTDOWN_TIMEOUT_SECONDS: '30',
         SUPABASE_JWT_AUDIENCE: 'authenticated',
+        SYNC_JOB_QUEUE_URL: syncJobQueue.queueUrl,
         ...databaseEnvironment,
       },
       secrets: applicationSecrets,
+      healthCheck: {
+        command: [
+          'CMD-SHELL',
+          'node -e "fetch(\'http://127.0.0.1:4000/health\').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"',
+        ],
+        interval: Duration.seconds(30),
+        timeout: Duration.seconds(5),
+        retries: 3,
+        startPeriod: Duration.seconds(30),
+      },
     });
     apiContainer.addPortMappings({ containerPort: 4000, protocol: ecs.Protocol.TCP });
+    syncJobQueue.grantSendMessages(apiTaskDefinition.taskRole);
 
     const apiService = new ecs.FargateService(this, 'ApiService', {
       serviceName: `${prefix}-api`,
@@ -336,34 +365,26 @@ export class OshiScheduleStack extends Stack {
       maxHealthyPercent: 200,
       enableExecuteCommand: false,
     });
-
-    const loadBalancer = new elbv2.ApplicationLoadBalancer(this, 'LoadBalancer', {
-      loadBalancerName: `${prefix}-alb`,
+    const namespace = new servicediscovery.PrivateDnsNamespace(this, 'ApiNamespace', {
+      name: `${config.environmentName}.oshi-schedule.internal`,
       vpc,
-      internetFacing: true,
-      securityGroup: albSecurityGroup,
-      vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
+      description: 'Private discovery namespace for the API Gateway integration',
     });
-    loadBalancer.setAttribute('idle_timeout.timeout_seconds', '300');
-    const albLogBucket = new s3.Bucket(this, 'AlbLogBucket', {
-      bucketName: `${prefix}-alb-logs-${this.account}`,
-      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
-      encryption: s3.BucketEncryption.S3_MANAGED,
-      enforceSSL: true,
-      lifecycleRules: [{ expiration: Duration.days(isProduction ? 180 : 90) }],
-      removalPolicy: RemovalPolicy.RETAIN,
-      autoDeleteObjects: false,
+    const apiDiscoveryService = apiService.enableCloudMap({
+      name: 'api',
+      cloudMapNamespace: namespace,
+      dnsRecordType: servicediscovery.DnsRecordType.SRV,
+      dnsTtl: Duration.seconds(30),
+      container: apiContainer,
     });
-    loadBalancer.logAccessLogs(albLogBucket, 'alb');
-    const targetGroup = new elbv2.ApplicationTargetGroup(this, 'ApiTargetGroup', {
+    const vpcLink = new apigatewayv2.VpcLink(this, 'VpcLink', {
       vpc,
-      targetType: elbv2.TargetType.IP,
-      port: 4000,
-      protocol: elbv2.ApplicationProtocol.HTTP,
-      deregistrationDelay: Duration.seconds(60),
-      healthCheck: { path: '/health', healthyHttpCodes: '200', interval: Duration.seconds(30) },
-      targets: [apiService.loadBalancerTarget({ containerName: 'api', containerPort: 4000 })],
+      vpcLinkName: `${prefix}-api`,
+      subnets: { subnetType: ec2.SubnetType.PUBLIC },
+      securityGroups: [vpcLinkSecurityGroup],
     });
+    let apiDomain: apigatewayv2.DomainName | undefined;
+    let hostedZone: route53.IHostedZone | undefined;
 
     if (
       config.certificateArn &&
@@ -376,37 +397,62 @@ export class OshiScheduleStack extends Stack {
         'ApiCertificate',
         config.certificateArn,
       );
-      const httpsListener = loadBalancer.addListener('HttpsListener', {
-        port: 443,
-        protocol: elbv2.ApplicationProtocol.HTTPS,
-        certificates: [certificate],
-        defaultTargetGroups: [targetGroup],
+      apiDomain = new apigatewayv2.DomainName(this, 'ApiDomainName', {
+        domainName: config.apiDomainName,
+        certificate,
+        endpointType: apigatewayv2.EndpointType.REGIONAL,
+        securityPolicy: apigatewayv2.SecurityPolicy.TLS_1_2,
       });
-      httpsListener.setAttribute('routing.http.drop_invalid_header_fields.enabled', 'true');
-      loadBalancer.addListener('HttpListener', {
-        port: 80,
-        defaultAction: elbv2.ListenerAction.redirect({
-          protocol: 'HTTPS',
-          port: '443',
-          permanent: true,
-        }),
-      });
-      const zone = route53.HostedZone.fromHostedZoneAttributes(this, 'HostedZone', {
+      hostedZone = route53.HostedZone.fromHostedZoneAttributes(this, 'HostedZone', {
         hostedZoneId: config.hostedZoneId,
         zoneName: config.hostedZoneName,
       });
+    }
+    const httpApi = new apigatewayv2.HttpApi(this, 'HttpApi', {
+      apiName: `${prefix}-api`,
+      description: 'Private proxy to the oshi-schedule ECS API',
+      disableExecuteApiEndpoint: Boolean(apiDomain),
+      defaultDomainMapping: apiDomain ? { domainName: apiDomain } : undefined,
+      defaultIntegration: new apigatewayv2Integrations.HttpServiceDiscoveryIntegration(
+        'ApiIntegration',
+        apiDiscoveryService,
+        {
+          vpcLink,
+          method: apigatewayv2.HttpMethod.ANY,
+          timeout: Duration.seconds(29),
+          parameterMapping: new apigatewayv2.ParameterMapping().overwritePath(
+            apigatewayv2.MappingValue.custom('$request.path'),
+          ),
+        },
+      ),
+    });
+    const defaultStage = httpApi.defaultStage?.node.defaultChild as apigatewayv2.CfnStage;
+    defaultStage.defaultRouteSettings = { throttlingBurstLimit: 100, throttlingRateLimit: 50 };
+    defaultStage.accessLogSettings = {
+      destinationArn: httpApiLogGroup.logGroupArn,
+      format: JSON.stringify({
+        requestId: '$context.requestId',
+        sourceIp: '$context.identity.sourceIp',
+        requestTime: '$context.requestTime',
+        routeKey: '$context.routeKey',
+        httpMethod: '$context.httpMethod',
+        path: '$context.path',
+        status: '$context.status',
+        integrationStatus: '$context.integration.status',
+        integrationLatency: '$context.integration.latency',
+        responseLength: '$context.responseLength',
+      }),
+    };
+    if (apiDomain && hostedZone && config.apiDomainName) {
       new route53.ARecord(this, 'ApiAliasRecord', {
-        zone,
+        zone: hostedZone,
         recordName: config.apiDomainName,
-        target: route53.RecordTarget.fromAlias(new route53Targets.LoadBalancerTarget(loadBalancer)),
-      });
-    } else {
-      loadBalancer.addListener('TlsRequiredListener', {
-        port: 80,
-        defaultAction: elbv2.ListenerAction.fixedResponse(503, {
-          contentType: 'application/json',
-          messageBody: '{"error":"TLS configuration required"}',
-        }),
+        target: route53.RecordTarget.fromAlias(
+          new route53Targets.ApiGatewayv2DomainProperties(
+            apiDomain.regionalDomainName,
+            apiDomain.regionalHostedZoneId,
+          ),
+        ),
       });
     }
 
@@ -425,9 +471,71 @@ export class OshiScheduleStack extends Stack {
       command: ['node', 'worker/dist/index.js'],
       essential: true,
       logging: ecs.LogDrivers.awsLogs({ logGroup: workerLogGroup, streamPrefix: 'worker' }),
-      environment: { NODE_ENV: 'production', ...databaseEnvironment },
+      environment: {
+        NODE_ENV: 'production',
+        SYNC_JOB_QUEUE_URL: syncJobQueue.queueUrl,
+        ...databaseEnvironment,
+      },
       secrets: applicationSecrets,
     });
+
+    const syncPipeRole = new iam.Role(this, 'SyncPipeRole', {
+      roleName: `${prefix}-sync-pipe`,
+      assumedBy: new iam.ServicePrincipal('pipes.amazonaws.com'),
+    });
+    syncJobQueue.grantConsumeMessages(syncPipeRole);
+    syncPipeRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ['ecs:RunTask'],
+        resources: [workerTaskDefinition.taskDefinitionArn],
+        conditions: { ArnEquals: { 'ecs:cluster': cluster.clusterArn } },
+      }),
+    );
+    syncPipeRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ['iam:PassRole'],
+        resources: [
+          workerTaskDefinition.executionRole!.roleArn,
+          workerTaskDefinition.taskRole.roleArn,
+        ],
+        conditions: { StringEquals: { 'iam:PassedToService': 'ecs-tasks.amazonaws.com' } },
+      }),
+    );
+    const syncPipe = new pipes.CfnPipe(this, 'SyncPipe', {
+      name: `${prefix}-sync-jobs`,
+      description: 'Starts one targeted Fargate worker for each durable manual sync job',
+      roleArn: syncPipeRole.roleArn,
+      source: syncJobQueue.queueArn,
+      sourceParameters: {
+        sqsQueueParameters: { batchSize: 1, maximumBatchingWindowInSeconds: 0 },
+      },
+      target: cluster.clusterArn,
+      targetParameters: {
+        ecsTaskParameters: {
+          taskDefinitionArn: workerTaskDefinition.taskDefinitionArn,
+          taskCount: 1,
+          launchType: 'FARGATE',
+          platformVersion: 'LATEST',
+          enableExecuteCommand: false,
+          networkConfiguration: {
+            awsvpcConfiguration: {
+              assignPublicIp: 'ENABLED',
+              securityGroups: [workerSecurityGroup.securityGroupId],
+              subnets: vpc.publicSubnets.map((subnet) => subnet.subnetId),
+            },
+          },
+          overrides: {
+            containerOverrides: [
+              {
+                name: 'worker',
+                environment: [{ name: 'SYNC_RUN_ID', value: '$.body.syncRunId' }],
+              },
+            ],
+          },
+        },
+      },
+    });
+    syncPipe.node.addDependency(syncPipeRole);
 
     const migrationTaskDefinition = new ecs.FargateTaskDefinition(this, 'MigrationTaskDefinition', {
       family: `${prefix}-migration`,
@@ -645,11 +753,9 @@ export class OshiScheduleStack extends Stack {
         threshold: 80,
         evaluationPeriods: 3,
       }),
-      new cloudwatch.Alarm(this, 'Alb5xxAlarm', {
-        alarmName: `${prefix}-alb-5xx`,
-        metric: loadBalancer.metrics.httpCodeElb(elbv2.HttpCodeElb.ELB_5XX_COUNT, {
-          period: Duration.minutes(5),
-        }),
+      new cloudwatch.Alarm(this, 'HttpApi5xxAlarm', {
+        alarmName: `${prefix}-http-api-5xx`,
+        metric: httpApi.metricServerError({ period: Duration.minutes(5), statistic: 'Sum' }),
         threshold: 5,
         evaluationPeriods: 1,
         treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
@@ -668,6 +774,16 @@ export class OshiScheduleStack extends Stack {
           metricName: 'MatchedEvents',
           dimensionsMap: { RuleName: failedWorkerRule.ref },
           period: Duration.minutes(5),
+        }),
+        threshold: 1,
+        evaluationPeriods: 1,
+        treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+      }),
+      new cloudwatch.Alarm(this, 'SyncJobDeadLetterAlarm', {
+        alarmName: `${prefix}-sync-job-dlq-not-empty`,
+        metric: syncJobDeadLetterQueue.metricApproximateNumberOfMessagesVisible({
+          period: Duration.minutes(5),
+          statistic: 'Maximum',
         }),
         threshold: 1,
         evaluationPeriods: 1,
@@ -943,8 +1059,12 @@ export class OshiScheduleStack extends Stack {
       });
       new CfnOutput(this, 'AutoSleepScheduleName', { value: autoSleepSchedule.ref });
     }
-    new CfnOutput(this, 'LoadBalancerArn', { value: loadBalancer.loadBalancerArn });
-    new CfnOutput(this, 'LoadBalancerDnsName', { value: loadBalancer.loadBalancerDnsName });
+    new CfnOutput(this, 'HttpApiId', { value: httpApi.httpApiId });
+    new CfnOutput(this, 'VpcLinkId', { value: vpcLink.vpcLinkId });
+    new CfnOutput(this, 'CloudMapNamespaceId', { value: namespace.namespaceId });
+    new CfnOutput(this, 'CloudMapServiceId', { value: apiDiscoveryService.serviceId });
+    new CfnOutput(this, 'SyncJobQueueUrl', { value: syncJobQueue.queueUrl });
+    new CfnOutput(this, 'SyncJobPipeName', { value: syncPipe.name! });
     if (config.apiDomainName) {
       new CfnOutput(this, 'ApiUrl', { value: `https://${config.apiDomainName}` });
     }

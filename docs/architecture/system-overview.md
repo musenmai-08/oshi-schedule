@@ -4,11 +4,13 @@
 flowchart LR
   U[Browser] --> W[Next.js Web]
   W --> S[Supabase Auth]
-  W --> A[Express REST API]
+  W --> H[API Gateway HTTP API]
+  H -->|VPC Link / Cloud Map| A[Express REST API]
   A --> DB[(MySQL / Prisma)]
-  A --> Y[YouTube Data API]
-  A --> G[Google Calendar API]
-  C[External Scheduler] --> K[Worker CLI]
+  A --> Q[SQS sync jobs]
+  Q --> P[EventBridge Pipes]
+  P --> K[Worker CLI targeted]
+  C[EventBridge Scheduler] --> K
   K --> DB
   K --> Y
   K --> G
@@ -18,7 +20,7 @@ flowchart LR
 
 - `apps/web`: 表示、Supabase PKCE、アクセストークンを付けた API 呼び出し。Google provider token は保存しない。
 - `apps/api`: presentation/application/domain/infrastructure を分離した REST API。認可とユーザー操作を担当する。
-- `apps/worker`: HTTP に依存しない `sync:scheduled` の入口。API と同じ application service を composition root から起動する。
+- `apps/worker`: HTTPに依存しないscheduled/`SYNC_RUN_ID` targetedの入口。APIと同じapplication serviceをcomposition rootから起動する。
 - `packages/shared`: API 契約、Zod schema、上限・期間などの定数。
 - `prisma`: 永続モデルと migration。Channel/Broadcast は全利用者で共有する。
 
@@ -28,4 +30,4 @@ flowchart LR
 
 ## 可用性・拡張
 
-API と worker をまたぐ多重実行は、subscription 単位の `SyncLease` を MySQL に保存して防ぐ。lease は owner token と期限を持ち、同期中も更新するため長時間処理で別 replica に奪われない。異常終了後は期限切れ lease を取得し直せる。手動同期のクールダウンも DB 時刻で共有する。将来はジョブキューへチャンネル取得・利用者反映を分割できる。特定クラウドの SDK は domain/application に置かない。
+初回・手動同期はSyncRunをdurable jobとしてSQS/Pipesからone-off workerへ渡す。API requestは外部同期を待たない。API連打はactive run再利用、queue redeliveryはatomic claim、subscription処理の多重実行は`SyncLease` fencingで防ぐ。異常終了後はstale run/leaseを取得し直せる。AWS SDKはdispatcher adapterとIaCに閉じ、domain/applicationの同期ロジックはqueueへ依存しない。

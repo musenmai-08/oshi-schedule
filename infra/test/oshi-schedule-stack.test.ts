@@ -30,7 +30,7 @@ const configFor = (environmentName: EnvironmentName): DeploymentConfig => ({
   region: 'ap-northeast-1',
   deployReady: false,
   bootstrapOnly: false,
-  monthlyBudgetUsd: environmentName === 'staging' ? 40 : 75,
+  monthlyBudgetUsd: environmentName === 'staging' ? 25 : 75,
   githubOwner: 'example-owner',
   githubRepository: 'oshi-schedule',
   imageTag: 'sha-0123456789abcdef',
@@ -80,6 +80,10 @@ describe('OshiScheduleStack', () => {
     template.resourceCountIs('AWS::ECS::Service', 0);
     template.resourceCountIs('AWS::RDS::DBInstance', 0);
     template.resourceCountIs('AWS::ElasticLoadBalancingV2::LoadBalancer', 0);
+    template.resourceCountIs('AWS::ApiGatewayV2::Api', 0);
+    template.resourceCountIs('AWS::ApiGatewayV2::VpcLink', 0);
+    template.resourceCountIs('AWS::ServiceDiscovery::PrivateDnsNamespace', 0);
+    template.resourceCountIs('AWS::Pipes::Pipe', 0);
     template.resourceCountIs('AWS::Amplify::App', 0);
     template.resourceCountIs('AWS::Scheduler::Schedule', 0);
     template.resourceCountIs('AWS::Lambda::Function', 0);
@@ -94,13 +98,21 @@ describe('OshiScheduleStack', () => {
     const template = renderFromCliContext(fullStagingContext);
     template.resourceCountIs('AWS::ECS::Service', 1);
     template.resourceCountIs('AWS::RDS::DBInstance', 1);
-    template.resourceCountIs('AWS::ElasticLoadBalancingV2::LoadBalancer', 1);
+    template.resourceCountIs('AWS::ElasticLoadBalancingV2::LoadBalancer', 0);
+    template.resourceCountIs('AWS::ElasticLoadBalancingV2::TargetGroup', 0);
+    template.resourceCountIs('AWS::ElasticLoadBalancingV2::Listener', 0);
+    template.resourceCountIs('AWS::S3::Bucket', 0);
+    template.resourceCountIs('AWS::ApiGatewayV2::Api', 1);
+    template.resourceCountIs('AWS::ApiGatewayV2::VpcLink', 1);
+    template.resourceCountIs('AWS::ServiceDiscovery::PrivateDnsNamespace', 1);
+    template.resourceCountIs('AWS::ServiceDiscovery::Service', 1);
+    template.resourceCountIs('AWS::Pipes::Pipe', 1);
     template.resourceCountIs('AWS::Amplify::App', 1);
     template.resourceCountIs('AWS::Scheduler::Schedule', 2);
     template.resourceCountIs('AWS::Budgets::Budget', 1);
     template.hasResourceProperties('AWS::Budgets::Budget', {
       Budget: Match.objectLike({
-        BudgetLimit: { Amount: 40, Unit: 'USD' },
+        BudgetLimit: { Amount: 25, Unit: 'USD' },
         CostFilters: { TagKeyValue: ['user:Environment$staging'] },
       }),
       NotificationsWithSubscribers: Match.arrayWith([
@@ -121,8 +133,12 @@ describe('OshiScheduleStack', () => {
       'WorkerScheduleName',
       'WakeExpiresAtParameterName',
       'AutoSleepScheduleName',
-      'LoadBalancerArn',
-      'LoadBalancerDnsName',
+      'HttpApiId',
+      'VpcLinkId',
+      'CloudMapNamespaceId',
+      'CloudMapServiceId',
+      'SyncJobQueueUrl',
+      'SyncJobPipeName',
       'ApiUrl',
       'WebUrl',
       'AmplifyAppId',
@@ -182,7 +198,7 @@ describe('OshiScheduleStack', () => {
       'WorkerScheduleName',
       'WakeExpiresAtParameterName',
       'AutoSleepScheduleName',
-      'LoadBalancerArn',
+      'HttpApiId',
       'ApiUrl',
       'WebUrl',
       'AmplifyAppId',
@@ -221,7 +237,7 @@ describe('OshiScheduleStack', () => {
     });
   });
 
-  it('runs one circuit-broken API service with public IP and IP targets', () => {
+  it('runs one circuit-broken API service with public-IP egress and SRV discovery', () => {
     const template = render();
     template.hasResourceProperties('AWS::ECS::Service', {
       DesiredCount: 1,
@@ -232,13 +248,20 @@ describe('OshiScheduleStack', () => {
         AwsvpcConfiguration: Match.objectLike({ AssignPublicIp: 'ENABLED' }),
       },
     });
-    template.hasResourceProperties('AWS::ElasticLoadBalancingV2::TargetGroup', {
-      TargetType: 'ip',
-      HealthCheckPath: '/health',
+    template.hasResourceProperties('AWS::ServiceDiscovery::Service', {
+      DnsConfig: Match.objectLike({ DnsRecords: [Match.objectLike({ Type: 'SRV' })] }),
+    });
+    template.hasResourceProperties('AWS::ECS::TaskDefinition', {
+      ContainerDefinitions: Match.arrayWith([
+        Match.objectLike({
+          Name: 'api',
+          HealthCheck: Match.objectLike({ Command: Match.arrayWith(['CMD-SHELL']) }),
+        }),
+      ]),
     });
   });
 
-  it('limits ingress to ALB-to-API and application-tasks-to-DB', () => {
+  it('limits ingress to VPC-Link-to-API and application-tasks-to-DB', () => {
     const template = render();
     const ingress = template.findResources('AWS::EC2::SecurityGroupIngress');
     const applicationIngress = Object.values(ingress).filter((resource) => {
@@ -258,6 +281,81 @@ describe('OshiScheduleStack', () => {
     );
     expect(worker).toBeDefined();
     expect(worker?.Properties?.SecurityGroupIngress).toBeUndefined();
+  });
+
+  it('proxies the default HTTP API route privately through Cloud Map', () => {
+    const template = renderFromCliContext(fullStagingContext);
+    template.hasResourceProperties('AWS::ApiGatewayV2::Api', {
+      ProtocolType: 'HTTP',
+      DisableExecuteApiEndpoint: true,
+    });
+    template.hasResourceProperties('AWS::ApiGatewayV2::Integration', {
+      ConnectionType: 'VPC_LINK',
+      IntegrationMethod: 'ANY',
+      IntegrationType: 'HTTP_PROXY',
+      PayloadFormatVersion: '1.0',
+      RequestParameters: { 'overwrite:path': '$request.path' },
+    });
+    template.hasResourceProperties('AWS::ApiGatewayV2::Route', { RouteKey: '$default' });
+    template.hasResourceProperties('AWS::ApiGatewayV2::Stage', {
+      StageName: '$default',
+      AutoDeploy: true,
+      DefaultRouteSettings: { ThrottlingBurstLimit: 100, ThrottlingRateLimit: 50 },
+    });
+    template.hasResourceProperties('AWS::ApiGatewayV2::DomainName', {
+      DomainName: 'api.staging.example.invalid',
+      DomainNameConfigurations: [
+        Match.objectLike({ EndpointType: 'REGIONAL', SecurityPolicy: 'TLS_1_2' }),
+      ],
+    });
+    template.hasResourceProperties('AWS::Route53::RecordSet', {
+      Name: 'api.staging.example.invalid.',
+      Type: 'A',
+      AliasTarget: Match.objectLike({ DNSName: Match.anyValue(), HostedZoneId: Match.anyValue() }),
+    });
+    const stage = Object.values(template.findResources('AWS::ApiGatewayV2::Stage'))[0];
+    const accessLogFormat = String(stage?.Properties?.AccessLogSettings?.Format);
+    expect(accessLogFormat).toContain('integrationLatency');
+    expect(accessLogFormat).not.toMatch(/authorization|cookie|query|string/i);
+  });
+
+  it('dispatches encrypted SQS jobs through a least-privilege Pipe to the shared worker task', () => {
+    const template = render();
+    template.resourceCountIs('AWS::SQS::Queue', 3);
+    template.hasResourceProperties('AWS::SQS::Queue', {
+      QueueName: 'oshi-schedule-staging-sync-jobs',
+      SqsManagedSseEnabled: true,
+      RedrivePolicy: Match.objectLike({
+        deadLetterTargetArn: Match.anyValue(),
+        maxReceiveCount: 3,
+      }),
+    });
+    template.hasResourceProperties('AWS::Pipes::Pipe', {
+      Name: 'oshi-schedule-staging-sync-jobs',
+      SourceParameters: { SqsQueueParameters: { BatchSize: 1, MaximumBatchingWindowInSeconds: 0 } },
+      TargetParameters: Match.objectLike({
+        EcsTaskParameters: Match.objectLike({
+          LaunchType: 'FARGATE',
+          TaskCount: 1,
+          Overrides: Match.objectLike({
+            ContainerOverrides: [
+              Match.objectLike({
+                Name: 'worker',
+                Environment: [{ Name: 'SYNC_RUN_ID', Value: '$.body.syncRunId' }],
+              }),
+            ],
+          }),
+        }),
+      }),
+    });
+    const taskDefinitions = Object.values(template.findResources('AWS::ECS::TaskDefinition'));
+    const worker = taskDefinitions.find((resource) =>
+      String(resource.Properties?.Family).endsWith('-worker'),
+    );
+    const workerEnvironment = worker?.Properties?.ContainerDefinitions?.[0]?.Environment as Array<{
+      Name: string;
+    }>;
+    expect(workerEnvironment.map(({ Name }) => Name)).toContain('SYNC_JOB_QUEUE_URL');
   });
 
   it('schedules a disabled-by-default hourly Fargate worker with retry and DLQ', () => {
@@ -413,8 +511,8 @@ describe('OshiScheduleStack', () => {
 
   it('creates operational logs, alarms, notifications, and a budget', () => {
     const template = render();
-    template.resourceCountIs('AWS::Logs::LogGroup', 4);
-    template.resourceCountIs('AWS::CloudWatch::Alarm', 5);
+    template.resourceCountIs('AWS::Logs::LogGroup', 5);
+    template.resourceCountIs('AWS::CloudWatch::Alarm', 6);
     template.resourceCountIs('AWS::SNS::Topic', 1);
     template.resourceCountIs('AWS::Budgets::Budget', 1);
   });

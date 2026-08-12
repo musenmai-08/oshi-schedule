@@ -19,8 +19,12 @@ const fullOutputs = [
   ['RdsInstanceIdentifier', 'staging-mysql'],
   ['WorkerScheduleName', 'staging-worker'],
   ['WakeExpiresAtParameterName', '/oshi-schedule-staging/runtime/wake-expires-at'],
-  ['LoadBalancerArn', 'arn:aws:elasticloadbalancing:region:account:loadbalancer/app/staging'],
-  ['LoadBalancerDnsName', 'staging.example.invalid'],
+  ['HttpApiId', 'http-api-id'],
+  ['VpcLinkId', 'vpc-link-id'],
+  ['CloudMapNamespaceId', 'namespace-id'],
+  ['CloudMapServiceId', 'service-id'],
+  ['SyncJobQueueUrl', 'https://sqs.example.invalid/queue'],
+  ['SyncJobPipeName', 'sync-pipe'],
   ['AmplifyAppId', 'app-id'],
   ['ApiUrl', 'https://api-staging.example.invalid'],
   ['WebUrl', 'https://staging.example.invalid'],
@@ -115,8 +119,20 @@ class FakeAws {
       case 'ssm put-parameter':
         this.deadline = args[args.indexOf('--value') + 1];
         return { Version: 2 };
-      case 'elbv2 describe-load-balancers':
-        return { LoadBalancers: [{ State: { Code: 'active' } }] };
+      case 'apigatewayv2 get-api':
+        return { ApiId: 'http-api-id', ProtocolType: 'HTTP' };
+      case 'apigatewayv2 get-vpc-link':
+        return { VpcLinkStatus: 'AVAILABLE' };
+      case 'servicediscovery get-namespace':
+        return { Namespace: { Id: 'namespace-id' } };
+      case 'servicediscovery get-service':
+        return { Service: { Id: 'service-id' } };
+      case 'servicediscovery list-instances':
+        return { Instances: this.api.desiredCount === 1 ? [{ Id: 'task' }] : [] };
+      case 'sqs get-queue-attributes':
+        return { Attributes: { ApproximateNumberOfMessages: '0' } };
+      case 'pipes describe-pipe':
+        return { CurrentState: 'RUNNING' };
       case 'amplify get-app':
         return { app: { appId: 'app-id' } };
       default:

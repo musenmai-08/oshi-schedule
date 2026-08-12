@@ -90,7 +90,7 @@ schema変更がないdeployでもmigration taskを実行して未適用migration
 `WEB_URL`、`API_URL`、deploy workflowだけが設定する`MIGRATION_VERIFIED=true`を渡して`scripts/smoke-staging.sh`を実行する。Secretや個人情報を出力せず、最低限次を確認する。
 
 - API `GET /health`がHTTP 200で`service=oshi-schedule-api`を返す。
-- STEP 4で追加するreadinessがDB接続成功を返し、ALB targetがhealthy。
+- readinessがDB接続成功を返し、ECS container health、Cloud Map discovery、HTTP API integrationがhealthy。
 - WebがHTTP 200または意図したredirectで応答し、production CSPとHTTPSが有効。
 - `/auth/callback` routeが存在する（自動testではOAuthを完遂しない）。
 - Web buildに環境別API/Supabase公開値だけが入り、demo modeがfalse。
@@ -108,7 +108,7 @@ Amplifyのsource branchもstaging/productionともに`main`とする。環境分
 
 ### code/image
 
-ECSは直前のtask definition/image digest、Amplifyは直前の成功commitへ戻す。auto rollbackはALB health失敗などcodeだけで安全に戻せる場合に限定する。
+ECSは直前のtask definition/image digest、Amplifyは直前の成功commitへ戻す。auto rollbackはECS container health失敗などcodeだけで安全に戻せる場合に限定する。
 
 ### database
 

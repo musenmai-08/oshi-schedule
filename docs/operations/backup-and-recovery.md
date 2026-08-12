@@ -16,7 +16,7 @@ RPO/RTOは小規模betaの暫定目標でありSLAではない。一般公開、
 - productionのschema migration前にsnapshotを取り、migration ID、image digest、取得時刻をdeploy recordへ残す。
 - automated backup/snapshotの削除、retention短縮、deletion protection解除はmanual approval対象とする。
 - 四半期ごとにproduction backupから隔離した新RDSへrestore rehearsalを行う。元RDSを上書きしない。
-- CDK stackを削除してもRDS snapshot、RDS managed secret、ECR image、ALB access log bucketがretain/snapshot policyにより残る。stack削除をdata完全削除とみなさず、残存resourceと費用を手動確認する。
+- CDK stackを削除してもRDS snapshot、RDS managed secret、ECR imageがretain/snapshot policyにより残る。stack削除をdata完全削除とみなさず、残存resourceと費用を手動確認する。
 
 production stackは常にRDS`Retain`とdeletion protectionを使う。`cdk destroy`は日常の停止手段ではなく、productionでは別reviewとbackup復元確認なしに実行しない。
 

@@ -21,7 +21,7 @@ local、test、staging、productionのデータとcredentialを混在させな�
 
 ## 分離単位
 
-- **AWS**: 初期は同一account/regionでもenvironment別CDK stack、VPC、ECS cluster、ECR、ALB、RDS、IAM role、log group、Scheduler、Secrets/Parametersを使う。GitHub OIDC providerだけaccount内で共有する。全resourceに`Application=oshi-schedule`と`Environment` tagを付ける。
+- **AWS**: 初期は同一account/regionでもenvironment別CDK stack、VPC、ECS cluster、ECR、HTTP API/VPC Link/Cloud Map、SQS/Pipes、RDS、IAM role、log group、Scheduler、Secrets/Parametersを使う。GitHub OIDC providerだけaccount内で共有する。全resourceに`Application=oshi-schedule`と`Environment` tagを付ける。
 - **Google Cloud**: stagingとproductionでproject、OAuth consent/test users、OAuth client、YouTube quotaを分ける。quota増枠申請もproduction projectに限定する。
 - **Supabase**: projectを分け、Auth user、Google provider設定、URL allowlist、keyを共有しない。productionの可用性を求めるbetaではPro planを前提とする。
 - **DB**: RDS instance、database credential、subnet/security boundaryを分ける。schemaは同じmigration列を適用するがdataは移送しない。
@@ -69,13 +69,13 @@ ECS task起動時にAWS Secrets Managerから注入し、Docker image、build ar
 
 ### 非Secretだが環境依存
 
-| 変数                                                        | 配置                                              |
-| ----------------------------------------------------------- | ------------------------------------------------- |
-| `NODE_ENV`、`PORT`、`SUPABASE_JWT_AUDIENCE`                 | ECS task definition                               |
-| `APP_MODE`、`WEB_ORIGIN`、`TRUST_PROXY_HOPS`、log/quota     | CDKが作るSSM Parameter                            |
-| `SUPABASE_URL`、`GOOGLE_CLIENT_ID`                          | 事前作成するSSM Parameter                         |
-| `ALLOWED_EMAILS`                                            | 事前作成するSSM SecureString                      |
-| timeout、lease、OAuth retry、YouTube quota/tracking設定     | SSM Parameter Store Standard。変更review対象      |
+| 変数                                                    | 配置                                         |
+| ------------------------------------------------------- | -------------------------------------------- |
+| `NODE_ENV`、`PORT`、`SUPABASE_JWT_AUDIENCE`             | ECS task definition                          |
+| `APP_MODE`、`WEB_ORIGIN`、`TRUST_PROXY_HOPS`、log/quota | CDKが作るSSM Parameter                       |
+| `SUPABASE_URL`、`GOOGLE_CLIENT_ID`                      | 事前作成するSSM Parameter                    |
+| `ALLOWED_EMAILS`                                        | 事前作成するSSM SecureString                 |
+| timeout、lease、OAuth retry、YouTube quota/tracking設定 | SSM Parameter Store Standard。変更review対象 |
 
 parameter名は`/oshi-schedule-{environment}/runtime/<kebab-name>`である。customer managed KMS keyでSecureStringを作る場合は、ECS execution roleへそのkeyの`kms:Decrypt`を追加してからdeployする。`.env.example`の`SUPABASE_PUBLISHABLE_KEY`（`NEXT_PUBLIC_`なし）はAPIから参照されないためproductionへ配布しない。
 

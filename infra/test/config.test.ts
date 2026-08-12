@@ -28,7 +28,7 @@ describe('loadConfig', () => {
     expect(config.deployReady).toBe(false);
     expect(config.bootstrapOnly).toBe(false);
     expect(config.webDomainName).toBeUndefined();
-    expect(config.monthlyBudgetUsd).toBe(40);
+    expect(config.monthlyBudgetUsd).toBe(25);
   });
 
   it('does not apply the staging budget default to production', () => {

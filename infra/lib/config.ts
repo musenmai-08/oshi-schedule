@@ -83,7 +83,7 @@ export const loadConfig = (app: App): DeploymentConfig => {
         app.node.tryGetContext(
           environmentName === 'staging' ? 'stagingMonthlyBudgetUsd' : 'productionMonthlyBudgetUsd',
         ) ??
-        (environmentName === 'staging' ? 40 : 75),
+        (environmentName === 'staging' ? 25 : 75),
     ),
     githubOwner: optionalString(app, 'githubOwner') ?? 'REQUIRED_GITHUB_OWNER',
     githubRepository: optionalString(app, 'githubRepository') ?? 'REQUIRED_GITHUB_REPOSITORY',
@@ -111,7 +111,10 @@ export const loadConfig = (app: App): DeploymentConfig => {
   if (!Number.isFinite(config.monthlyBudgetUsd) || config.monthlyBudgetUsd <= 0) {
     throw new Error('monthlyBudgetUsd must be a positive number');
   }
-  if (environmentName === 'production' && app.node.tryGetContext('confirmProduction') !== 'DEPLOY_PRODUCTION') {
+  if (
+    environmentName === 'production' &&
+    app.node.tryGetContext('confirmProduction') !== 'DEPLOY_PRODUCTION'
+  ) {
     throw new Error('production requires -c confirmProduction=DEPLOY_PRODUCTION');
   }
   if (config.deployReady) {
@@ -130,7 +133,10 @@ export const loadConfig = (app: App): DeploymentConfig => {
     ] as const) {
       requiredForDeploy(config, key);
     }
-    if (config.githubOwner.startsWith('REQUIRED_') || config.githubRepository.startsWith('REQUIRED_')) {
+    if (
+      config.githubOwner.startsWith('REQUIRED_') ||
+      config.githubRepository.startsWith('REQUIRED_')
+    ) {
       throw new Error('CDK deploy requires githubOwner and githubRepository');
     }
     if (config.imageTag === 'bootstrap-required') {

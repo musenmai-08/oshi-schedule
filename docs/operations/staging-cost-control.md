@@ -2,7 +2,7 @@
 
 ## 目的と適用範囲
 
-このrunbookは`oshi-schedule-staging`だけを対象にする。VPC、ECR、ALB、Route 53、ACM、Secrets Manager、RDS storageは維持し、未使用時にECS API computeとRDS DB instance computeを止める。productionには適用しない。
+このrunbookは`oshi-schedule-staging`だけを対象にする。VPC、ECR、HTTP API、VPC Link、Cloud Map、SQS/Pipes、Route 53、ACM、Secrets Manager、RDS storageは維持し、未使用時にECS API computeとRDS DB instance computeを止める。productionには適用しない。
 
 コマンドはAWS account `741448960817`、region `ap-northeast-1`、profile `oshi-schedule`、environment `staging`を固定guardとして検証する。`default` profileへfallbackせず、CloudFormation stackのOutputsだけから操作対象を解決する。Secretの取得・表示、resourceの削除、snapshot、rebootは行わない。
 
@@ -54,16 +54,16 @@ Worker Schedulerは`staging:wake`で有効化しない。YouTube quotaとFargate
 
 ## statusの判定
 
-`staging:status`は読み取り専用でCloudFormation、ECS API、RDS、Worker Scheduler、ALB、Amplify、公開URL、設定中のimage digestと自動sleep期限を確認する。期限はJST、残時間は時間・分で表示する。秘密値は取得しない。full deploy前または初期値`UNSET`では、期限未設定として安全に表示する。
+`staging:status`は読み取り専用でCloudFormation、HTTP API、VPC Link、Cloud Map、sync queue/Pipe、ECS API、RDS、Worker Scheduler、Amplify、公開URL、設定中のimage digestと自動sleep期限を確認する。期限はJST、残時間は時間・分で表示する。秘密値は取得しない。
 
-| Overall        | 意味                                                          |
-| -------------- | ------------------------------------------------------------- |
-| `NOT_DEPLOYED` | full stackのOutputsがなく、bootstrap-onlyまたは未作成         |
-| `SLEEPING`     | API 0、RDS stopped、Scheduler disabled                        |
-| `WAKING`       | RDS起動中、またはECS task起動中                               |
-| `RUNNING`      | API 1、RDS available、Scheduler disabled、ALB/Amplify利用可能 |
-| `PARTIAL`      | resource間の状態が不一致。完了扱いにしない                    |
-| `ERROR`        | AWS状態取得に失敗。完了扱いにしない                           |
+| Overall        | 意味                                                                                  |
+| -------------- | ------------------------------------------------------------------------------------- |
+| `NOT_DEPLOYED` | full stackのOutputsがなく、bootstrap-onlyまたは未作成                                 |
+| `SLEEPING`     | API 0、RDS stopped、Scheduler disabled                                                |
+| `WAKING`       | RDS起動中、またはECS task起動中                                                       |
+| `RUNNING`      | API 1、RDS available、Scheduler disabled、HTTP API/VPC Link/Cloud Map/Amplify利用可能 |
+| `PARTIAL`      | resource間の状態が不一致。完了扱いにしない                                            |
+| `ERROR`        | AWS状態取得に失敗。完了扱いにしない                                                   |
 
 bootstrap-onlyの現在でも`staging:status`は失敗せず`NOT_DEPLOYED`を返す。`wake`と`sleep`はfull stack用Outputが揃うまでAWS writeを拒否する。
 
@@ -118,9 +118,9 @@ CloudWatch Logsには`NOOP_NO_DEADLINE`、`NOOP_ACTIVE`、`NOOP_ALREADY_SLEEPING
 
 ## Budgetと費用
 
-stagingの月額Budget既定値は`40 USD`である。これはhard spending limitではなく、resourceを自動停止するものでもない。現行CDKは月間予測額がBudgetの80%を超えた時点でSNS通知するため、40 USD設定ではforecast 32 USDが通知点になる。
+stagingの月額Budget既定値は`25 USD`である。これはhard spending limitではなく、resourceを自動停止するものでもない。現行CDKは月間予測額がBudgetの80%を超えた時点でSNS通知するため、forecast 20 USDが通知点になる。
 
-計画上の概算は、通常の低コスト運用で月35〜50 USD程度、常時稼働では月68〜90 USD程度である。実際の請求はRDS稼働時間、ALB/LCU、Public IPv4、Fargate、Amplify、CloudWatch、保存量と通信量で変わる。Budget 40 USDは早期検知には妥当だが、請求上限ではなく、検証時間が多い月は正常運用でも超える可能性がある。
+計画上の概算は、月40時間で最低/通常/上振れ`$8/$14/$22`、常時稼働で`$32/$42/$55`程度である。HTTP API/Pipes/SQSは低trafficではほぼ従量で、ALB時間固定費はない。実際の請求はRDS稼働時間、Public IPv4、Fargate、Amplify、CloudWatch、保存量と通信量で変わる。25 USDは月40時間運用の上振れを早期検知できるが、常時稼働月は通常利用でも超える。
 
 自動sleepは月約720回のScheduler/Lambda実行である。[EventBridge料金](https://aws.amazon.com/eventbridge/pricing/)のScheduler月1,400万invocation、[Lambda料金](https://aws.amazon.com/lambda/pricing/)の月100万request・40万GB秒、[CloudWatch料金](https://aws.amazon.com/cloudwatch/pricing/)のLogs 5 GB・標準Alarm metric 10個の各Free Tier、[無料のSSM Standard Parameter](https://docs.aws.amazon.com/systems-manager/latest/userguide/ps-default-tier.html)内に収まる想定なので、通常の追加費用は0 USDに近い。Free Tierを使い切った場合も、Schedulerは約0.00072 USD、Lambda/Logsはごく少額、標準Alarm 1個を含めて保守的に月0.15 USD未満を目安とする。料金はregion、ログ量、既存利用量、税で変わるため公開前にPricing Calculatorで再確認する。
 
@@ -135,6 +135,7 @@ stagingの月額Budget既定値は`40 USD`である。これはhard spending lim
 3. RDSが`available`になる前にECSを手動起動しない。
 4. `PARTIAL`やtimeoutを成功として扱わず、再実行前に前回の成功済み操作を確認する。
 5. 調査時もSecret、DB接続文字列、task environmentをterminalやissueへ転記しない。
+6. 同期が止まった場合はSyncRunの`QUEUED/RUNNING/FAILED`、sync queue/DLQ、Pipe、targeted ECS taskの順に確認する。PipeがRunTaskを受理した後のtask失敗はSQSだけでは再配信されないため、status APIから再試行するか次回scheduled recoveryを待つ。
 
 ## 関連文書
 

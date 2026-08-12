@@ -1,6 +1,6 @@
 # AWS bootstrap
 
-この手順はAWS resourceを作る直前のrunbookである。STEP 4の実装・検証では以下のcommandを実行しておらず、CloudFormation stackも存在しない。実行するとECR、ALB、RDS、public IPv4などの課金が始まるため、先に[費用見積](cost-estimate.md)を承認する。
+この手順はAWS resourceを作る直前のrunbookである。実行するとECR、HTTP API/VPC Link/Cloud Map、SQS/Pipes、RDS、public IPv4などの課金が始まるため、先に[費用見積](cost-estimate.md)を承認する。
 
 GitHubのdefault branchが`main`、`staging`/`production` Environmentが作成済み、mainのCI validate/E2Eが成功済みであることもbootstrapの前提とする。workflowがdefault branchに存在しない状態やCI失敗中にはAWS resourceを作らない。
 
@@ -17,9 +17,9 @@ GitHubのdefault branchが`main`、`staging`/`production` Environmentが作成�
 
 実値のSecretはissue、commit、CloudFormation context、CLI outputへ書かない。
 
-stagingの`stagingMonthlyBudgetUsd`既定値は40、productionの`productionMonthlyBudgetUsd`既定値は75であり、staging用の40をproductionへ流用しない。deploy時の`monthlyBudgetUsd`は対象環境の値を明示的に上書きする。Budgetは通知基準であってhard spending limitや自動停止ではない。
+stagingの`stagingMonthlyBudgetUsd`既定値は25、productionの`productionMonthlyBudgetUsd`既定値は75であり、staging値をproductionへ流用しない。deploy時の`monthlyBudgetUsd`は対象環境の値を明示的に上書きする。Budgetは通知基準であってhard spending limitや自動停止ではない。
 
-staging Budgetはユーザー定義cost allocation tag `Environment=staging`で絞り込む。full deploy前にBilling ConsoleのCost allocation tagsで`Environment`が`Active`であることを確認する。未有効または反映待ちの状態では、40 USD Budgetがstaging費用を正しく追跡する前提を満たさない。
+staging Budgetはユーザー定義cost allocation tag `Environment=staging`で絞り込む。full deploy前にBilling ConsoleのCost allocation tagsで`Environment`が`Active`であることを確認する。未有効または反映待ちの状態では、25 USD Budgetがstaging費用を正しく追跡する前提を満たさない。
 
 ## 1. identityと静的検証
 
@@ -33,7 +33,7 @@ pnpm aws:cdk synth --quiet
 
 `scripts/aws/with-project-node.sh`はroot `.nvmrc`を正とし、NVM配下のNode.js 22.23.1をPATH先頭へ固定する。`~/.vite-plus/bin/node`など別のshimが先頭にあってもそちらを使わず、22.23.1を選択できなければAWS command実行前に失敗する。GitHub Actionsでは`actions/setup-node`が用意した同一versionを利用できる。
 
-最後の`synth`はdomainなしでも成功し、TLS未設定のALB listenerは503固定応答になる。これは検査用であり完成したHTTP stagingではない。full deployでは必ず`deployReady=true`を指定し、domain/certificate/public Web設定が欠ければconfig validationで停止させる。
+最後の`synth`はdomainなしでも成功するが、custom domain/Route 53 Aliasを持たない検査用templateであり完成したHTTPS stagingではない。full deployでは必ず`deployReady=true`を指定し、domain/certificate/public Web設定が欠ければconfig validationで停止させる。
 
 CDK CLIの`-c key=value`は値を文字列としてapplicationへ渡す。boolean contextは共通parserがbooleanまたは小文字の文字列`true`/`false`だけを受け付け、未指定時は`cdk.json`または実装のdefaultを使う。`TRUE`、`yes`、`1`、空文字などはsynth/deploy前に設定エラーとして拒否する。
 
@@ -67,7 +67,7 @@ AWS_PROFILE=<profile> pnpm aws:cdk deploy \
   -c awsRegion=<region>
 ```
 
-この段階はVPC（public subnetとisolated database subnet、NATなし）とimmutable ECR repositoryだけを同じstackに作る。ECS service、RDS、ALB、Scheduler、Amplify、Budget、application Secret/Parameterは作らない。`deployReady=true`はaccountを必須化し、`bootstrapOnly=true`との組み合わせではfull deploy入力を要求しない。出力されたrepositoryへ検証済みimageをcommit SHA tagでpushし、digestを記録する。
+この段階はVPC（public subnetとisolated database subnet、NATなし）とimmutable ECR repositoryだけを同じstackに作る。ECS、RDS、HTTP API/VPC Link/Cloud Map、SQS/Pipes、Scheduler、Amplify、Budget、application Secret/Parameterは作らない。`deployReady=true`はaccountを必須化し、`bootstrapOnly=true`との組み合わせではfull deploy入力を要求しない。出力されたrepositoryへ検証済みimageをcommit SHA tagでpushし、digestを記録する。
 
 ```bash
 docker build --platform linux/amd64 -t oshi-schedule:<commit-sha> .
@@ -102,7 +102,7 @@ Route 53 hosted zoneを確認し、staging API FQDNを含むACM certificateを�
 
 ## 4. full stack
 
-deploy前に`cdk diff`を読み、RDS/ALB/ECS/Budgetとremoval policyを確認する。例の値を実値に置換する。
+deploy前に`cdk diff`を読み、RDS/HTTP API/VPC Link/Cloud Map/SQS/Pipes/ECS/Budgetとremoval policyを確認する。例の値を実値に置換する。
 
 `deployReady=true`かつ`bootstrapOnly=false`では、domain/certificate、通知先、GitHub、公開Supabase設定、既存immutable image tagを必須にする。入力不足または不正boolean contextのままfull stackをsynth/deployしない。
 
@@ -133,4 +133,4 @@ AWS_PROFILE=<profile> pnpm aws:cdk diff \
 
 ## destroy
 
-staging廃止時はSchedulerをdisable、ECS desired countを0、必要snapshotを取得し、対象account/stackを再確認してから`cdk destroy`する。production stackでは日常的に実行しない。destroy後もRDS snapshot、RDS/アプリSecret、ECR image、ALB log bucketがretainされ、課金が続く可能性がある。残存resourceを一覧化し、data retention承認後に個別削除する。
+staging廃止時はSchedulerをdisable、ECS desired countを0、必要snapshotを取得し、対象account/stackを再確認してから`cdk destroy`する。production stackでは日常的に実行しない。destroy後もRDS snapshot、RDS/アプリSecret、ECR imageがretainされ、課金が続く可能性がある。残存resourceを一覧化し、data retention承認後に個別削除する。

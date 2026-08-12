@@ -7,9 +7,9 @@ application、Docker、CDK、GitHub Actions、Amplify build、smoke scriptは実
 ## 構築前gate
 
 - [ ] AWS account ID/region/profileと請求先を確定
-- [ ] AWS Pricing CalculatorでRDS、ALB、Fargate、public IPv4、Amplify、Logs、Secrets、ECR/S3、Route 53、backupを確認
+- [ ] AWS Pricing CalculatorでRDS、HTTP API、Cloud Map、Fargate、public IPv4、SQS/Pipes、Amplify、Logs、Secrets、ECR/S3、Route 53、backupを確認
 - [ ] domain/TLD、Route 53 hosted zone、staging Web/API FQDNを確定
-- [x] alert emailとstaging monthly Budget 40 USDを確定
+- [ ] alert emailとstaging monthly Budget 25 USDを最終承認
 - [ ] Billingのユーザー定義cost allocation tag `Environment`が`Active`
 - [ ] 自動sleepのSSM期限、毎時Scheduler、Lambda、Errors Alarmがstaging full synthにだけ存在することを確認
 - [ ] RDS class/storage/retention/deletion protectionを最終承認
@@ -21,7 +21,7 @@ application、Docker、CDK、GitHub Actions、Amplify build、smoke scriptは実
 - [ ] OAuth client、YouTube key、allowed email、encryption keyを安全に用意
 - [ ] `pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm test:e2e`が成功
 - [ ] Docker/API/worker/migration、CDK test/synth、YAML/shell検証が成功
-- [ ] 実CLI形式の`bootstrapOnly=true` synthでVPC/ECRだけが含まれ、RDS/ECS/ALB/Amplify/Scheduler/Budgetが0件であることを機械確認
+- [ ] 実CLI形式の`bootstrapOnly=true` synthでVPC/ECRだけが含まれ、RDS/ECS/HTTP API/VPC Link/Cloud Map/SQS/Pipes/Amplify/Scheduler/Budgetが0件であることを機械確認
 
 ## 構築順
 
@@ -43,7 +43,9 @@ application、Docker、CDK、GitHub Actions、Amplify build、smoke scriptは実
 - Web/APIがHTTPSのみで、HTTPはredirect。domain未設定の503 listenerを完成扱いにしない
 - `/health`はprocess liveness、`/ready`はRDS readinessとして成功
 - RDSはMySQL 8.4.10、isolated subnet、public accessなし、TLS required、Single-AZ、20 GiB、backup 1日
-- API inboundはALBのみ、DB inboundはAPI/worker SGのみ、worker inboundなし、NAT Gatewayなし
+- public edgeはHTTP APIのみ、API :4000 inboundはVPC Link SGのみ、DB inboundはAPI/worker SGのみ、worker inboundなし、NAT Gatewayなし
+- `$default` HTTP_PROXY、Cloud Map SRV、stage path overwrite、Regional custom domain/Route 53 Aliasが機能し、ALB resourceが0
+- 初回/手動同期は201/202後にSQS/Pipesのtargeted taskで完了し、status APIで所有権を検証できる
 - API desired count 1、circuit breaker、graceful shutdown、CloudWatch Logsが機能
 - Schedulerはhourly、retry 2、DLQ、exit非0通知を持ち、lease/fencingを維持
 - app Secretがimage、CloudFormation output、Amplify、GitHub logsへ出ていない
