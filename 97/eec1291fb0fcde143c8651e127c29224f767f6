@@ -1,0 +1,142 @@
+docs/testing/testing-policy.md
+  s_3a50bad78ea1cd::t_dd61cfe1511465 4-5
+apps/api/src/presentation/routes.ts
+  s_3a50bad78ea1cd::t_4d9b4c0546c40a 119-137
+prisma/schema.prisma
+  s_3a50bad78ea1cd::t_8e38f9bffa4f5c 39
+  s_3a50bad78ea1cd::t_9a1ca425eeb2a6 44,231-233,243,255-256
+apps/api/package.json
+  s_3a50bad78ea1cd::t_89072076c4979f 7-9
+  s_3a50bad78ea1cd::t_4d9b4c0546c40a 26
+docs/database/schema.md
+  s_3a50bad78ea1cd::t_dd61cfe1511465 28
+apps/api/src/prisma-api.integration.test.ts
+  s_3a50bad78ea1cd::t_e5bcce343c02cd 31-34,90
+  s_3a50bad78ea1cd::t_eff59671bed877 153-166
+  s_3a50bad78ea1cd::t_89072076c4979f 101
+apps/api/src/application/models.ts
+  s_3a50bad78ea1cd::t_8e38f9bffa4f5c 73,253
+  s_3a50bad78ea1cd::t_4f04315bff19f4 252
+  s_3a50bad78ea1cd::t_9a1ca425eeb2a6 32,49,60-72,74-88,248-251,254-258
+apps/api/src/container.ts
+  s_3a50bad78ea1cd::t_4d9b4c0546c40a 10,26-29,53,130-134,143
+apps/api/src/application/sync-service.ts
+  s_3a50bad78ea1cd::t_3af45251c89618 91,161,188,404,448
+  s_3a50bad78ea1cd::t_1e799f71fe7e84 53
+  s_3a50bad78ea1cd::t_89072076c4979f 126,129,270-275,495-502
+  s_3a50bad78ea1cd::t_9c4a1c2c68bbb3 46,50,258,350,357,364,383,401
+  s_3a50bad78ea1cd::t_8e38f9bffa4f5c 65,88
+  s_3a50bad78ea1cd::t_db0d4d499a2edc 3,23,54-64,66-87,89-90,92-124
+  s_3a50bad78ea1cd::t_72776f6fa51b58 125
+apps/api/src/infrastructure/database/prisma-store.ts
+  s_3a50bad78ea1cd::t_90bfe42a3b05ea 777
+  s_3a50bad78ea1cd::t_5d56361d1b65cd 11,66,710,712,714,721-735,738-741,743-755,763-764,769-776,778-786,793-794,796-812,821-839,841-870,873-879,881-889,894,897,935,941-947
+  s_3a50bad78ea1cd::t_8e38f9bffa4f5c 737,742,761,788,795,840,871
+  s_3a50bad78ea1cd::t_1e799f71fe7e84 756-760,762,787,789-791
+  s_3a50bad78ea1cd::t_89072076c4979f 427-429,736,872
+  s_3a50bad78ea1cd::t_4f04315bff19f4 765-768,792,813-820
+docs/architecture/synchronization.md
+  s_3a50bad78ea1cd::t_6cc0d1209979fa 5,9-11,15-19,67-74,77,79
+apps/worker/src/index.ts
+  s_3a50bad78ea1cd::t_dacb2edd1b300e 2-6,20-24
+  s_3a50bad78ea1cd::t_89072076c4979f 25-28
+apps/api/src/infrastructure/database/memory-store.ts
+  s_3a50bad78ea1cd::t_8e38f9bffa4f5c 500,505,524,535,545,553,587-589,617-620
+  s_3a50bad78ea1cd::t_1e799f71fe7e84 519-523,525,544,546-548
+  s_3a50bad78ea1cd::t_5d56361d1b65cd 12,36-39,41,47-48,50-51,478,483-493,496-498,501-504,506-518,527-528,530-534,536-543,550-552,554-575,578-586,590-616,621-625,627-634,639,642-643,657-658,675,682-686
+  s_3a50bad78ea1cd::t_89072076c4979f 289-293,499
+  s_3a50bad78ea1cd::t_4f04315bff19f4 526,529,549,576-577
+  s_3a50bad78ea1cd::t_9757ecc87ea68a 669,676
+docs/api/api-specification.md
+  s_3a50bad78ea1cd::t_303dd316a5277d 26,30-32,36
+  s_3a50bad78ea1cd::t_89072076c4979f 7-22
+apps/web/src/components/dashboard.tsx
+  s_3a50bad78ea1cd::t_89072076c4979f 30-35,347-351,353-355,357-426,428-432,434-477,479-485
+  s_3a50bad78ea1cd::t_90bfe42a3b05ea 179-180,182
+  s_3a50bad78ea1cd::t_3bbe0fb7ae41eb 183-189
+  s_3a50bad78ea1cd::t_d0b2bece1319f2 39,100,198-238,343-346,486-487
+apps/worker/src/scheduled-worker.ts
+  s_3a50bad78ea1cd::t_89072076c4979f 21
+  s_3a50bad78ea1cd::t_dacb2edd1b300e 15-20,22-23
+apps/web/src/lib/api.test.ts
+  s_3a50bad78ea1cd::t_9fc08e0c957981 1-49,64
+  s_3a50bad78ea1cd::t_6e19aef83943df 50
+  s_3a50bad78ea1cd::t_db7ad1fe389c9b 51-63
+apps/api/src/runtime.ts
+  s_3a50bad78ea1cd::t_4d9b4c0546c40a 14
+  s_3a50bad78ea1cd::t_db0d4d499a2edc 10-13
+apps/api/src/infrastructure/env.ts
+  s_3a50bad78ea1cd::t_89072076c4979f 4
+  s_3a50bad78ea1cd::t_4d9b4c0546c40a 34,119-120
+docs/api/openapi.yaml
+  s_3a50bad78ea1cd::t_5e9c5e2fea2fc5 16-20,58,60,62,64-66,74-82,85-90,93-108,111-112,239,284-285,292,298-314
+  s_3a50bad78ea1cd::t_f2289e4efffad8 67-72
+  s_3a50bad78ea1cd::t_3872bc32ee2d42 4,296
+  s_3a50bad78ea1cd::t_89072076c4979f 83-84,91-92,109-110
+docs/requirements/use-cases.md
+  s_3a50bad78ea1cd::t_89072076c4979f 3-13
+.env.example
+  s_3a50bad78ea1cd::t_502564896f7cdf 25-26
+apps/api/src/domain/errors.ts
+  s_3a50bad78ea1cd::t_4d9b4c0546c40a 17,20
+  s_3a50bad78ea1cd::t_4f04315bff19f4 18
+  s_3a50bad78ea1cd::t_89072076c4979f 19
+apps/api/src/app.test.ts
+  s_3a50bad78ea1cd::t_acf7d1ea2c7aae 146-168
+  s_3a50bad78ea1cd::t_f1fcf741fced14 19-21,59-66,71,85,182-184,194-203,209-212,248,267-271,275,286-287,291,296,300,316-317,324,333-337
+  s_3a50bad78ea1cd::t_89072076c4979f 207-208,243-244,259-261
+  s_3a50bad78ea1cd::t_6a3e384596309d 215-238,242,245-246,366-373
+  s_3a50bad78ea1cd::t_863aa58bbadd99 239-241
+  s_3a50bad78ea1cd::t_e5bcce343c02cd 356
+apps/api/src/infrastructure/sync/sync-job-dispatcher.test.ts
+  s_3a50bad78ea1cd::t_9fc08e0c957981 1-27
+apps/api/src/application/oshi-service.ts
+  s_3a50bad78ea1cd::t_9f520a787c7c50 94,117-120,122,132
+  s_3a50bad78ea1cd::t_1e799f71fe7e84 93
+  s_3a50bad78ea1cd::t_89072076c4979f 123,158
+  s_3a50bad78ea1cd::t_4d9b4c0546c40a 10,25,95-99,106-109,115,129-131,139-157,159-166
+  s_3a50bad78ea1cd::t_90bfe42a3b05ea 100-105,110-111,113-114,116,124-125,133-138
+  s_3a50bad78ea1cd::t_a4bc68bcda2717 167
+apps/web/src/lib/api.ts
+  s_3a50bad78ea1cd::t_89072076c4979f 86
+  s_3a50bad78ea1cd::t_d0b2bece1319f2 7-8,46-69,87
+apps/worker/src/scheduled-worker.test.ts
+  s_3a50bad78ea1cd::t_dacb2edd1b300e 6,11-27
+apps/api/src/infrastructure/database/memory-store.test.ts
+  s_3a50bad78ea1cd::t_f31243b57eaf05 69-113
+  s_3a50bad78ea1cd::t_89072076c4979f 57
+packages/shared/src/index.ts
+  s_3a50bad78ea1cd::t_8e38f9bffa4f5c 77
+  s_3a50bad78ea1cd::t_9a1ca425eeb2a6 41,46-52,58-76,78-89
+  s_3a50bad78ea1cd::t_90bfe42a3b05ea 53
+  s_3a50bad78ea1cd::t_8e3492952df5ff 90
+e2e/dashboard.spec.ts
+  s_3a50bad78ea1cd::t_2d9ea327918c07 24
+apps/api/src/infrastructure/env.test.ts
+  s_3a50bad78ea1cd::t_15d2d37a8b882e 17
+apps/api/src/infrastructure/sync/sync-job-dispatcher.ts
+  s_3a50bad78ea1cd::t_db7ad1fe389c9b 30-33
+  s_3a50bad78ea1cd::t_4d9b4c0546c40a 1-29,34-37
+prisma/migrations/20260812190000_async_sync_jobs/migration.sql
+  s_3a50bad78ea1cd::t_e3ee4f759274e6 28-30
+  s_3a50bad78ea1cd::t_9a1ca425eeb2a6 1-2,4-27
+  s_3a50bad78ea1cd::t_8e38f9bffa4f5c 3
+pnpm-lock.yaml
+  s_3a50bad78ea1cd::t_7558ef832436b6 50-52,289-356,1312-1335,1677-1679,2895-3047,3768-3800,4202-4203
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "97eec1291fb0fcde143c8651e127c29224f767f6",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
