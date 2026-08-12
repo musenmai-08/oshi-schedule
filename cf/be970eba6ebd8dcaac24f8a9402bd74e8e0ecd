@@ -1,0 +1,32 @@
+docs/operations/staging-setup.md
+  s_3a50bad78ea1cd::t_f3969865c38939 12-13,35,50
+docs/operations/staging-cost-control.md
+  s_3a50bad78ea1cd::t_723751e7c11dd1 85
+  s_3a50bad78ea1cd::t_f3969865c38939 1-50,59-84,86-114
+  s_3a50bad78ea1cd::t_1c98529b388909 51-58
+docs/operations/aws-bootstrap.md
+  s_3a50bad78ea1cd::t_f3969865c38939 21,129
+  s_3a50bad78ea1cd::t_307cac5ce137bf 20
+docs/operations/cost-estimate.md
+  s_3a50bad78ea1cd::t_1c98529b388909 33-37
+  s_3a50bad78ea1cd::t_f3969865c38939 5,29-32,38-41
+  s_3a50bad78ea1cd::t_673832a9367728 42
+docs/operations/monitoring.md
+  s_3a50bad78ea1cd::t_f3969865c38939 41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "cfbe970eba6ebd8dcaac24f8a9402bd74e8e0ecd",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
