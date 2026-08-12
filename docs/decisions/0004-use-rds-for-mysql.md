@@ -25,4 +25,4 @@ Accepted — 2026-08-04
 
 ## Revisit conditions
 
-RDS+ALBがAWS費用の70%超、実請求が見積上限を20%超えて2か月継続、RTO要求が厳格化、DB CPU/connection 70%継続時にAurora、Multi-AZ、別managed MySQLを同条件で比較する。
+RDSとAPI runtimeがAWS費用の70%超、実請求が見積上限を20%超えて2か月継続、RTO要求が厳格化、DB CPU/connection 70%継続時にAurora、Multi-AZ、別managed MySQLを同条件で比較する。

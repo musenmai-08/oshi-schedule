@@ -2,15 +2,15 @@
 
 ## Status
 
-Accepted — 2026-08-04
+Accepted — 2026-08-04（edge部分はADR 0008で更新）
 
 ## Context
 
-APIはExpress/Node.js 22、Prisma/MySQL、Google/YouTube通信と、長めになり得る手動同期HTTP処理を持つ。現行構造を大きく変えず、将来は複数instanceへscaleできる必要がある。
+APIはExpress/Node.js 22、Prisma/MySQLとjob受付を持つ。外部同期はworkerへ分離し、現行構造を大きく変えず将来は複数instanceへscaleできる必要がある。
 
 ## Decision
 
-ALB配下のECS Fargate Serviceで実行する。betaは0.25 vCPU/0.5 GiB相当、desired count 1から開始し、image digestでdeployする。ALB idle timeoutは初期300秒。staging構築前にgraceful shutdown、readiness、`trust proxy=1`を実装する。
+HTTP API + VPC Link + Cloud Map配下のECS Fargate Serviceで実行する。betaは0.25 vCPU/0.5 GiB相当、desired count 1から開始し、image digestでdeployする。graceful shutdown、readiness、`trust proxy=1`を維持する。
 
 ## Alternatives
 
@@ -20,7 +20,7 @@ ALB配下のECS Fargate Serviceで実行する。betaは0.25 vCPU/0.5 GiB相当�
 
 ## Consequences
 
-Express containerをそのまま使い、resource/command/networkを制御できる。ALBと常駐taskの固定費、Docker/IaC/ECS運用が必要。single task中はdeploymentで短い停止リスクがあり、一般公開時に2 tasksへ移す。
+Express containerをそのまま使い、resource/command/networkを制御できる。常駐task、Docker/IaC/ECS運用は必要だがALB時間固定費は除く。single task中はdeploymentで短い停止リスクがあり、一般公開時に2 tasksへ移す。
 
 ## Revisit conditions
 

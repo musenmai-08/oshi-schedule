@@ -1,158 +1,72 @@
-# インフラ候補と費用見積
+# AWS構成と費用見積
 
-## 見積の扱い
+## 前提
 
-- 料金確認日: **2026-08-12**
-- 通貨: USD、税・為替・domain年額を除く。日本円換算は契約時の為替を使う。
-- region: AWS/GCPは東京を前提にするが、公式price pageの表示、契約、使用量で変わるため金額はquoteではなくplanning rangeである。
-- 730時間/月、stagingとproductionを常設、少量traffic/log/build、workerは各環境で1時間ごとに平均2〜5分、APIは初期0.25 vCPU/0.5 GiB相当を仮定する。
-- promotion credit、期間限定free tier、tax、support plan、大量egressは合計から除外する。構築前に[AWS Pricing Calculator](https://calculator.aws/)と[Google Cloud Pricing Calculator](https://cloud.google.com/products/calculator)でresource/regionを確定する。
+- 確認日: 2026-08-12、region: `ap-northeast-1`、USD、税・為替・domain年額・supportを除く。
+- stagingはHTTP API + VPC Link + Cloud Map、ECS API 0.25 vCPU/0.5 GiB、RDS MySQL `db.t4g.micro`/20 GiB gp3、public IPv4、Amplify、Secrets、Logs/ECR、Route 53を使う。
+- sleep中はECS APIを0、RDSをstopped、定期Worker Schedulerをdisabledにする。HTTP API/VPC Link/Cloud Map、queue/Pipe、RDS storage、Secrets、DNS、image/logは維持する。
+- 料金は契約・usageで変わるplanning rangeでありquoteではない。deploy承認前に[AWS Pricing Calculator](https://calculator.aws/)で再計算する。
 
-## 公式仕様・料金の確認先
+## 公式料金と制約
 
-| 分類                | 公式参照先                                                                                                                                                                                                                                                    | この設計で使う事実                                                                                                          |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Amplify             | [pricing](https://aws.amazon.com/amplify/pricing/)、[Next.js SSR support](https://docs.aws.amazon.com/amplify/latest/userguide/ssr-amplify-support.html)、[Node.js support](https://docs.aws.amazon.com/amplify/latest/userguide/ssr-supported-features.html) | pay-as-you-use、SSR compute/build/hosting、Next.js 12〜15 SSR/App Router/middleware、Node 22をsupport                       |
-| Fargate             | [pricing](https://aws.amazon.com/fargate/pricing/)                                                                                                                                                                                                            | requested vCPU、memory、storageのtask実行秒数で課金                                                                         |
-| ALB                 | [pricing](https://aws.amazon.com/elasticloadbalancing/pricing/)                                                                                                                                                                                               | load balancer hoursとLCUが固定費の一部                                                                                      |
-| RDS MySQL           | [pricing](https://aws.amazon.com/rds/mysql/pricing/)、[MySQL version](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/MySQL.Concepts.VersionMgmt.html)                                                                                                 | instance/storage/backupで課金、MySQL 8.4系を利用可能                                                                        |
-| Scheduler           | [EventBridge Scheduler](https://aws.amazon.com/eventbridge/scheduler/)、[ECS scheduled task](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/tasks-scheduled-eventbridge-scheduler.html)                                                          | 月14 million invocationのfree allowance、Fargate RunTaskをschedule可能                                                      |
-| ECR/IPv4/Secret     | [ECR](https://aws.amazon.com/ecr/pricing/)、[public IPv4](https://aws.amazon.com/vpc/pricing/)、[Secrets Manager](https://aws.amazon.com/secrets-manager/pricing/)                                                                                            | ECR storage、public IPv4 $0.005/hour、Secret $0.40/month + API call                                                         |
-| Vercel              | [plans](https://vercel.com/docs/plans/hobby)、[pricing](https://vercel.com/pricing)、[Next.js](https://vercel.com/docs/frameworks/full-stack/nextjs)                                                                                                          | Hobbyはnon-commercial personal use、Proは$20/user/monthとusage credit、Next.js機能への適合が高い                            |
-| App Runner          | [pricing](https://aws.amazon.com/apprunner/pricing/)、[request timeout](https://docs.aws.amazon.com/apprunner/latest/dg/develop.html)                                                                                                                         | provisioned/active compute課金、request total timeoutは120秒                                                                |
-| Cloud Run/Cloud SQL | [Cloud Run](https://cloud.google.com/run)、[Cloud SQL pricing](https://cloud.google.com/sql/pricing)、[Cloud Run jobs](https://cloud.google.com/run/docs/create-jobs)                                                                                         | request/task従量、Jobs利用可。Cloud SQL instanceは常設固定費、shared-coreはSLAなし                                          |
-| Supabase            | [pricing](https://supabase.com/pricing)、[compute billing](https://supabase.com/docs/guides/platform/manage-your-usage/compute)、[backups](https://supabase.com/docs/guides/platform/backups)                                                                 | Freeは2 active projectsだがinactive pause、Pro $25に1 project分のcompute credit、追加Micro projectは概ね$10、Pro backup 7日 |
-| YouTube             | [quota overview](https://developers.google.com/youtube/v3/getting-started)、[`search.list`](https://developers.google.com/youtube/v3/docs/search/list)                                                                                                        | defaultは一般quota 10,000 units/dayに加えsearch用100 queries/day。30 channel毎時はそのままでは不可                          |
+| 項目                                                                                                | この見積で使う事実                                                      |
+| --------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| [HTTP API](https://aws.amazon.com/api-gateway/pricing/)                                             | request/data transfer従量。低trafficではALBのような時間固定費を持たない |
+| [HTTP API quota](https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-quotas.html) | integration timeoutは最大30秒で増枠不可。同期job化が前提                |
+| [Cloud Map](https://aws.amazon.com/cloud-map/pricing/)                                              | 登録resource月額とdiscovery request従量。1 API taskの低trafficでは小額  |
+| [Fargate](https://aws.amazon.com/fargate/pricing/)                                                  | image pull開始から終了まで、要求vCPU/memoryの秒数で課金                 |
+| [SQS](https://aws.amazon.com/sqs/pricing/)                                                          | 1 million requests/月のfree allowance、64 KiB単位。messageはrun IDだけ  |
+| [EventBridge Pipes](https://aws.amazon.com/eventbridge/pricing/)                                    | filter後64 KiB request単位。掲載例の基準は$0.40/million                 |
+| [RDS MySQL](https://aws.amazon.com/rds/mysql/pricing/)                                              | instance稼働時間、storage、backup。stoppedでもstorage/backupは継続      |
+| [Public IPv4](https://aws.amazon.com/vpc/pricing/)                                                  | 使用中IPv4は時間課金。API/workerの外向き通信に利用                      |
 
-料金ページはregionや使用量を対話的に計算するものがあり、東京の単価を本文へ固定しない。以下は安全側に丸めた範囲である。
+## staging月額
 
-## staging低コスト運用の概算
+| 稼働パターン         | 最低 | 通常 | 上振れ | 主な前提                                                   |
+| -------------------- | ---: | ---: | -----: | ---------------------------------------------------------- |
+| A. 24時間（730h）    |  $32 |  $42 |    $55 | API/RDS常時、scheduled worker低頻度、少量traffic/log/build |
+| B. 平日8時間（176h） |  $12 |  $20 |    $30 | API/RDSだけ利用時間中、schedulerは検証時のみ               |
+| C. 月40時間          |   $8 |  $14 |    $22 | auto-sleepを通常運用、storage/Secrets/DNS等は維持          |
 
-stagingはALB、ALB用Public IPv4、RDS storage、Secrets Manager、Route 53、ECRを維持し、利用終了時にECS APIを0、RDSをstopped、Worker Schedulerをdisabledにする。RDS停止中もstorageとbackup、ALBとIPv4、Secret、DNS、image/log storage等は課金される。
+旧ALB構成のplanning range（A `$68〜90`、B `$40〜55`、C `$35〜48`）に対し、通常値で月約`$28〜37`削減する見込みである。主因はALB/LCUとALB用public IPv4の常時固定費削除で、HTTP API、Cloud Map、SQS/Pipesの低traffic従量費は小さい。
 
-| 稼働パターン              | 月額概算 | 前提                                                           |
-| ------------------------- | -------: | -------------------------------------------------------------- |
-| A. API/RDS常時稼働        |  $68〜90 | 730時間、API 1 task、RDS available、Worker/traffic/buildは少量 |
-| B. 平日8時間              |  $40〜55 | 月約176時間だけAPI/RDS起動、Workerは検証時のみ                 |
-| C. 必要時のみ（月40時間） |  $35〜48 | API/RDSは月40時間、その他の維持費は継続                        |
+## 要求時sync jobの追加費用
 
-内訳は、ALB/LCU、Public IPv4、Secrets Manager、Route 53、ECRが休止中も残り、RDS instance compute、Fargate API/worker、Amplify/CloudWatchが稼働・利用時間に応じて加算される。東京region、税、為替、実traffic、log retention、build回数で変動するplanning rangeでありquoteではない。
+1 jobあたりone-off Fargate workerを起動する。0.25 vCPU/0.5 GiB、public IPv4、image pullを含め平均5分、上振れ15分として概算する。SQS/Pipesは64 KiB未満1 messageで、この件数ではfree allowanceまたは`$0.01`未満に丸まる。
 
-staging Budget既定値は40 USDで、現行CDKはforecast 80%で通知する。40 USDは低利用月の異常を早期検知する基準として妥当だが、hard spending limitではなく、Bの上側やAでは通常利用でも超過する。通知時は[staging低コスト運用](staging-cost-control.md)で状態を確認する。
+| job/月 | 通常（5分） | 上振れ（15分） | SQS/Pipes |
+| -----: | ----------: | -------------: | --------: |
+|     10 |     約$0.02 |        約$0.05 | $0.01未満 |
+|    100 |     約$0.17 |        約$0.50 | $0.01未満 |
+|  1,000 |     約$1.70 |        約$5.00 | $0.01未満 |
 
-## 3案比較
+Fargateの起動待ちが利用者のpoll時間へ加わるが、HTTP API requestはjob受付で完了するため起動待ちを課金以外のAPI timeoutへ伝播させない。
 
-| 評価軸         | 案A: Vercel + AWS                                            | 案B: AWS統一（採用）                                                               | 案C: Cloud Run + Cloud SQL                                         |
-| -------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Web            | Vercel                                                       | Amplify Hosting                                                                    | Cloud RunまたはFirebase Hosting連携                                |
-| API            | ECS Fargate Service                                          | ECS Fargate Service                                                                | Cloud Run Service                                                  |
-| worker         | Scheduler + Fargate Task                                     | Scheduler + Fargate Task                                                           | Cloud Scheduler + Cloud Run Job                                    |
-| MySQL          | RDS for MySQL                                                | RDS for MySQL                                                                      | Cloud SQL for MySQL                                                |
-| 月額beta概算   | $143〜210                                                    | **$142〜234**                                                                      | $95〜160                                                           |
-| 無料枠         | Vercel Hobbyは非商用のみ。AWS各free allowanceは条件/期限あり | Amplify/Scheduler等にallowance。RDS/ALB常設分は残る                                | Cloud Run request/compute allowance。Cloud SQL固定費は残る         |
-| 最低固定費     | RDS、ALB、API、商用Vercel Pro seat                           | RDS 2台、環境別ALB 2台、API tasks、public IPv4                                     | Cloud SQL 2台、network。Cloud Runはscale-to-zero可能               |
-| 小traffic      | Web変動は小さいがVercel Pro固定費あり                        | Web変動が小さく、AWS control planeを統一                                           | computeは最安になり得るがDB固定費あり                              |
-| Web deploy     | 最も容易、Next.js first-class                                | Next.js 15機能の対応範囲内。Edge API/streaming/on-demand ISRは非対応だが現行未使用 | Next.js SSR containerのbuild/運用が必要                            |
-| API deploy     | AWSとVercelに分散                                            | image/ECSへ統一                                                                    | container deploy容易、cold startとrequest timeoutを設計            |
-| worker定期実行 | native Fargate task                                          | native Fargate task                                                                | Cloud Run Jobが適合                                                |
-| MySQL接続      | RDS private connectionをAWS内で完結                          | RDS private connectionをAWS内で完結                                                | Cloud SQL connector/private IPとpool調整                           |
-| Secret         | VercelとAWSの2か所                                           | Secrets Manager/SSMへ集約（Webは公開値のみ）                                       | Secret Managerへ集約可能                                           |
-| log/monitor    | Vercel + CloudWatchに分散                                    | CloudWatch中心                                                                     | Cloud Logging/Monitoring中心                                       |
-| HTTPS/domain   | 双方自動化、2 control planes                                 | Amplify + ACM/ALB、Route 53                                                        | managed certificate/domain mapping                                 |
-| CI/CD          | Vercel Git連携 + GitHub/AWS                                  | GitHub Actions OIDC + Amplify/ECS                                                  | GitHub OIDC/WIF + Cloud Run                                        |
-| staging分離    | Vercel project + AWS resources                               | Amplify app + AWS resourcesをtag/SG/IAMで分離                                      | GCP services/project/resourcesを分離                               |
-| scale          | Webは容易、APIはECS scale                                    | ECS desired count、RDS class/Multi-AZへ段階拡張                                    | Cloud Run auto scaleが容易。DB connection上限に注意                |
-| cold start     | Webは低い、API常駐                                           | API desired 1で回避、workerのみtask起動待ち                                        | API scale-to-zero時に発生。min instanceで費用増                    |
-| lock-in        | Vercel + AWSの2種                                            | AWS managed serviceに集中。container/MySQLは移植可能                               | GCP managed serviceに集中。container/MySQLは移植可能               |
-| 運用負荷       | Webは楽だが権限/請求/logが分散                               | ECS/ALB構築は中程度、以後1 cloudで確認                                             | Cloud Runは軽いが現行AWS候補から知識/運用を切替                    |
-| 個人開発       | commercial判定時のPro固定費に注意                            | **予測可能性と将来scaleの均衡が良い**                                              | 最安候補だがcold start/pool/rate-limitの検証が増える               |
-| 固有の注意     | OAuth envをVercelとAWSで揃える                               | Amplify対応機能、API graceful shutdown、ALB proxy設定                              | 複数instance時のメモリrate-limit、Cloud SQL connection、cold start |
+## Budget
 
-案Cは価格だけなら採用案より安くなる可能性があるが、実traffic/Cloud SQL class/egressのcalculator見積をまだ固定していないため断定しない。AWS案はRDS/ALB固定費を受け入れ、runtime、network、Secret、log、権限を1 cloudに集約する判断である。
+候補比較は次のとおり。
 
-App RunnerはExpressを簡単にdeployできる一方、total request timeout 120秒が現行の長めの手動同期に合わない。Lambda + API Gatewayは同期処理をjob化する大きな変更が必要なため候補から外す。
+|  Budget | 評価                                                                 |
+| ------: | -------------------------------------------------------------------- |
+|     $20 | 月40時間の通常値には合うが、build/logや検証増加で誤報しやすい        |
+| **$25** | 月40時間の上振れを検知でき、forecast 80%=$20で早期確認できるため採用 |
+|     $30 | 平日8時間の上振れまで許容するが、低利用時の異常検知が遅い            |
+|     $40 | 旧ALB構成向け。新しい月40時間運用には緩すぎる                        |
 
-## 採用構成の費用内訳
+staging既定値を25 USDへ変更し、productionは75 USDを維持する。Budgetはhard limitでも自動sleep triggerでもない。
 
-2環境合計の通常月。幅はinstanceの東京単価、storage、log/build/traffic差を含む。
+## さらに安い案
 
-| 項目                                                  |                              月額概算 | 性質                                                |
-| ----------------------------------------------------- | ------------------------------------: | --------------------------------------------------- |
-| RDS MySQL Single-AZ x 2、20 GiB gp storage            |                               $35〜65 | 最大の固定費。実class単価をcalculatorで確認         |
-| ECS API desired 1 x 2 + hourly worker tasks           |                               $10〜25 | 主にAPI常駐compute。worker変動は小さい              |
-| environment別 ALB x 2                                 |                               $36〜60 | load balancer hour + LCU                            |
-| public IPv4（ALB、ECS API常時、worker実行時）         |                               $20〜28 | ALBもpublic IPv4課金対象。NAT Gatewayを置かない構成 |
-| Amplify Web x 2                                       |                                 $0〜5 | build、SSR request/compute、hosting/egress          |
-| Secrets Manager、ECR、CloudWatch/S3、Route 53         |                                $5〜15 | Secret数、log量、image retentionで変動              |
-| AWS小計                                               |                         **$107〜199** | usageにより変動                                     |
-| Supabase                                              | Free $0、beta Pro 2 projectsは概ね$35 | Authの可用性/backup要件で選択                       |
+- API/targeted workerをLambdaへ移せばECS API/public IPv4/Cloud Mapを減らせる。ただしprivate MySQLへ接続しつつGoogle/YouTubeへoutboundするにはVPC/NATまたはnetwork再設計が必要で、NAT固定費、connection pool、15分上限、Prisma cold startが利点を打ち消し得る。
+- Aurora Serverless v2 + Data API/Lambdaはscale-to-zero余地があるが、MySQL互換・migration・Data API adapter・復帰遅延・最小ACU料金の再検証が必要である。
+- Supabase Postgres等へDBを統合すればRDSを除ける可能性があるが、MySQL migration/locking/fencing、private DB要件、障害境界が大きく変わる。
+- ECS Express Modeは運用を簡略化できる候補だが、この構成のSQS targeted task、Cloud Map、厳密なSG/IAM/auto-sleepと同条件での費用・制御を確認してから別ADRで評価する。
 
-実装はstaging/productionでALBを分け、誤routingとsecurity境界の共有を避ける。費用最適化が必要なら、実測後にshared ALBへ統合する変更を別reviewする。NAT Gatewayは初期採用せず、固定outbound IP、private-only task、AWS private endpoint要件が生じた時点で再検討する。
-
-stagingだけを先に常設する場合のAWS planning rangeは概ね月$53〜95である。RDS、ALB、public IPv4はtrafficがなくても主要固定費になり、`cdk deploy`直後から発生する。AWS Pricing CalculatorではRDS MySQL 8.4 Single-AZ/20 GiB gp3、ALB hours/LCU、Fargate 0.25 vCPU/0.5 GiB、public IPv4、Amplify SSR/build、CloudWatch Logs、Secrets Manager、ECR/S3、Route 53、backup/snapshotを個別入力する。
-
-## 規模別概算
-
-### 規模1: 本人のみ
-
-```text
-初期費用：AWS resource作成は$0、未購入domainは年$10〜30程度を別計上
-月額固定費：$100〜175
-月額変動費：$7〜24
-合計概算：$107〜199（Supabase Freeを仮定）
-主な増加要因：staging/productionのRDS 2台、environment別ALB、API常駐task、public IPv4
-```
-
-Supabase Freeのinactive pauseやbackup条件を受け入れられる本人利用だけを想定する。常時stagingが不要な月はAPI/RDS停止運用で下げられるが、worker定期実行と即時検証はできなくなるため基本見積には入れない。
-
-### 規模2: 招待制beta（10 user、最大30 distinct channel）
-
-```text
-初期費用：AWS resource作成は$0、domain年$10〜30程度を別計上
-月額固定費：$112〜160（Supabase Pro 2 projects約$35を含む）
-月額変動費：$11〜20
-合計概算：$142〜234
-主な増加要因：Supabase Pro、RDS/ALB固定費、log、build、少量egress
-```
-
-30 channelを毎時`search.list`すると720 queries/dayで、defaultの100 search queries/dayを超える。これは課金で自動解消するものではない。時分割/頻度変更/既知動画追跡またはquota増枠がbeta開始の前提である。
-
-### 規模3: 小規模一般公開（100 user、100〜300 channel）
-
-```text
-初期費用：resource作成は$0、domain年額を別計上。quota審査/運用作業費は含めない
-月額固定費：$180〜310
-月額変動費：$40〜80
-合計概算：$220〜390
-主な増加要因：production API 2 tasks、RDS class/Multi-AZ、shared rate-limit store、log/egress、Supabase compute
-```
-
-YouTube search quota拡張とfetch頻度最適化済みを仮定する。production RDSをMulti-AZ/t4g.small相当、API desired 2、shared Valkey storeを候補に含むため幅が大きい。実測前に固定費を先行投入しない。
-
-## RDSが費用中心になる理由と代替
-
-RDSはtrafficがほぼなくてもinstanceとstorageが常時課金され、staging/productionの独立要件で2台になる。Aurora Serverless v2は0 ACU auto-pause対応構成もあるが、hourly workerがwakeさせ、復帰遅延とAurora互換性検証が増えるため初期採用しない。Railway MySQL等は低価格になり得るが、private network、PITR、外部キー/transaction、Prisma migration、東京latencyを同等条件で公式見積できていないため未採用とする。
-
-費用を最優先にする場合、構成変更より先に「stagingを常設する必要がある時間帯」を見直す。ただしmigration/OAuth/workerの継続検証環境という要件を失うため、招待制betaでは常設を維持する。
+現時点ではHTTP API + ECS + RDSが、既存コードを維持しながらALB固定費を除く最小変更である。
 
 ## 見直し条件
 
-- 構築直前、四半期ごと、AWS/GCP/Supabase price変更時にcalculatorを更新する。
-- 実請求が見積上限を2か月連続で20%超えたらresource tag別costを確認する。
-- RDS+ALBがAWS請求の70%を超えたらAurora Serverless v2、Cloud SQL、低価格managed MySQLを同じRPO/RTO/TLS条件で再比較する。
-- API desired count 2、100 active users、月100 GiB超egress、またはRDS CPU/connection 70%超でscale見積を更新する。
-- 商用公開前にVercelを再比較する場合はHobbyを候補にせずPro料金を使う。
-- `search.list` quotaは費用と別に毎release確認し、projectの実quota画面をsource of truthとする。
-
-## 未確認・利用者判断
-
-- 実際のregistrable domain/TLDと年額は未決定・未購入。
-- AWS東京regionの最終SKU（RDS class、Fargate architecture、backup超過、CloudWatch量）はresource作成前のcalculator確認が必要。
-- betaでSupabase Proを契約する時期と月額budget上限は利用者の承認が必要。
-- 案Cの正確な東京見積は採用しないため未確定。AWS上限を超えた場合の再比較時にcalculatorで確定する。
-
-## 関連文書
-
-- [採用構成](../architecture/deployment-architecture.md)
-- [環境戦略](environment-strategy.md)
-- [監視とcost alarm](monitoring.md)
+- deploy直前と四半期ごとに東京regionのPricing Calculatorを更新する。
+- actual/forecastが25 USDの80%に達したらtag別費用、RDS起動時間、public IPv4、Fargate task時間、logsを確認する。
+- sync job平均時間が15分、月1,000件、API desired count 2のいずれかを超えたらtask集約、Fargate Spot、Lambda/Aurora案を再比較する。
+- [staging低コスト運用](staging-cost-control.md)の利用期限指定とmanual sleepを通常手順とする。

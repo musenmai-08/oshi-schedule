@@ -10,7 +10,7 @@ Accepted — 2026-08-04
 
 ## Decision
 
-staging/productionともAPI desired count 1で開始する。ALB health checkとECS restartを使うが、betaではdeploy/instance障害時の短時間停止を受け入れる。resource/latency/availabilityを観測してproductionだけ2 tasksへ強化する。
+staging/productionともAPI desired count 1で開始する。ECS container health checkとrestartを使うが、betaではdeploy/instance障害時の短時間停止を受け入れる。resource/latency/availabilityを観測してproductionだけ2 tasksへ強化する。
 
 ## Alternatives
 

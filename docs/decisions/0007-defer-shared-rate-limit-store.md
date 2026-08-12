@@ -10,7 +10,7 @@ Accepted — 2026-08-04
 
 ## Decision
 
-betaのsingle task中は既存memory storeを使い、ALB一段だけを信頼する`trust proxy=1`と正確な`X-Forwarded-For`処理をSTEP 4で実装する。認証routeはuser ID単位制限を優先しIP制限と併用する。desired countを2以上にする**前**にElastiCache for Valkey/Redisを第一候補としてshared storeへ移す。
+betaのsingle task中は既存memory storeを使い、API Gateway/VPC Linkの一段だけを信頼する`trust proxy=1`と正確な`X-Forwarded-For`処理を使う。認証routeはuser ID単位制限を優先しIP制限と併用する。desired countを2以上にする**前**にElastiCache for Valkey/Redisを第一候補としてshared storeへ移す。
 
 ## Alternatives
 
@@ -21,7 +21,7 @@ betaのsingle task中は既存memory storeを使い、ALB一段だけを信頼�
 
 ## Consequences
 
-初期固定費を抑え、single taskでは現行挙動を維持できる。水平scale前のshared store導入がhard prerequisiteになる。ALB以外からAPI taskへ直接到達できないsecurity groupを維持し、proxy hop数を変えたら`trust proxy`を再評価する。
+初期固定費を抑え、single taskでは現行挙動を維持できる。水平scale前のshared store導入がhard prerequisiteになる。VPC Link以外からAPI taskへ直接到達できないsecurity groupを維持し、proxy hop数を変えたら`trust proxy`を再評価する。
 
 ## Revisit conditions
 

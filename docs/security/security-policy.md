@@ -10,7 +10,7 @@
 
 ## rate limitのデプロイ制約
 
-現在のAPI rate limitは`express-rate-limit`のprocess memory storeを使う。`TRUST_PROXY_HOPS`は整数で、local/testの既定値0はproxyを信頼せず、ALBだけが1段存在するstaging/productionは1とする。無条件の`true`は禁止し、ECS taskのsecurity groupはALBからだけinboundを許可する。hop数と実networkがずれると`X-Forwarded-For`偽装または全利用者集約が起きるため、proxy追加時は同時に見直す。複数instanceではカウンターが共有されないので、desired countを2以上にする前にRedis/Valkey等のatomicな共有storeを導入する。
+現在のAPI rate limitは`express-rate-limit`のprocess memory storeを使う。`TRUST_PROXY_HOPS`は整数で、local/testの既定値0はproxyを信頼せず、API Gateway/VPC Linkの1段を通るstaging/productionは1とする。無条件の`true`は禁止し、ECS taskのsecurity groupはVPC Link SGからport 4000だけを許可する。左端`X-Forwarded-For`をclientが変えてもrate limit identityを回避できないことをtestする。複数instanceではカウンターが共有されないため、desired countを2以上にする前にRedis/Valkey等のatomicな共有storeを導入する。
 
 ## ログ
 

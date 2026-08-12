@@ -145,7 +145,7 @@ pnpm --filter @oshi-schedule/infra synth
 pnpm validate:yaml -- docs/api/openapi.yaml amplify.yml .github/workflows/*.yml
 ```
 
-実`cdk deploy`はこのREADMEから直接開始せず、[staging構築チェックリスト](docs/operations/staging-setup.md)と[AWS bootstrap](docs/operations/aws-bootstrap.md)に従ってください。RDS、ALB、public IPv4はstagingでも主要固定費です。AWS resourceはまだ作成されていません。
+実`cdk deploy`はこのREADMEから直接開始せず、[staging構築チェックリスト](docs/operations/staging-setup.md)と[AWS bootstrap](docs/operations/aws-bootstrap.md)に従ってください。API edgeはALBではなくHTTP API + VPC Link + Cloud Mapで、同期要求はSQS/Pipes経由のone-off workerへ分離されます。RDS storage、Secrets、DNS等はsleep中も維持費が残ります。
 
 AWS bootstrap前にGitHubのdefault branchを`main`へ変更し、`staging`/`production` Environmentを作成して、mainのCI validate/E2Eを成功させてください。CIのproduction Web buildは`example.invalid`の非秘密公開テスト値を使用し、実Secretや外部serviceを必要としません。RDSはMySQL 8.4.10を固定し、minor更新手順と終了日は[AWS bootstrap](docs/operations/aws-bootstrap.md)を正とします。
 
@@ -154,7 +154,7 @@ AWS bootstrap前にGitHubのdefault branchを`main`へ変更し、`staging`/`pro
 ```text
 apps/web       Next.js App Router + MUI + Supabase PKCE
 apps/api       Express REST API、同期use case、Prisma/Google/YouTube adapter
-apps/worker    クラウド非依存の定期同期CLI
+apps/worker    scheduled/targeted両対応の一回実行同期CLI
 packages/shared             Zod契約・型・定数
 packages/eslint-config      共通lint
 packages/typescript-config  共通TypeScript設定
