@@ -1,6 +1,7 @@
 import type { App } from 'aws-cdk-lib';
 
 export type EnvironmentName = 'staging' | 'production';
+export type SyncPipeDesiredState = 'STOPPED' | 'RUNNING';
 
 export interface DeploymentConfig {
   environmentName: EnvironmentName;
@@ -8,6 +9,9 @@ export interface DeploymentConfig {
   region: string;
   deployReady: boolean;
   bootstrapOnly: boolean;
+  apiDesiredCount: number;
+  syncPipeDesiredState: SyncPipeDesiredState;
+  applicationActivated: boolean;
   hostedZoneId?: string;
   hostedZoneName?: string;
   webDomainName?: string;
@@ -48,6 +52,36 @@ export const parseBooleanContext = (
   throw new Error(`CDK context ${name} must be true or false`);
 };
 
+export const parseNonNegativeIntegerContext = (
+  name: string,
+  value: unknown,
+  defaultValue: number,
+): number => {
+  if (
+    value !== undefined &&
+    typeof value !== 'number' &&
+    (typeof value !== 'string' || value.trim() === '')
+  ) {
+    throw new Error(`CDK context ${name} must be a non-negative integer`);
+  }
+  const parsed = value === undefined ? defaultValue : Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new Error(`CDK context ${name} must be a non-negative integer`);
+  }
+  return parsed;
+};
+
+export const parseSyncPipeDesiredState = (
+  value: unknown,
+  defaultValue: SyncPipeDesiredState,
+): SyncPipeDesiredState => {
+  const parsed = value === undefined ? defaultValue : value;
+  if (parsed !== 'STOPPED' && parsed !== 'RUNNING') {
+    throw new Error('CDK context syncPipeDesiredState must be STOPPED or RUNNING');
+  }
+  return parsed;
+};
+
 const requiredForDeploy = (config: DeploymentConfig, name: keyof DeploymentConfig): void => {
   if (config[name] === undefined || config[name] === '') {
     throw new Error(`CDK deploy requires context: ${String(name)}`);
@@ -69,6 +103,20 @@ export const loadConfig = (app: App): DeploymentConfig => {
       'bootstrapOnly',
       app.node.tryGetContext('bootstrapOnly'),
       false,
+    ),
+    apiDesiredCount: parseNonNegativeIntegerContext(
+      'apiDesiredCount',
+      app.node.tryGetContext('apiDesiredCount'),
+      environmentName === 'staging' ? 0 : 1,
+    ),
+    syncPipeDesiredState: parseSyncPipeDesiredState(
+      app.node.tryGetContext('syncPipeDesiredState'),
+      environmentName === 'staging' ? 'STOPPED' : 'RUNNING',
+    ),
+    applicationActivated: parseBooleanContext(
+      'applicationActivated',
+      app.node.tryGetContext('applicationActivated'),
+      environmentName === 'production',
     ),
     hostedZoneId: optionalString(app, 'hostedZoneId'),
     hostedZoneName: optionalString(app, 'hostedZoneName'),
@@ -110,6 +158,15 @@ export const loadConfig = (app: App): DeploymentConfig => {
 
   if (!Number.isFinite(config.monthlyBudgetUsd) || config.monthlyBudgetUsd <= 0) {
     throw new Error('monthlyBudgetUsd must be a positive number');
+  }
+  if (
+    !config.bootstrapOnly &&
+    !config.applicationActivated &&
+    (config.apiDesiredCount !== 0 || config.syncPipeDesiredState !== 'STOPPED')
+  ) {
+    throw new Error(
+      'applicationActivated=false requires apiDesiredCount=0 and syncPipeDesiredState=STOPPED',
+    );
   }
   if (
     environmentName === 'production' &&

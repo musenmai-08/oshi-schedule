@@ -30,7 +30,7 @@ pnpm staging:status
 pnpm staging:sleep
 ```
 
-`wake`は実行時刻を基準にUTCの利用期限を`/oshi-schedule-staging/runtime/wake-expires-at`へ保存する。すでに起動中でも再実行でき、その時点から指定時間へ期限を延長する。`--hours`省略時は4時間、上限は24時間で、0、負数、25以上、小数、文字列はAWS write前に拒否する。
+`wake`は最初に`/oshi-schedule-staging/runtime/application-activated`を読み、`true`でなければ全AWS write前に拒否する。Phase 2後は実行時刻を基準にUTCの利用期限を`/oshi-schedule-staging/runtime/wake-expires-at`へ保存する。すでに起動中でも再実行でき、その時点から指定時間へ期限を延長する。`--hours`省略時は4時間、上限は24時間で、0、負数、25以上、小数、文字列はAWS write前に拒否する。
 
 通常の終了操作は引き続き`staging:sleep`である。自動sleepは停止忘れに対するsafety netであり、利用終了まで待つための通常手段ではない。manual sleepは期限を削除せず現在時刻へ更新してexpired状態にする。
 
@@ -59,6 +59,7 @@ Worker Schedulerは`staging:wake`で有効化しない。YouTube quotaとFargate
 | Overall        | 意味                                                                                  |
 | -------------- | ------------------------------------------------------------------------------------- |
 | `NOT_DEPLOYED` | full stackのOutputsがなく、bootstrap-onlyまたは未作成                                 |
+| `NOT_STARTED`  | Phase 1。activation未完了、API 0、Pipe stoppedでmigration待ち                         |
 | `SLEEPING`     | API 0、RDS stopped、Scheduler disabled                                                |
 | `WAKING`       | RDS起動中、またはECS task起動中                                                       |
 | `RUNNING`      | API 1、RDS available、Scheduler disabled、HTTP API/VPC Link/Cloud Map/Amplify利用可能 |
@@ -126,7 +127,7 @@ stagingの月額Budget既定値は`25 USD`である。これはhard spending lim
 
 ## 初回full deploy
 
-初回full staging deployではRDS作成、ECS API起動、migration、HTTPS/API/Web smokeが必要である。最初からdesired countを0にせず、一度`RUNNING`状態で受入確認する。確認終了後に`pnpm staging:sleep`を実行する。
+初回構築は[初回staging rollout](staging-initial-rollout.md)に従い、Phase 1をAPI 0/Pipe STOPPED/activation falseでdeployし、one-off migration成功後だけPhase 2をAPI 1/Pipe RUNNING/activation trueでdeployする。`wake-expires-at=UNSET`の間はauto-sleepがno-opであり、migration前の`staging:wake`はactivation guardが拒否する。
 
 ## トラブルシューティング
 

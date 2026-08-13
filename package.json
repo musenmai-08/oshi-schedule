@@ -24,6 +24,8 @@
     "staging:status": "bash scripts/aws/with-project-node.sh node scripts/aws/staging-operations.mjs status",
     "staging:wake": "bash scripts/aws/with-project-node.sh node scripts/aws/staging-operations.mjs wake",
     "staging:sleep": "bash scripts/aws/with-project-node.sh node scripts/aws/staging-operations.mjs sleep",
+    "staging:cdk:phase1": "bash scripts/aws/staging-rollout.sh phase1",
+    "staging:cdk:phase2": "bash scripts/aws/staging-rollout.sh phase2",
     "format": "prettier --write .",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",

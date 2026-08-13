@@ -28,15 +28,16 @@ application、Docker、CDK、GitHub Actions、Amplify build、smoke scriptは実
 1. [AWS bootstrap](aws-bootstrap.md)のECR-first手順を実行する。
 2. image scan後のimmutable SHA tagをECRへpushする。
 3. Secrets Manager、SSM、Route 53、ACMの入力を準備する。
-4. `deployReady=true`のfull `cdk diff`をreviewし、ユーザー承認後だけdeployする。
-5. AmplifyとGitHubを管理画面で接続し、source branch `main`とcustom domainを検証する。
-6. Supabase Site URL/Redirect URLとGoogle Cloud authorized originをstaging URLへ変更する。
-7. one-off migration、API stable、worker revision、Amplify、smokeの順で確認する。
-8. SNS subscriptionを承認し、alarm/Budgetを確認する。
-9. workerを一度だけcontrolled runしてからhourly scheduleを有効化する。
-10. GitHub Variablesを設定し、最後にstaging自動deploy gateを有効化する。
-11. 受入確認では`pnpm staging:wake`（既定4時間、必要なら`--hours 1..24`）で利用期限を設定する。
-12. 確認終了後に`pnpm staging:sleep`を実行し、通常の低コスト状態へ移行する。自動sleepは停止忘れ時だけのsafety netとして扱う。
+4. [初回staging rollout](staging-initial-rollout.md)のPhase 1 preset（API 0、Pipe STOPPED、activation false）でfull `cdk diff`をreviewし、ユーザー承認後だけdeployする。
+5. one-off migrationのexit 0、pendingなし、driftなしを確認し、Phase 2 preset（API 1、Pipe RUNNING、activation true）をdeployする。
+6. API `/health`と`/ready`成功後だけAmplifyとGitHubを管理画面で接続し、source branch `main`とcustom domainを検証する。
+7. Supabase Site URL/Redirect URLとGoogle Cloud authorized originをstaging URLへ変更する。
+8. OAuth、controlled async sync、Amplify smokeの順で確認する。
+9. SNS subscriptionを承認し、alarm/Budgetを確認する。
+10. workerを一度だけcontrolled runしてからhourly scheduleを有効化する。
+11. GitHub Variablesを設定し、最後にstaging自動deploy gateを有効化する。
+12. 受入確認ではPhase 2後に限り`pnpm staging:wake`（既定4時間、必要なら`--hours 1..24`）で利用期限を設定する。
+13. 確認終了後に`pnpm staging:sleep`を実行し、通常の低コスト状態へ移行する。自動sleepは停止忘れ時だけのsafety netとして扱う。
 
 ## 完了条件
 
@@ -49,7 +50,7 @@ application、Docker、CDK、GitHub Actions、Amplify build、smoke scriptは実
 - API desired count 1、circuit breaker、graceful shutdown、CloudWatch Logsが機能
 - Schedulerはhourly、retry 2、DLQ、exit非0通知を持ち、lease/fencingを維持
 - app Secretがimage、CloudFormation output、Amplify、GitHub logsへ出ていない
-- migration task exit 0の後だけAPIがdeployされる
+- migration task exit 0とstatus/drift確認の後だけPhase 2でAPI/Pipe/applicationを有効化する
 - smoke全項目とalarm通知経路が確認済み
 - stagingだけに自動sleepがあり、productionとbootstrap-onlyにはLambda/Scheduler/期限Parameter/Alarmがない
 

@@ -68,7 +68,7 @@ OIDC trustは`repo:<owner>/<repository>:ref:refs/heads/main`とaudience `sts.ama
 
 1. GitHubのdefault branchを`main`にし、`staging`と`production` Environmentを作成する。productionはrequired reviewerを有効化する。
 2. mainのCI validate/E2Eが両方成功したことを確認する。失敗中はAWS bootstrapへ進まない。
-3. [AWS bootstrap](aws-bootstrap.md)でfull staging stackとOIDC roleを作る。
+3. [AWS bootstrap](aws-bootstrap.md)と[初回staging rollout](staging-initial-rollout.md)でPhase 1、migration、Phase 2を完了し、OIDC roleを作る。
 4. CDK outputに基づくRepository Variablesを設定する。
 5. GitHubとAmplifyを管理画面で接続し、source branchに`main`を選ぶ。
 6. staging deployをmanualで一度成功させる。

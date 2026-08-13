@@ -205,6 +205,16 @@ export class OshiScheduleStack extends Stack {
         },
       ),
     };
+    const applicationActivationParameter = new ssm.StringParameter(
+      this,
+      'ApplicationActivationParameter',
+      {
+        parameterName: `/${prefix}/runtime/application-activated`,
+        description: 'Migration-safe application activation marker used by operational guards',
+        stringValue: String(config.applicationActivated),
+        tier: ssm.ParameterTier.STANDARD,
+      },
+    );
     const referencedParameters = {
       ALLOWED_EMAILS: ssm.StringParameter.fromStringParameterAttributes(
         this,
@@ -356,7 +366,7 @@ export class OshiScheduleStack extends Stack {
       serviceName: `${prefix}-api`,
       cluster,
       taskDefinition: apiTaskDefinition,
-      desiredCount: 1,
+      desiredCount: config.apiDesiredCount,
       assignPublicIp: true,
       vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
       securityGroups: [apiSecurityGroup],
@@ -505,6 +515,7 @@ export class OshiScheduleStack extends Stack {
       name: `${prefix}-sync-jobs`,
       description: 'Starts one targeted Fargate worker for each durable manual sync job',
       roleArn: syncPipeRole.roleArn,
+      desiredState: config.syncPipeDesiredState,
       source: syncJobQueue.queueArn,
       sourceParameters: {
         sqsQueueParameters: { batchSize: 1, maximumBatchingWindowInSeconds: 0 },
@@ -1053,6 +1064,9 @@ export class OshiScheduleStack extends Stack {
     new CfnOutput(this, 'ApiServiceName', { value: apiService.serviceName });
     new CfnOutput(this, 'RdsInstanceIdentifier', { value: database.instanceIdentifier });
     new CfnOutput(this, 'WorkerScheduleName', { value: workerSchedule.ref });
+    new CfnOutput(this, 'ApplicationActivationParameterName', {
+      value: applicationActivationParameter.parameterName,
+    });
     if (wakeExpiresAtParameter && autoSleepSchedule) {
       new CfnOutput(this, 'WakeExpiresAtParameterName', {
         value: wakeExpiresAtParameter.parameterName,

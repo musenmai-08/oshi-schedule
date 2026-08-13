@@ -151,6 +151,19 @@ const collectDeadline = async (aws, parameterName, now) => {
   }
 };
 
+const collectApplicationActivation = async (aws, parameterName) => {
+  if (!parameterName) return { state: 'NOT_DEPLOYED' };
+  try {
+    const response = await aws.json(['ssm', 'get-parameter', '--name', parameterName]);
+    if (response.Parameter?.Value === 'true') return { state: 'READY' };
+    if (response.Parameter?.Value === 'false') return { state: 'NOT_READY' };
+    return { state: 'INVALID' };
+  } catch (error) {
+    if (isMissing(error)) return { state: 'NOT_DEPLOYED' };
+    return { state: 'ERROR', error: error.message };
+  }
+};
+
 const putDeadline = (aws, parameterName, value) =>
   aws.json([
     'ssm',
@@ -180,17 +193,23 @@ export const collectStatus = async (aws, { now = new Date() } = {}) => {
       syncJobs: { state: 'NOT_DEPLOYED' },
       amplify: { state: 'NOT_DEPLOYED' },
       autoSleep: { state: 'NOT_DEPLOYED' },
+      applicationActivation: { state: 'NOT_DEPLOYED' },
     };
   }
 
   const outputs = outputMap(stack);
   const autoSleep = await collectDeadline(aws, outputs.WakeExpiresAtParameterName, now);
+  const applicationActivation = await collectApplicationActivation(
+    aws,
+    outputs.ApplicationActivationParameterName,
+  );
   const fullOutputKeys = [
     'EcsClusterName',
     'ApiServiceName',
     'RdsInstanceIdentifier',
     'WorkerScheduleName',
     'WakeExpiresAtParameterName',
+    'ApplicationActivationParameterName',
     'HttpApiId',
     'VpcLinkId',
     'CloudMapNamespaceId',
@@ -332,12 +351,23 @@ export const collectStatus = async (aws, { now = new Date() } = {}) => {
       })
     : { state: 'NOT_DEPLOYED' };
 
-  const resources = [api, rds, scheduler, httpApi, vpcLink, cloudMap, syncJobs, amplify];
+  const resources = [
+    api,
+    rds,
+    scheduler,
+    httpApi,
+    vpcLink,
+    cloudMap,
+    syncJobs,
+    amplify,
+    applicationActivation,
+  ];
   const hasError = resources.some(({ state }) => state === 'ERROR');
   const noneDeployed = presentFullOutputs.length === 0;
   const allOutputsPresent = presentFullOutputs.length === fullOutputKeys.length;
   const sleeping =
     allOutputsPresent &&
+    applicationActivation.state === 'READY' &&
     api.desiredCount === 0 &&
     api.runningCount === 0 &&
     api.pendingCount === 0 &&
@@ -350,6 +380,7 @@ export const collectStatus = async (aws, { now = new Date() } = {}) => {
     amplify.state === 'DEPLOYED';
   const running =
     allOutputsPresent &&
+    applicationActivation.state === 'READY' &&
     api.desiredCount === 1 &&
     api.runningCount === 1 &&
     api.pendingCount === 0 &&
@@ -360,6 +391,19 @@ export const collectStatus = async (aws, { now = new Date() } = {}) => {
     cloudMap.state === 'DEPLOYED' &&
     Number(cloudMap.registeredInstances) >= 1 &&
     syncJobs.state === 'RUNNING' &&
+    amplify.state === 'DEPLOYED';
+  const notStarted =
+    allOutputsPresent &&
+    applicationActivation.state === 'NOT_READY' &&
+    api.desiredCount === 0 &&
+    api.runningCount === 0 &&
+    api.pendingCount === 0 &&
+    ['available', 'stopped'].includes(rds.state) &&
+    scheduler.state === 'DISABLED' &&
+    httpApi.state === 'DEPLOYED' &&
+    ['AVAILABLE', 'INACTIVE'].includes(vpcLink.state) &&
+    cloudMap.state === 'DEPLOYED' &&
+    syncJobs.state === 'STOPPED' &&
     amplify.state === 'DEPLOYED';
   const waking =
     ['starting', 'backing-up', 'configuring-enhanced-monitoring', 'modifying'].includes(
@@ -373,13 +417,15 @@ export const collectStatus = async (aws, { now = new Date() } = {}) => {
     ? 'ERROR'
     : noneDeployed
       ? 'NOT_DEPLOYED'
-      : sleeping
-        ? 'SLEEPING'
-        : running
-          ? 'RUNNING'
-          : waking
-            ? 'WAKING'
-            : 'PARTIAL';
+      : notStarted
+        ? 'NOT_STARTED'
+        : sleeping
+          ? 'SLEEPING'
+          : running
+            ? 'RUNNING'
+            : waking
+              ? 'WAKING'
+              : 'PARTIAL';
 
   return {
     environment: STAGING.environment,
@@ -394,6 +440,7 @@ export const collectStatus = async (aws, { now = new Date() } = {}) => {
     syncJobs,
     amplify,
     autoSleep,
+    applicationActivation,
     apiUrl: outputs.ApiUrl,
     webUrl: outputs.WebUrl,
     outputs,
@@ -404,20 +451,25 @@ export const formatStatus = (status) => {
   const apiState =
     status.api.state === 'NOT_DEPLOYED' || status.api.state === 'ERROR'
       ? status.api.state
-      : status.api.desiredCount === 0 && status.api.runningCount === 0
-        ? 'SLEEPING'
-        : status.api.desiredCount === 1 &&
-            status.api.runningCount === 1 &&
-            status.api.pendingCount === 0
-          ? 'RUNNING'
-          : Number(status.api.desiredCount) > Number(status.api.runningCount) ||
-              Number(status.api.pendingCount) > 0
-            ? 'WAKING'
-            : 'PARTIAL';
+      : status.applicationActivation?.state === 'NOT_READY' &&
+          status.api.desiredCount === 0 &&
+          status.api.runningCount === 0
+        ? 'NOT_STARTED'
+        : status.api.desiredCount === 0 && status.api.runningCount === 0
+          ? 'SLEEPING'
+          : status.api.desiredCount === 1 &&
+              status.api.runningCount === 1 &&
+              status.api.pendingCount === 0
+            ? 'RUNNING'
+            : Number(status.api.desiredCount) > Number(status.api.runningCount) ||
+                Number(status.api.pendingCount) > 0
+              ? 'WAKING'
+              : 'PARTIAL';
   const lines = [
     `Environment: ${status.environment}`,
     `Status: ${status.overall}`,
     `CloudFormation: ${status.stack.state}`,
+    `Application activation: ${status.applicationActivation?.state ?? 'NOT_DEPLOYED'}`,
     `API: ${apiState}`,
   ];
   if (status.api.desiredCount !== undefined) {
@@ -594,6 +646,7 @@ const requireFullDeployment = (status) => {
     'RdsInstanceIdentifier',
     'WorkerScheduleName',
     'WakeExpiresAtParameterName',
+    'ApplicationActivationParameterName',
   ];
   if (!status.outputs || required.some((key) => !status.outputs[key])) {
     throw new Error('Staging full stack is NOT_DEPLOYED; no write was attempted');
@@ -684,6 +737,11 @@ export const wakeStaging = async (aws, options = {}) => {
   const runtime = optionsFor(options);
   const before = await collectStatus(aws);
   requireFullDeployment(before);
+  if (before.applicationActivation?.state !== 'READY') {
+    throw new Error(
+      'Staging application is not activated yet. Complete migration and Phase 2 deployment first. No write was attempted.',
+    );
+  }
   const outputs = before.outputs;
 
   const expiresAt = calculateWakeDeadline(options.hours ?? DEFAULT_WAKE_HOURS, runtime.now());

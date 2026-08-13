@@ -107,7 +107,7 @@ deploy前に`cdk diff`を読み、RDS/HTTP API/VPC Link/Cloud Map/SQS/Pipes/ECS/
 `deployReady=true`かつ`bootstrapOnly=false`では、domain/certificate、通知先、GitHub、公開Supabase設定、既存immutable image tagを必須にする。入力不足または不正boolean contextのままfull stackをsynth/deployしない。
 
 ```bash
-AWS_PROFILE=<profile> pnpm aws:cdk diff \
+AWS_PROFILE=<profile> pnpm staging:cdk:phase1 -- diff \
   -c environment=staging -c deployReady=true -c bootstrapOnly=false \
   -c awsAccount=<account-id> -c awsRegion=<region> \
   -c hostedZoneId=<zone-id> -c hostedZoneName=<zone-name> \
@@ -119,14 +119,16 @@ AWS_PROFILE=<profile> pnpm aws:cdk diff \
   -c imageTag=<existing-image-digest>
 ```
 
-`imageTag`というcontext名は互換性のため維持するが、値には検証済みの`sha256:...` digestを渡し、Task Definitionをdigest固定する。同じcontextで`cdk deploy`するのはdiff、費用、Secret/Parameter、backup方針をユーザーが承認した後だけである。productionはさらに`-c environment=production -c confirmProduction=DEPLOY_PRODUCTION`を要求し、staging構築時には実行しない。
+`staging:cdk:phase1`はAPI 0、Pipe STOPPED、activation falseを末尾へ固定し、同名contextの手動指定を拒否する。`imageTag`というcontext名は互換性のため維持するが、値には検証済みの`sha256:...` digestを渡し、Task Definitionをdigest固定する。同じcontextで`deploy`するのはdiff、費用、Secret/Parameter、backup方針をユーザーが承認した後だけである。
+
+Phase 1 deploy後は[初回staging rollout](staging-initial-rollout.md)に従ってone-off migrationのexit 0、pendingなし、driftなしを確認する。その後、同じ共通contextを`pnpm staging:cdk:phase2 -- diff/deploy`へ渡し、API 1、Pipe RUNNING、activation trueへupdate-in-placeする。migration失敗時はPhase 2を禁止する。productionはさらに`-c environment=production -c confirmProduction=DEPLOY_PRODUCTION`を要求し、staging構築時には実行しない。
 
 ## 5. deploy後
 
 1. SNS email subscriptionを承認する。
-2. Amplify ConsoleでGitHub App接続とsource branch `main`を選ぶ。staging/productionは環境名でありGit branch名ではない。OAuth tokenをCDK/GitHub Secretへコピーしない。
+2. migrationとPhase 2、API health/readiness成功後にだけAmplify ConsoleでGitHub App接続とsource branch `main`を選ぶ。staging/productionは環境名でありGit branch名ではない。OAuth tokenをCDK/GitHub Secretへコピーしない。
 3. Supabase Site/Redirect URLとGoogle Cloud authorized originをstaging FQDNへ設定する。Google provider redirect URIはSupabase callbackのままにする。
-4. one-off migration taskを成功させてからAPIを更新する。
+4. one-off migration taskを成功させてstatus/driftを確認してからPhase 2でAPIとPipeを有効化する。
 5. `scripts/smoke-staging.sh`を実行し、最後にSchedulerを有効化する。
 6. `STAGING_DEPLOY_ENABLED=true`は初回手動deployとsmoke成功後にだけGitHub Repository Variableへ設定する。
 7. 初回受入確認が完了したら`pnpm staging:sleep`を実行する。以後は[staging低コスト運用](staging-cost-control.md)に従う。

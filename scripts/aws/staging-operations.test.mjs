@@ -19,6 +19,7 @@ const fullOutputs = [
   ['RdsInstanceIdentifier', 'staging-mysql'],
   ['WorkerScheduleName', 'staging-worker'],
   ['WakeExpiresAtParameterName', '/oshi-schedule-staging/runtime/wake-expires-at'],
+  ['ApplicationActivationParameterName', '/oshi-schedule-staging/runtime/application-activated'],
   ['HttpApiId', 'http-api-id'],
   ['VpcLinkId', 'vpc-link-id'],
   ['CloudMapNamespaceId', 'namespace-id'],
@@ -39,6 +40,8 @@ class FakeAws {
     rds = 'available',
     scheduler = 'DISABLED',
     deadline = '2099-01-01T00:00:00.000Z',
+    applicationActivated = true,
+    pipe = 'RUNNING',
     failOn,
   } = {}) {
     this.deployed = deployed;
@@ -48,6 +51,8 @@ class FakeAws {
     this.rds = rds;
     this.scheduler = scheduler;
     this.deadline = deadline;
+    this.applicationActivated = applicationActivated;
+    this.pipe = pipe;
     this.failOn = failOn;
     this.calls = [];
   }
@@ -112,6 +117,9 @@ class FakeAws {
         this.scheduler = JSON.parse(args[args.indexOf('--cli-input-json') + 1]).State;
         return {};
       case 'ssm get-parameter':
+        if (args[args.indexOf('--name') + 1].endsWith('/application-activated')) {
+          return { Parameter: { Value: String(this.applicationActivated) } };
+        }
         if (this.deadline === undefined) {
           throw new AwsCommandError('missing', 'ParameterNotFound');
         }
@@ -132,7 +140,7 @@ class FakeAws {
       case 'sqs get-queue-attributes':
         return { Attributes: { ApproximateNumberOfMessages: '0' } };
       case 'pipes describe-pipe':
-        return { CurrentState: 'RUNNING' };
+        return { CurrentState: this.pipe };
       case 'amplify get-app':
         return { app: { appId: 'app-id' } };
       default:
@@ -200,6 +208,20 @@ describe('staging status', () => {
     assert.equal((await collectStatus(aws)).overall, 'SLEEPING');
   });
 
+  it('reports NOT_STARTED for the migration-safe Phase 1 state', async () => {
+    const aws = new FakeAws({
+      applicationActivated: false,
+      api: { desiredCount: 0, runningCount: 0 },
+      rds: 'available',
+      pipe: 'STOPPED',
+    });
+    const status = await collectStatus(aws);
+    assert.equal(status.overall, 'NOT_STARTED');
+    assert.equal(status.applicationActivation.state, 'NOT_READY');
+    assert.match(formatStatus(status), /Application activation: NOT_READY/);
+    assert.match(formatStatus(status), /API: NOT_STARTED/);
+  });
+
   it('reports PARTIAL for inconsistent core state', async () => {
     const aws = new FakeAws({ api: { desiredCount: 0, runningCount: 0 }, rds: 'available' });
     assert.equal((await collectStatus(aws)).overall, 'PARTIAL');
@@ -265,6 +287,24 @@ describe('staging sleep', () => {
 });
 
 describe('staging wake', () => {
+  it('rejects before any AWS write when migration activation is not ready', async () => {
+    const aws = new FakeAws({
+      applicationActivated: false,
+      api: { desiredCount: 0, runningCount: 0 },
+      rds: 'available',
+      pipe: 'STOPPED',
+    });
+    await assert.rejects(wakeStaging(aws, runtime), /not activated yet/);
+    for (const operation of [
+      'ssm put-parameter',
+      'scheduler update-schedule',
+      'rds start-db-instance',
+      'ecs update-service',
+    ]) {
+      assert.equal(called(aws, operation), false);
+    }
+  });
+
   it('starts RDS, scales ECS to one, waits for health and ready, and leaves Scheduler disabled', async () => {
     const urls = [];
     const aws = new FakeAws({ api: { desiredCount: 0, runningCount: 0 }, rds: 'stopped' });

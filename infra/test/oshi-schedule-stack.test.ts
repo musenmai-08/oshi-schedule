@@ -8,6 +8,9 @@ const fullStagingContext: Record<string, unknown> = {
   environment: 'staging',
   deployReady: 'true',
   bootstrapOnly: 'false',
+  apiDesiredCount: '0',
+  syncPipeDesiredState: 'STOPPED',
+  applicationActivated: 'false',
   awsAccount: '111111111111',
   awsRegion: 'ap-northeast-1',
   hostedZoneId: 'Z00000000000000000000',
@@ -30,6 +33,9 @@ const configFor = (environmentName: EnvironmentName): DeploymentConfig => ({
   region: 'ap-northeast-1',
   deployReady: false,
   bootstrapOnly: false,
+  apiDesiredCount: environmentName === 'staging' ? 0 : 1,
+  syncPipeDesiredState: environmentName === 'staging' ? 'STOPPED' : 'RUNNING',
+  applicationActivated: environmentName === 'production',
   monthlyBudgetUsd: environmentName === 'staging' ? 25 : 75,
   githubOwner: 'example-owner',
   githubRepository: 'oshi-schedule',
@@ -132,6 +138,7 @@ describe('OshiScheduleStack', () => {
       'RdsInstanceIdentifier',
       'WorkerScheduleName',
       'WakeExpiresAtParameterName',
+      'ApplicationActivationParameterName',
       'AutoSleepScheduleName',
       'HttpApiId',
       'VpcLinkId',
@@ -197,6 +204,7 @@ describe('OshiScheduleStack', () => {
       'RdsInstanceIdentifier',
       'WorkerScheduleName',
       'WakeExpiresAtParameterName',
+      'ApplicationActivationParameterName',
       'AutoSleepScheduleName',
       'HttpApiId',
       'ApiUrl',
@@ -237,10 +245,10 @@ describe('OshiScheduleStack', () => {
     });
   });
 
-  it('runs one circuit-broken API service with public-IP egress and SRV discovery', () => {
+  it('synthesizes the migration-safe staging Phase 1 state', () => {
     const template = render();
     template.hasResourceProperties('AWS::ECS::Service', {
-      DesiredCount: 1,
+      DesiredCount: 0,
       DeploymentConfiguration: Match.objectLike({
         DeploymentCircuitBreaker: { Enable: true, Rollback: true },
       }),
@@ -258,6 +266,38 @@ describe('OshiScheduleStack', () => {
           HealthCheck: Match.objectLike({ Command: Match.arrayWith(['CMD-SHELL']) }),
         }),
       ]),
+    });
+    template.hasResourceProperties('AWS::Pipes::Pipe', { DesiredState: 'STOPPED' });
+    template.hasResourceProperties('AWS::SSM::Parameter', {
+      Name: '/oshi-schedule-staging/runtime/application-activated',
+      Type: 'String',
+      Value: 'false',
+      Tier: 'Standard',
+    });
+  });
+
+  it('synthesizes the staging Phase 2 activation state', () => {
+    const template = renderFromCliContext({
+      ...fullStagingContext,
+      apiDesiredCount: '1',
+      syncPipeDesiredState: 'RUNNING',
+      applicationActivated: 'true',
+    });
+    template.hasResourceProperties('AWS::ECS::Service', { DesiredCount: 1 });
+    template.hasResourceProperties('AWS::Pipes::Pipe', { DesiredState: 'RUNNING' });
+    template.hasResourceProperties('AWS::SSM::Parameter', {
+      Name: '/oshi-schedule-staging/runtime/application-activated',
+      Value: 'true',
+    });
+  });
+
+  it('uses the active production defaults', () => {
+    const template = render('production');
+    template.hasResourceProperties('AWS::ECS::Service', { DesiredCount: 1 });
+    template.hasResourceProperties('AWS::Pipes::Pipe', { DesiredState: 'RUNNING' });
+    template.hasResourceProperties('AWS::SSM::Parameter', {
+      Name: '/oshi-schedule-production/runtime/application-activated',
+      Value: 'true',
     });
   });
 
@@ -332,6 +372,7 @@ describe('OshiScheduleStack', () => {
     });
     template.hasResourceProperties('AWS::Pipes::Pipe', {
       Name: 'oshi-schedule-staging-sync-jobs',
+      DesiredState: 'STOPPED',
       SourceParameters: { SqsQueueParameters: { BatchSize: 1, MaximumBatchingWindowInSeconds: 0 } },
       TargetParameters: Match.objectLike({
         EcsTaskParameters: Match.objectLike({

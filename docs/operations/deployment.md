@@ -17,7 +17,7 @@
 5. `.github/workflows/`のCI、gated staging deploy、manual production deploy。
 6. `amplify.yml`と`scripts/smoke-staging.sh`。
 
-AWS resourceはまだ作成していない。初回は[staging構築手順](staging-setup.md)に従い、`bootstrapOnly=true`でVPC/ECRだけを作成し、imageをpushした後にfull stackをdeployする。image不在のままfull stackを先に作らない。
+初回は[staging構築手順](staging-setup.md)に従い、`bootstrapOnly=true`でVPC/ECRだけを作成し、imageをpushした後に[2-phase rollout](staging-initial-rollout.md)でfull stackをdeployする。image不在のままfull stackを先に作らない。
 
 ## Pull Request pipeline
 
