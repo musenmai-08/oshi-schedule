@@ -1,0 +1,49 @@
+package.json
+  s_3a50bad78ea1cd::t_40855346c47e07 27-28
+scripts/aws/staging-operations.test.mjs
+  s_3a50bad78ea1cd::t_65f55b06f2d552 22
+  s_3a50bad78ea1cd::t_289cf49f561cd7 43-44,54-55,120-122,143,211-224,290-307
+infra/lib/oshi-schedule-stack.ts
+  s_3a50bad78ea1cd::t_5cf5d911c7898a 208-217,369,518,1067-1069
+scripts/aws/staging-operations.mjs
+  s_3a50bad78ea1cd::t_65f55b06f2d552 422-428,458-467
+  s_3a50bad78ea1cd::t_289cf49f561cd7 154-166,196,202-205,212,354-364,370,383,395-407,420-421,443,454-457,472,649,740-744
+docs/operations/staging-initial-rollout.md
+  s_3a50bad78ea1cd::t_e60e68cc7c8b57 1-65
+docs/operations/staging-setup.md
+  s_3a50bad78ea1cd::t_e60e68cc7c8b57 31-40,53
+docs/operations/github-actions.md
+  s_3a50bad78ea1cd::t_e60e68cc7c8b57 71
+infra/lib/config.ts
+  s_3a50bad78ea1cd::t_5cf5d911c7898a 4,12-14,55-59,67-84,107-120,162-170
+  s_3a50bad78ea1cd::t_d37e0004a666d7 60-66
+docs/operations/deployment.md
+  s_3a50bad78ea1cd::t_e60e68cc7c8b57 20
+scripts/aws/staging-rollout.sh
+  s_3a50bad78ea1cd::t_f993b4bfedd930 9-13,18
+  s_3a50bad78ea1cd::t_40855346c47e07 1-8,14-17,19-44
+docs/operations/aws-bootstrap.md
+  s_3a50bad78ea1cd::t_e60e68cc7c8b57 110,122-124,129,131
+infra/test/oshi-schedule-stack.test.ts
+  s_3a50bad78ea1cd::t_4b3a85bc38825f 11-13,36-38,141,207,248,251,270-301,375
+infra/test/config.test.ts
+  s_3a50bad78ea1cd::t_4b3a85bc38825f 3-8,29-61,68-70,79-84,129-170
+docs/operations/staging-cost-control.md
+  s_3a50bad78ea1cd::t_e60e68cc7c8b57 33,62,130
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "096e38306798fd3668f40b28051f1c0c481752ae",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
