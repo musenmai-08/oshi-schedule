@@ -1,0 +1,30 @@
+infra/lib/oshi-schedule-stack.ts
+  s_3a50bad78ea1cd::t_d0aea664afc3fa 46-47,49-55,57-64,347
+  s_3a50bad78ea1cd::t_a732fd810986be 56
+  s_3a50bad78ea1cd::t_2fcf3323ca06dd 48
+  s_3a50bad78ea1cd::t_0e10872c1cf910 237-241,324,345-346,373,512
+  s_3a50bad78ea1cd::t_9a6c439a987159 348
+docs/operations/aws-bootstrap.md
+  s_3a50bad78ea1cd::t_0e10872c1cf910 99
+infra/test/oshi-schedule-stack.test.ts
+  s_3a50bad78ea1cd::t_7b6c436733a400 520,522-523,565
+  s_3a50bad78ea1cd::t_0e10872c1cf910 517-519,521,524-564,566-574,587-588
+  s_3a50bad78ea1cd::t_4a462117d8abf4 575-584,586
+  s_3a50bad78ea1cd::t_d0aea664afc3fa 585
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "e15a5318fc62585fb5708ee6489fce66814a3ac6",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
