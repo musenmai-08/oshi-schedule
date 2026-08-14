@@ -62,6 +62,8 @@ AWS_PROFILE=oshi-schedule pnpm staging:cdk:phase2 -- deploy
 
 Phase 1 templateをsynthし、API `DesiredCount=0`、Pipe `DesiredState=STOPPED`、`/oshi-schedule-staging/runtime/application-activated=false`、Worker Scheduler `DISABLED`を確認してからdeployする。RDS、HTTP API、VPC Link、Cloud Map、SQS、task definitionsなどは作成されるがapplication処理は開始しない。
 
+ECRへpushするruntime imageは、build中に`pnpm deploy`後のproduction node_modulesへ正式schemaからPrisma Clientを生成する。`scripts/validate-runtime-image.sh`でruntime userによる`@prisma/client`の実import、data model、`PrismaClient`構築、API/Worker import、migration CLI/schemaを確認し、すべて成功するまでdigestを共通contextへ設定しない。`.prisma/client`のfile存在だけでは未生成stubを区別できないため不十分である。
+
 Secret参照修正などTask Definition revisionだけを更新するremediationでは、まずPhase 1のままdiff/deployし、API 0、Pipe `STOPPED`、activation `false`を維持する。Task DefinitionとExecution Roleの整合を確認した後に、別途明示承認したPhase 2でapplicationを起動する。
 
 `wake-expires-at=UNSET`ではauto-sleep Lambdaはno-opなのでmigration中にRDSを停止しない。Phase 1中の`pnpm staging:status`は`Application activation: NOT_READY`、`API: NOT_STARTED`を表示する。`pnpm staging:wake`はactivation Parameterをreadした後、期限、RDS、ECSへのwrite前に拒否する。

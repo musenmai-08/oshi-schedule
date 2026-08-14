@@ -31,7 +31,12 @@ COPY prisma prisma
 RUN pnpm --filter @oshi-schedule/shared build \
     && pnpm --filter @oshi-schedule/api build \
     && pnpm --filter @oshi-schedule/worker build \
-    && pnpm --filter @oshi-schedule/api deploy --prod /output/api
+    && pnpm --filter @oshi-schedule/api deploy --prod /output/api \
+    && mkdir -p /output/api/prisma \
+    && cp /workspace/prisma/schema.prisma /output/api/prisma/schema.prisma \
+    && cd /output/api \
+    && ./node_modules/.bin/prisma generate \
+        --schema=prisma/schema.prisma
 
 FROM node:22.23.1-bookworm-slim AS runtime
 

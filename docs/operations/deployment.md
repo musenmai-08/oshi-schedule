@@ -10,7 +10,7 @@
 
 ## STEP 4で実装済みのartifact
 
-1. Node.js 22.23.1を使うmulti-stage Dockerfile。API、worker、shared package、Prisma Client、migrationと`prisma` CLIだけをruntime imageに含める。
+1. Node.js 22.23.1を使うmulti-stage Dockerfile。API、worker、shared package、Prisma Client、migrationと`prisma` CLIだけをruntime imageに含める。`pnpm deploy`後、repositoryの正式な`prisma/schema.prisma`をdeploy出力へコピーし、その同居schemaからproduction node_modulesを対象にPrisma Clientを生成する。Prismaはschemaの場所を基準に生成先clientを解決するため、workspace側だけへ生成されることを防ぐ。
 2. `.dockerignore`で`.env*`、Git metadata、test output、local logsを除外する。
 3. API/worker/migrationのcommandを分けたECS task definition。
 4. `infra/`のTypeScript AWS CDKによるstaging/production infrastructure definitionとassertion test。
@@ -32,7 +32,7 @@ Node.js 22.23.1、repositoryの`packageManager`に固定したpnpmを使い、�
 7. production相当の非秘密sample公開設定で`pnpm build`
 8. `docs/api/openapi.yaml`のparse/validationとgenerated contract test
 9. `pnpm test:e2e`
-10. production Docker image build（vulnerability scanはECR push前のstaging deploy workflowで必須）
+10. production Docker image buildとruntime contract検証。検証はruntime userで`@prisma/client`を実importし、data model確認と`PrismaClient`構築まで行う。packageやstub fileの存在確認だけでは合格にしない（vulnerability scanはECR push前のstaging deploy workflowで必須）。
 
 E2Eは現在の規模では毎PR実行する。所要時間が継続して10分を超えた場合だけ、smoke subsetをPR、full suiteをmainへ分ける。
 
