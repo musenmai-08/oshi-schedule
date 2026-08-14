@@ -85,7 +85,7 @@ describe('staging common deploy context', () => {
 
     assert.equal(
       context.imageTag,
-      'sha256:30d4cfae02eb1ebd92bfb619f41cba83366a648693776ba2c0b3a2da906e9c4c',
+      'sha256:724b4edd23c7b9b71790623414895aa53f0ddc82249b164b9798d09cf756b99e',
     );
   });
 

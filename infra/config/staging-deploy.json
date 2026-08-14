@@ -16,7 +16,7 @@
   "monthlyBudgetUsd": 25,
   "githubOwner": "musenmai-08",
   "githubRepository": "oshi-schedule",
-  "imageTag": "sha256:30d4cfae02eb1ebd92bfb619f41cba83366a648693776ba2c0b3a2da906e9c4c",
+  "imageTag": "sha256:724b4edd23c7b9b71790623414895aa53f0ddc82249b164b9798d09cf756b99e",
   "apiCpu": 256,
   "apiMemoryMiB": 512,
   "workerCpu": 256,
