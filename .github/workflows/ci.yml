@@ -89,7 +89,9 @@ jobs:
           pnpm --filter @oshi-schedule/infra test
           pnpm --filter @oshi-schedule/infra synth
       - name: Build production container
-        run: docker build --tag oshi-schedule:ci .
+        run: docker build --pull --platform linux/amd64 --tag oshi-schedule:ci .
+      - name: Validate production container runtime contract
+        run: pnpm validate:runtime-image -- oshi-schedule:ci
       - name: Scan production container
         uses: aquasecurity/trivy-action@v0.36.0
         with:

@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${1:-}" == '--' ]]; then
+  shift
+fi
+
+image="${1:-}"
+if [[ -z "$image" ]]; then
+  echo 'Usage: validate-runtime-image.sh <image>' >&2
+  exit 2
+fi
+
+ca_path='/etc/ssl/certs/aws-rds-global-bundle.pem'
+runtime_user="$(docker image inspect --format '{{.Config.User}}' "$image")"
+platform="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$image")"
+
+[[ "$runtime_user" == 'node' ]] || {
+  echo "Runtime image user must be node, got: ${runtime_user:-unset}" >&2
+  exit 1
+}
+[[ "$platform" == 'linux/amd64' ]] || {
+  echo "Runtime image platform must be linux/amd64, got: $platform" >&2
+  exit 1
+}
+
+docker run --rm --platform linux/amd64 --entrypoint /bin/sh "$image" -eu -c '
+  fail() { echo "$1" >&2; exit 1; }
+  ca_path=/etc/ssl/certs/aws-rds-global-bundle.pem
+  test "$(id -u)" = 1000 || fail "Runtime UID must be 1000"
+  test "$(id -un)" = node || fail "Runtime process must run as node"
+  test -f "$ca_path" || fail "RDS CA bundle is missing"
+  test "$(stat -c %U:%G "$ca_path")" = root:root || fail "RDS CA bundle must be root:root"
+  test "$(stat -c %a "$ca_path")" = 644 || fail "RDS CA bundle mode must be 0644"
+  test -r "$ca_path" || fail "RDS CA bundle is not readable by the runtime user"
+  node -e '\''const fs = require("node:fs"); fs.accessSync(process.argv[1], fs.constants.R_OK);'\'' "$ca_path"
+  grep -F "$ca_path" /opt/oshi-schedule/entrypoint.sh >/dev/null
+  grep -F "sslcert=" /opt/oshi-schedule/entrypoint.sh >/dev/null
+  test -x /opt/oshi-schedule/api/node_modules/.bin/prisma
+  test -f /opt/oshi-schedule/prisma/schema.prisma
+  /opt/oshi-schedule/api/node_modules/.bin/prisma migrate deploy \
+    --schema=/opt/oshi-schedule/prisma/schema.prisma --help >/dev/null
+  test -f /opt/oshi-schedule/api/dist/server.js
+  test -f /opt/oshi-schedule/worker/dist/index.js
+  for tool in npm npx pnpm pnpx yarn yarnpkg corepack; do
+    ! command -v "$tool" >/dev/null 2>&1
+  done
+'
+
+node_version="$(docker run --rm --platform linux/amd64 --entrypoint node "$image" --version)"
+[[ "$node_version" == 'v22.23.1' ]] || {
+  echo "Runtime Node.js must be v22.23.1, got: $node_version" >&2
+  exit 1
+}
+
+echo "Runtime image contract validated: platform=$platform, user=$runtime_user, node=$node_version, CA=root:root/0644/readable"

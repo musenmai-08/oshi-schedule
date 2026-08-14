@@ -16,6 +16,7 @@
     "typecheck": "turbo typecheck",
     "test": "turbo test && node --test scripts/aws/*.test.mjs",
     "test:e2e": "playwright test",
+    "validate:runtime-image": "bash scripts/validate-runtime-image.sh",
     "validate:trivy-ignore": "node scripts/validate-trivy-ignore.mjs .trivyignore",
     "validate:yaml": "node scripts/validate-yaml.mjs",
     "aws:node": "bash scripts/aws/with-project-node.sh node --version",
