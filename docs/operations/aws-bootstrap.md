@@ -102,26 +102,20 @@ Route 53 hosted zoneを確認し、staging API FQDNを含むACM certificateを�
 
 ## 4. full stack
 
-deploy前に`cdk diff`を読み、RDS/HTTP API/VPC Link/Cloud Map/SQS/Pipes/ECS/Budgetとremoval policyを確認する。例の値を実値に置換する。
+deploy前に`cdk diff`を読み、RDS/HTTP API/VPC Link/Cloud Map/SQS/Pipes/ECS/Budgetとremoval policyを確認する。
 
 `deployReady=true`かつ`bootstrapOnly=false`では、domain/certificate、通知先、GitHub、公開Supabase設定、既存immutable image tagを必須にする。入力不足または不正boolean contextのままfull stackをsynth/deployしない。
 
 ```bash
-AWS_PROFILE=<profile> pnpm staging:cdk:phase1 -- diff \
-  -c environment=staging -c deployReady=true -c bootstrapOnly=false \
-  -c awsAccount=<account-id> -c awsRegion=<region> \
-  -c hostedZoneId=<zone-id> -c hostedZoneName=<zone-name> \
-  -c webDomainName=<staging-web-fqdn> -c apiDomainName=<staging-api-fqdn> \
-  -c certificateArn=<acm-arn> -c alertEmail=<notification-email> \
-  -c monthlyBudgetUsd=<usd> -c githubOwner=<owner> -c githubRepository=<repo> \
-  -c nextPublicSupabaseUrl=<staging-supabase-url> \
-  -c nextPublicSupabasePublishableKey=<publishable-key> \
-  -c imageTag=<existing-image-digest>
+pnpm staging:context:show -- phase1
+AWS_PROFILE=oshi-schedule pnpm staging:cdk:phase1 -- diff
 ```
 
-`staging:cdk:phase1`はAPI 0、Pipe STOPPED、activation falseを末尾へ固定し、同名contextの手動指定を拒否する。`imageTag`というcontext名は互換性のため維持するが、値には検証済みの`sha256:...` digestを渡し、Task Definitionをdigest固定する。同じcontextで`deploy`するのはdiff、費用、Secret/Parameter、backup方針をユーザーが承認した後だけである。
+stagingのrepository-managed共通値は[`infra/config/staging-deploy.json`](../../infra/config/staging-deploy.json)で管理する。通知先とSupabase公開設定はGit管理外のroot `.env`から読み、実値をrepositoryへ置かない。詳細、必須環境変数、GitHub Actionsでの注入方法は[初回staging rollout](staging-initial-rollout.md)を参照する。
 
-Phase 1 deploy後は[初回staging rollout](staging-initial-rollout.md)に従ってone-off migrationのexit 0、pendingなし、driftなしを確認する。その後、同じ共通contextを`pnpm staging:cdk:phase2 -- diff/deploy`へ渡し、API 1、Pipe RUNNING、activation trueへupdate-in-placeする。migration失敗時はPhase 2を禁止する。productionはさらに`-c environment=production -c confirmProduction=DEPLOY_PRODUCTION`を要求し、staging構築時には実行しない。
+`staging:cdk:phase1`はAPI 0、Pipe STOPPED、activation falseを固定し、手動`-c`/`--context`を拒否する。`imageTag`というcontext名は互換性のため維持するが、source of truthの値は検証済みの`sha256:...` digestとし、Task Definitionをdigest固定する。同じpresetで`deploy`するのはdiff、費用、Secret/Parameter、backup方針をユーザーが承認した後だけである。
+
+Phase 1 deploy後は[初回staging rollout](staging-initial-rollout.md)に従ってone-off migrationのexit 0、pendingなし、driftなしを確認する。その後、同じ共通fingerprintの`pnpm staging:cdk:phase2 -- diff/deploy`を使い、API 1、Pipe RUNNING、activation trueへupdate-in-placeする。migration失敗時はPhase 2を禁止する。productionはstaging presetを使わず、従来どおり`-c environment=production -c confirmProduction=DEPLOY_PRODUCTION`を要求する。
 
 ## 5. deploy後
 

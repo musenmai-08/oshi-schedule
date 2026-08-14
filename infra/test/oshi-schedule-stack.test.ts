@@ -24,7 +24,7 @@ const fullStagingContext: Record<string, unknown> = {
   nextPublicSupabasePublishableKey: 'sb_publishable_synth_only',
   githubOwner: 'example-owner',
   githubRepository: 'oshi-schedule',
-  imageTag: 'sha-0123456789abcdef',
+  imageTag: `sha256:${'a'.repeat(64)}`,
 };
 
 const configFor = (environmentName: EnvironmentName): DeploymentConfig => ({
@@ -39,7 +39,7 @@ const configFor = (environmentName: EnvironmentName): DeploymentConfig => ({
   monthlyBudgetUsd: environmentName === 'staging' ? 25 : 75,
   githubOwner: 'example-owner',
   githubRepository: 'oshi-schedule',
-  imageTag: 'sha-0123456789abcdef',
+  imageTag: `sha256:${'a'.repeat(64)}`,
   apiCpu: 256,
   apiMemoryMiB: 512,
   workerCpu: 256,
@@ -274,6 +274,18 @@ describe('OshiScheduleStack', () => {
       Value: 'false',
       Tier: 'Standard',
     });
+  });
+
+  it('pins API, Worker, and Migration task definitions to the same image digest', () => {
+    const template = renderFromCliContext(fullStagingContext);
+    const taskDefinitions = Object.values(template.findResources('AWS::ECS::TaskDefinition'));
+
+    expect(taskDefinitions).toHaveLength(3);
+    for (const taskDefinition of taskDefinitions) {
+      expect(JSON.stringify(taskDefinition.Properties?.ContainerDefinitions?.[0]?.Image)).toContain(
+        `@sha256:${'a'.repeat(64)}`,
+      );
+    }
   });
 
   it('synthesizes the staging Phase 2 activation state', () => {
