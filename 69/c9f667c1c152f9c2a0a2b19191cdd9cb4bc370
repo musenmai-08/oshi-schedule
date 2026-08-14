@@ -1,0 +1,55 @@
+infra/lib/config.ts
+  s_3a50bad78ea1cd::t_b835253359ae4e 6-32,50-53,122-143,182-185,247-250,254
+scripts/aws/staging-context.mjs
+  s_3a50bad78ea1cd::t_b835253359ae4e 23-26,95-103,140-149
+infra/test/config.test.ts
+  s_3a50bad78ea1cd::t_ae92be883c0cd4 160,162-180,188-193
+  s_3a50bad78ea1cd::t_9be7b63f6502f7 181-187
+  s_3a50bad78ea1cd::t_c84b18894aaa86 63-90,127-159
+  s_3a50bad78ea1cd::t_48e5a1dae3da18 161
+scripts/aws/staging-context.test.mjs
+  s_3a50bad78ea1cd::t_c84b18894aaa86 33-40,179-211,213-218
+  s_3a50bad78ea1cd::t_ae92be883c0cd4 212
+infra/test/oshi-schedule-stack.test.ts
+  s_3a50bad78ea1cd::t_f003c725f07db2 645-647
+  s_3a50bad78ea1cd::t_c84b18894aaa86 7-20,44,62
+  s_3a50bad78ea1cd::t_cdbe9c3e3d3964 553-569,573-628,635-640,667-681,695-696
+  s_3a50bad78ea1cd::t_9be7b63f6502f7 570-572,629-634
+  s_3a50bad78ea1cd::t_fa22860e3acf18 644,648
+  s_3a50bad78ea1cd::t_466f7be8f4612f 21-28,682-683,685-686,688-689,693-694
+  s_3a50bad78ea1cd::t_c24cbbf557a7cd 641-643
+  s_3a50bad78ea1cd::t_6447448add0528 655-661
+  s_3a50bad78ea1cd::t_47727f60da49fd 684,687,690-692
+  s_3a50bad78ea1cd::t_2028d29187fcea 649-654,662-666
+infra/config/staging-deploy.json
+  s_3a50bad78ea1cd::t_b835253359ae4e 12-15
+infra/lib/oshi-schedule-stack.ts
+  s_3a50bad78ea1cd::t_aa86782e8be6ae 275-276
+  s_3a50bad78ea1cd::t_b835253359ae4e 40,273-274,277-282,284-286
+  s_3a50bad78ea1cd::t_231388869308cb 65-83,352
+  s_3a50bad78ea1cd::t_9be7b63f6502f7 283
+docs/operations/staging-initial-rollout.md
+  s_3a50bad78ea1cd::t_47727f60da49fd 59
+  s_3a50bad78ea1cd::t_b7a87fa8a2ca4a 7,60,65
+  s_3a50bad78ea1cd::t_8e05366ca4e25d 66
+docs/operations/aws-bootstrap.md
+  s_3a50bad78ea1cd::t_b7a87fa8a2ca4a 20-21,111
+  s_3a50bad78ea1cd::t_47727f60da49fd 93
+  s_3a50bad78ea1cd::t_033048cacdc179 94
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "69c9f667c1c152f9c2a0a2b19191cdd9cb4bc370",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
