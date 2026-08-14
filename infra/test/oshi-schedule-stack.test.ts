@@ -4,6 +4,28 @@ import { describe, expect, it } from 'vitest';
 import { loadConfig, type DeploymentConfig, type EnvironmentName } from '../lib/config.js';
 import { OshiScheduleStack } from '../lib/oshi-schedule-stack.js';
 
+const applicationSecretArns = (environment: EnvironmentName, account = '111111111111') => ({
+  supabaseServiceRoleSecretArn: `arn:aws:secretsmanager:ap-northeast-1:${account}:secret:oshi-schedule-${environment}/app/supabase-service-role-key-Ab12Cd`,
+  googleClientSecretArn: `arn:aws:secretsmanager:ap-northeast-1:${account}:secret:oshi-schedule-${environment}/app/google-client-secret-Ef34Gh`,
+  youtubeApiKeySecretArn: `arn:aws:secretsmanager:ap-northeast-1:${account}:secret:oshi-schedule-${environment}/app/youtube-api-key-Ij56Kl`,
+  tokenEncryptionKeysSecretArn: `arn:aws:secretsmanager:ap-northeast-1:${account}:secret:oshi-schedule-${environment}/app/token-encryption-keys-Mn78Op`,
+});
+
+const applicationSecretEnvironmentVariables = [
+  'GOOGLE_CLIENT_SECRET',
+  'SUPABASE_SERVICE_ROLE_KEY',
+  'TOKEN_ENCRYPTION_KEYS',
+  'YOUTUBE_API_KEY',
+] as const;
+
+const assertValueFromIamContract = (valueFromArns: unknown[], iamResources: unknown[]): void => {
+  for (const valueFromArn of valueFromArns) {
+    if (!iamResources.includes(valueFromArn)) {
+      throw new Error('TaskDefinition ValueFrom is not allowed by its execution role');
+    }
+  }
+};
+
 const fullStagingContext: Record<string, unknown> = {
   environment: 'staging',
   deployReady: 'true',
@@ -19,6 +41,7 @@ const fullStagingContext: Record<string, unknown> = {
   apiDomainName: 'api.staging.example.invalid',
   certificateArn:
     'arn:aws:acm:ap-northeast-1:111111111111:certificate/00000000-0000-4000-8000-000000000000',
+  ...applicationSecretArns('staging'),
   alertEmail: 'synth-only@example.invalid',
   nextPublicSupabaseUrl: 'https://supabase.example.invalid',
   nextPublicSupabasePublishableKey: 'sb_publishable_synth_only',
@@ -36,6 +59,7 @@ const configFor = (environmentName: EnvironmentName): DeploymentConfig => ({
   apiDesiredCount: environmentName === 'staging' ? 0 : 1,
   syncPipeDesiredState: environmentName === 'staging' ? 'STOPPED' : 'RUNNING',
   applicationActivated: environmentName === 'production',
+  ...applicationSecretArns(environmentName),
   monthlyBudgetUsd: environmentName === 'staging' ? 25 : 75,
   githubOwner: 'example-owner',
   githubRepository: 'oshi-schedule',
@@ -524,6 +548,150 @@ describe('OshiScheduleStack', () => {
       Name: string;
     }>;
     expect(secrets.map(({ Name }) => Name).sort()).toEqual(['DB_PASSWORD', 'DB_USER']);
+  });
+
+  it('uses the configured complete ARNs for API and Worker application secrets in both phases', () => {
+    const phase1 = renderFromCliContext(fullStagingContext);
+    const phase2 = renderFromCliContext({
+      ...fullStagingContext,
+      apiDesiredCount: '1',
+      syncPipeDesiredState: 'RUNNING',
+      applicationActivated: 'true',
+    });
+    const expectedArns = applicationSecretArns('staging');
+    const expectedByEnvironmentVariable = {
+      SUPABASE_SERVICE_ROLE_KEY: expectedArns.supabaseServiceRoleSecretArn,
+      GOOGLE_CLIENT_SECRET: expectedArns.googleClientSecretArn,
+      YOUTUBE_API_KEY: expectedArns.youtubeApiKeySecretArn,
+      TOKEN_ENCRYPTION_KEYS: expectedArns.tokenEncryptionKeysSecretArn,
+    };
+
+    const applicationSecretsByFamily = (template: Template, familySuffix: string) => {
+      const taskDefinition = Object.values(template.findResources('AWS::ECS::TaskDefinition')).find(
+        (resource) => String(resource.Properties?.Family).endsWith(familySuffix),
+      );
+      const secrets = taskDefinition?.Properties?.ContainerDefinitions?.[0]?.Secrets as Array<{
+        Name: string;
+        ValueFrom: unknown;
+      }>;
+      return Object.fromEntries(
+        secrets
+          .filter(({ Name }) => applicationSecretEnvironmentVariables.includes(Name as never))
+          .map(({ Name, ValueFrom }) => [Name, ValueFrom]),
+      );
+    };
+
+    for (const familySuffix of ['-api', '-worker']) {
+      const phase1Secrets = applicationSecretsByFamily(phase1, familySuffix);
+      const phase2Secrets = applicationSecretsByFamily(phase2, familySuffix);
+      expect(phase1Secrets).toEqual(expectedByEnvironmentVariable);
+      expect(phase2Secrets).toEqual(expectedByEnvironmentVariable);
+      expect(phase2Secrets).toEqual(phase1Secrets);
+      for (const valueFrom of Object.values(phase1Secrets)) {
+        expect(valueFrom).toMatch(/-[A-Za-z0-9]{6}$/);
+      }
+    }
+
+    expect(applicationSecretsByFamily(phase1, '-migration')).toEqual({});
+  });
+
+  it('keeps task-definition ValueFrom and execution-role GetSecretValue resources identical', () => {
+    const template = renderFromCliContext(fullStagingContext);
+    const taskDefinitions = template.findResources('AWS::ECS::TaskDefinition');
+    const roles = template.findResources('AWS::IAM::Role');
+    const policies = template.findResources('AWS::IAM::Policy');
+
+    for (const [familySuffix, logicalPrefix] of [
+      ['-api', 'ApiTaskDefinition'],
+      ['-worker', 'WorkerTaskDefinition'],
+    ] as const) {
+      const taskDefinition = Object.values(taskDefinitions).find((resource) =>
+        String(resource.Properties?.Family).endsWith(familySuffix),
+      );
+      const valueFromArns = (
+        taskDefinition?.Properties?.ContainerDefinitions?.[0]?.Secrets as Array<{
+          Name: string;
+          ValueFrom: unknown;
+        }>
+      )
+        .filter(({ Name }) => applicationSecretEnvironmentVariables.includes(Name as never))
+        .map(({ ValueFrom }) => ValueFrom);
+      const executionRoleLogicalId = Object.keys(roles).find((logicalId) =>
+        logicalId.startsWith(`${logicalPrefix}ExecutionRole`),
+      );
+      expect(executionRoleLogicalId).toBeDefined();
+      const executionPolicies = Object.values(policies).filter((policy) =>
+        (policy.Properties?.Roles as Array<{ Ref?: string }> | undefined)?.some(
+          (role) => role.Ref === executionRoleLogicalId,
+        ),
+      );
+      const getSecretValueResources = executionPolicies.flatMap((policy) =>
+        (
+          policy.Properties?.PolicyDocument?.Statement as Array<{
+            Action: string | string[];
+            Resource: unknown | unknown[];
+          }>
+        ).flatMap((statement) => {
+          const actions = Array.isArray(statement.Action) ? statement.Action : [statement.Action];
+          if (!actions.includes('secretsmanager:GetSecretValue')) return [];
+          return Array.isArray(statement.Resource) ? statement.Resource : [statement.Resource];
+        }),
+      );
+
+      expect(() =>
+        assertValueFromIamContract(valueFromArns, getSecretValueResources),
+      ).not.toThrow();
+      expect(
+        getSecretValueResources
+          .filter((resource): resource is string => typeof resource === 'string')
+          .sort(),
+      ).toEqual([...valueFromArns].sort());
+      const applicationSecretStatements = executionPolicies.flatMap((policy) =>
+        (
+          policy.Properties?.PolicyDocument?.Statement as Array<{
+            Action: string | string[];
+            Resource: unknown;
+          }>
+        ).filter((statement) => {
+          const actions = Array.isArray(statement.Action) ? statement.Action : [statement.Action];
+          return (
+            typeof statement.Resource === 'string' &&
+            actions.includes('secretsmanager:GetSecretValue')
+          );
+        }),
+      );
+      expect(applicationSecretStatements).toHaveLength(4);
+      for (const statement of applicationSecretStatements) {
+        expect(statement.Action).toBe('secretsmanager:GetSecretValue');
+      }
+      expect(getSecretValueResources).not.toContain('*');
+      expect(JSON.stringify(executionPolicies)).not.toContain('secretsmanager:*');
+      expect(JSON.stringify(executionPolicies)).not.toContain('kms:Decrypt');
+    }
+
+    for (const logicalId of Object.keys(roles).filter((logicalId) =>
+      /(?:Api|Worker)TaskDefinitionTaskRole/.test(logicalId),
+    )) {
+      const taskRolePolicies = Object.values(policies).filter((policy) =>
+        (policy.Properties?.Roles as Array<{ Ref?: string }> | undefined)?.some(
+          (role) => role.Ref === logicalId,
+        ),
+      );
+      expect(JSON.stringify(taskRolePolicies)).not.toContain('secretsmanager:GetSecretValue');
+    }
+  });
+
+  it('rejects mismatched task-definition ValueFrom and execution-role resources', () => {
+    const completeArn = applicationSecretArns('staging').googleClientSecretArn;
+    const partialArn = completeArn.replace(/-[A-Za-z0-9]{6}$/, '');
+    const unrelatedArn = applicationSecretArns('staging').youtubeApiKeySecretArn;
+
+    expect(() => assertValueFromIamContract([partialArn], [completeArn])).toThrow(
+      /ValueFrom is not allowed/,
+    );
+    expect(() => assertValueFromIamContract([completeArn], [unrelatedArn])).toThrow(
+      /ValueFrom is not allowed/,
+    );
   });
 
   it('injects allowed emails only into the API from the secure SSM parameter', () => {

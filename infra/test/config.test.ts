@@ -60,6 +60,34 @@ describe('parseSyncPipeDesiredState', () => {
 });
 
 describe('loadConfig', () => {
+  const completeDeployContext = {
+    environment: 'staging',
+    deployReady: 'true',
+    bootstrapOnly: 'false',
+    awsAccount: '111111111111',
+    awsRegion: 'ap-northeast-1',
+    hostedZoneId: 'Z00000000000000000000',
+    hostedZoneName: 'example.invalid',
+    webDomainName: 'staging.example.invalid',
+    apiDomainName: 'api.staging.example.invalid',
+    certificateArn:
+      'arn:aws:acm:ap-northeast-1:111111111111:certificate/00000000-0000-4000-8000-000000000000',
+    alertEmail: 'alerts@example.invalid',
+    nextPublicSupabaseUrl: 'https://supabase.example.invalid',
+    nextPublicSupabasePublishableKey: 'sb_publishable_fixture',
+    supabaseServiceRoleSecretArn:
+      'arn:aws:secretsmanager:ap-northeast-1:111111111111:secret:oshi-schedule-staging/app/supabase-service-role-key-Ab12Cd',
+    googleClientSecretArn:
+      'arn:aws:secretsmanager:ap-northeast-1:111111111111:secret:oshi-schedule-staging/app/google-client-secret-Ef34Gh',
+    youtubeApiKeySecretArn:
+      'arn:aws:secretsmanager:ap-northeast-1:111111111111:secret:oshi-schedule-staging/app/youtube-api-key-Ij56Kl',
+    tokenEncryptionKeysSecretArn:
+      'arn:aws:secretsmanager:ap-northeast-1:111111111111:secret:oshi-schedule-staging/app/token-encryption-keys-Mn78Op',
+    githubOwner: 'example-owner',
+    githubRepository: 'example-repository',
+    imageTag: `sha256:${'a'.repeat(64)}`,
+  };
+
   it('synthesizes staging without a purchased domain', () => {
     const app = new App({ context: { environment: 'staging' } });
     const config = loadConfig(app);
@@ -94,6 +122,73 @@ describe('loadConfig', () => {
   it('rejects deployReady when mandatory deployment inputs are absent', () => {
     const app = new App({ context: { environment: 'staging', deployReady: 'true' } });
     expect(() => loadConfig(app)).toThrow(/requires context/);
+  });
+
+  it('accepts complete application Secret ARNs for a full deploy', () => {
+    expect(loadConfig(new App({ context: completeDeployContext }))).toMatchObject({
+      googleClientSecretArn: completeDeployContext.googleClientSecretArn,
+      youtubeApiKeySecretArn: completeDeployContext.youtubeApiKeySecretArn,
+    });
+  });
+
+  it.each([
+    [
+      'a suffix-less partial ARN',
+      {
+        googleClientSecretArn:
+          'arn:aws:secretsmanager:ap-northeast-1:111111111111:secret:oshi-schedule-staging/app/google-client-secret',
+      },
+    ],
+    [
+      'an ARN for another Secret name',
+      {
+        googleClientSecretArn:
+          'arn:aws:secretsmanager:ap-northeast-1:111111111111:secret:oshi-schedule-staging/app/youtube-api-key-Ab12Cd',
+      },
+    ],
+    [
+      'an ARN from another account',
+      {
+        googleClientSecretArn:
+          'arn:aws:secretsmanager:ap-northeast-1:999999999999:secret:oshi-schedule-staging/app/google-client-secret-Ab12Cd',
+      },
+    ],
+  ])('rejects %s before synth', (_name, patch) => {
+    expect(() => loadConfig(new App({ context: { ...completeDeployContext, ...patch } }))).toThrow(
+      /googleClientSecretArn must be the complete ARN/,
+    );
+  });
+
+  it('requires production-specific Secret ARNs instead of accepting staging ARNs', () => {
+    const productionContext = {
+      ...completeDeployContext,
+      environment: 'production',
+      confirmProduction: 'DEPLOY_PRODUCTION',
+      applicationActivated: 'true',
+      apiDesiredCount: '1',
+      syncPipeDesiredState: 'RUNNING',
+    };
+    expect(() => loadConfig(new App({ context: productionContext }))).toThrow(
+      /supabaseServiceRoleSecretArn must be the complete ARN for oshi-schedule-production/,
+    );
+
+    const productionSecretArns = Object.fromEntries(
+      [
+        'supabaseServiceRoleSecretArn',
+        'googleClientSecretArn',
+        'youtubeApiKeySecretArn',
+        'tokenEncryptionKeysSecretArn',
+      ].map((key) => [
+        key,
+        String(productionContext[key as keyof typeof productionContext]).replace(
+          'oshi-schedule-staging',
+          'oshi-schedule-production',
+        ),
+      ]),
+    );
+    expect(
+      loadConfig(new App({ context: { ...productionContext, ...productionSecretArns } })),
+    ).toMatchObject({ environmentName: 'production' });
   });
 
   it('keeps synth-only behavior when deployReady is the CLI string false', () => {

@@ -3,6 +3,33 @@ import type { App } from 'aws-cdk-lib';
 export type EnvironmentName = 'staging' | 'production';
 export type SyncPipeDesiredState = 'STOPPED' | 'RUNNING';
 
+export const applicationSecretArnDefinitions = [
+  {
+    contextKey: 'supabaseServiceRoleSecretArn',
+    environmentVariable: 'SUPABASE_SERVICE_ROLE_KEY',
+    constructId: 'SupabaseServiceRoleSecret',
+    secretNameSuffix: 'app/supabase-service-role-key',
+  },
+  {
+    contextKey: 'googleClientSecretArn',
+    environmentVariable: 'GOOGLE_CLIENT_SECRET',
+    constructId: 'GoogleClientSecret',
+    secretNameSuffix: 'app/google-client-secret',
+  },
+  {
+    contextKey: 'youtubeApiKeySecretArn',
+    environmentVariable: 'YOUTUBE_API_KEY',
+    constructId: 'YoutubeApiKeySecret',
+    secretNameSuffix: 'app/youtube-api-key',
+  },
+  {
+    contextKey: 'tokenEncryptionKeysSecretArn',
+    environmentVariable: 'TOKEN_ENCRYPTION_KEYS',
+    constructId: 'TokenEncryptionKeysSecret',
+    secretNameSuffix: 'app/token-encryption-keys',
+  },
+] as const;
+
 export interface DeploymentConfig {
   environmentName: EnvironmentName;
   account?: string;
@@ -20,6 +47,10 @@ export interface DeploymentConfig {
   alertEmail?: string;
   nextPublicSupabaseUrl?: string;
   nextPublicSupabasePublishableKey?: string;
+  supabaseServiceRoleSecretArn?: string;
+  googleClientSecretArn?: string;
+  youtubeApiKeySecretArn?: string;
+  tokenEncryptionKeysSecretArn?: string;
   monthlyBudgetUsd: number;
   githubOwner: string;
   githubRepository: string;
@@ -88,6 +119,28 @@ const requiredForDeploy = (config: DeploymentConfig, name: keyof DeploymentConfi
   }
 };
 
+const escapeRegularExpression = (value: string): string =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const validateApplicationSecretArns = (config: DeploymentConfig): void => {
+  if (!config.account) throw new Error('CDK deploy requires context: account');
+
+  for (const definition of applicationSecretArnDefinitions) {
+    const value = config[definition.contextKey];
+    if (!value) continue;
+    const expectedSecretName = `oshi-schedule-${config.environmentName}/${definition.secretNameSuffix}`;
+    const pattern = new RegExp(
+      `^arn:(?:aws|aws-us-gov|aws-cn):secretsmanager:${escapeRegularExpression(config.region)}:` +
+        `${escapeRegularExpression(config.account)}:secret:${escapeRegularExpression(expectedSecretName)}-[A-Za-z0-9]{6}$`,
+    );
+    if (!pattern.test(value)) {
+      throw new Error(
+        `CDK context ${definition.contextKey} must be the complete ARN for ${expectedSecretName}`,
+      );
+    }
+  }
+};
+
 export const loadConfig = (app: App): DeploymentConfig => {
   const environmentName = optionalString(app, 'environment') ?? 'staging';
   if (environmentName !== 'staging' && environmentName !== 'production') {
@@ -126,6 +179,10 @@ export const loadConfig = (app: App): DeploymentConfig => {
     alertEmail: optionalString(app, 'alertEmail'),
     nextPublicSupabaseUrl: optionalString(app, 'nextPublicSupabaseUrl'),
     nextPublicSupabasePublishableKey: optionalString(app, 'nextPublicSupabasePublishableKey'),
+    supabaseServiceRoleSecretArn: optionalString(app, 'supabaseServiceRoleSecretArn'),
+    googleClientSecretArn: optionalString(app, 'googleClientSecretArn'),
+    youtubeApiKeySecretArn: optionalString(app, 'youtubeApiKeySecretArn'),
+    tokenEncryptionKeysSecretArn: optionalString(app, 'tokenEncryptionKeysSecretArn'),
     monthlyBudgetUsd: Number(
       app.node.tryGetContext('monthlyBudgetUsd') ??
         app.node.tryGetContext(
@@ -187,9 +244,14 @@ export const loadConfig = (app: App): DeploymentConfig => {
       'alertEmail',
       'nextPublicSupabaseUrl',
       'nextPublicSupabasePublishableKey',
+      'supabaseServiceRoleSecretArn',
+      'googleClientSecretArn',
+      'youtubeApiKeySecretArn',
+      'tokenEncryptionKeysSecretArn',
     ] as const) {
       requiredForDeploy(config, key);
     }
+    validateApplicationSecretArns(config);
     if (
       config.githubOwner.startsWith('REQUIRED_') ||
       config.githubRepository.startsWith('REQUIRED_')

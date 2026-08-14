@@ -4,7 +4,7 @@
 
 ## 共通contextのsource of truth
 
-staging full deployで使う共通contextは[`infra/config/staging-deploy.json`](../../infra/config/staging-deploy.json)を唯一のrepository-managed source of truthとする。account/region、domain/certificate、検証済みimage digest、Budget、GitHub、CPU/memory、RDS、`workerScheduleEnabled=false`をここで管理する。CloudFormationの実値から毎回逆生成しない。
+staging full deployで使う共通contextは[`infra/config/staging-deploy.json`](../../infra/config/staging-deploy.json)を唯一のrepository-managed source of truthとする。account/region、domain/certificate、検証済みimage digest、4つのapplication Secretのcomplete ARN、Budget、GitHub、CPU/memory、RDS、`workerScheduleEnabled=false`をここで管理する。CloudFormationの実値から毎回逆生成しない。Secret ARNは識別子であり、Secret値はこのファイルへ保存しない。
 
 通知先とSupabase公開設定は環境固有入力であり、repositoryへ実値をcommitしない。ローカルではGit管理外のroot `.env`へ次を設定する。
 
@@ -56,9 +56,13 @@ AWS_PROFILE=oshi-schedule pnpm staging:cdk:phase2 -- deploy
 
 操作を省略した`pnpm staging:cdk:phase1`と`pnpm staging:cdk:phase2`は安全な既定として`synth`を実行する。Phase 1/2で変更するのはpreset管理の3項目だけである。手動contextを追加せず、diff承認なしにdeployしない。image更新時はscan済みECR digestを確認し、`infra/config/staging-deploy.json`の`imageTag`だけを新しい`sha256:...`へ更新して、Phase 1/2のfingerprintとsynth差分を再確認する。
 
+外部管理のSecrets Manager Secretは、`DescribeSecret`で確認した6文字suffix付きcomplete ARNを共通contextへ設定し、`fromSecretCompleteArn`でimportする。Secret名またはsuffixなしpartial ARNからECS Task Definitionの`ValueFrom`を生成してはならない。parserはaccount、region、期待するSecret名、6文字suffixをsynth前に検証する。API/WorkerのExecution Roleに付く`secretsmanager:GetSecretValue`のResourceは同じcomplete ARNへ限定し、Task RoleへSecret読取権限を付けない。Task Definitionの`ValueFrom`とExecution RoleのResourceが一致する契約は回帰テストで保証する。productionはproduction固有のcomplete ARNを明示し、staging ARNを流用しない。
+
 ## Phase 1: infrastructure
 
 Phase 1 templateをsynthし、API `DesiredCount=0`、Pipe `DesiredState=STOPPED`、`/oshi-schedule-staging/runtime/application-activated=false`、Worker Scheduler `DISABLED`を確認してからdeployする。RDS、HTTP API、VPC Link、Cloud Map、SQS、task definitionsなどは作成されるがapplication処理は開始しない。
+
+Secret参照修正などTask Definition revisionだけを更新するremediationでは、まずPhase 1のままdiff/deployし、API 0、Pipe `STOPPED`、activation `false`を維持する。Task DefinitionとExecution Roleの整合を確認した後に、別途明示承認したPhase 2でapplicationを起動する。
 
 `wake-expires-at=UNSET`ではauto-sleep Lambdaはno-opなのでmigration中にRDSを停止しない。Phase 1中の`pnpm staging:status`は`Application activation: NOT_READY`、`API: NOT_STARTED`を表示する。`pnpm staging:wake`はactivation Parameterをreadした後、期限、RDS、ECSへのwrite前に拒否する。
 

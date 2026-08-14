@@ -37,7 +37,7 @@ import {
 } from 'aws-cdk-lib';
 import type { StackProps } from 'aws-cdk-lib';
 import type { Construct } from 'constructs';
-import type { DeploymentConfig } from './config.js';
+import { applicationSecretArnDefinitions, type DeploymentConfig } from './config.js';
 
 interface OshiScheduleStackProps extends StackProps {
   config: DeploymentConfig;
@@ -57,6 +57,25 @@ class EcsSsmParameterSecret extends ecs.Secret {
     return iam.Grant.addToPrincipal({
       grantee,
       actions: ['ssm:GetParameters'],
+      resourceArns: [this.arn],
+    });
+  }
+}
+
+class EcsSecretsManagerSecret extends ecs.Secret {
+  readonly arn: string;
+  readonly hasField = false;
+
+  constructor(secret: secretsmanager.ISecret) {
+    super();
+    this.arn = secret.secretArn;
+  }
+
+  grantRead(grantee: iam.IGrantable): iam.Grant {
+    // ECS secret injection only requires GetSecretValue on the exact complete ARN.
+    return iam.Grant.addToPrincipal({
+      grantee,
+      actions: ['secretsmanager:GetSecretValue'],
       resourceArns: [this.arn],
     });
   }
@@ -251,28 +270,20 @@ export class OshiScheduleStack extends Stack {
         { parameterName: `/${prefix}/runtime/google-client-id`, simpleName: false },
       ),
     };
-    const referencedSecrets = {
-      SUPABASE_SERVICE_ROLE_KEY: secretsmanager.Secret.fromSecretNameV2(
-        this,
-        'SupabaseServiceRoleSecret',
-        `${prefix}/app/supabase-service-role-key`,
-      ),
-      GOOGLE_CLIENT_SECRET: secretsmanager.Secret.fromSecretNameV2(
-        this,
-        'GoogleClientSecret',
-        `${prefix}/app/google-client-secret`,
-      ),
-      YOUTUBE_API_KEY: secretsmanager.Secret.fromSecretNameV2(
-        this,
-        'YoutubeApiKeySecret',
-        `${prefix}/app/youtube-api-key`,
-      ),
-      TOKEN_ENCRYPTION_KEYS: secretsmanager.Secret.fromSecretNameV2(
-        this,
-        'TokenEncryptionKeysSecret',
-        `${prefix}/app/token-encryption-keys`,
-      ),
-    };
+    const referencedSecrets = Object.fromEntries(
+      applicationSecretArnDefinitions.map((definition) => {
+        // Full deploys require a validated environment-specific ARN. The invalid suffix is only
+        // for the existing deployReady=false, synth-only template path.
+        const completeArn =
+          config[definition.contextKey] ??
+          `arn:aws:secretsmanager:${config.region}:${config.account ?? '000000000000'}:` +
+            `secret:${prefix}/${definition.secretNameSuffix}-000000`;
+        return [
+          definition.environmentVariable,
+          secretsmanager.Secret.fromSecretCompleteArn(this, definition.constructId, completeArn),
+        ];
+      }),
+    );
 
     const apiLogGroup = new logs.LogGroup(this, 'ApiLogGroup', {
       logGroupName: `/oshi-schedule/${config.environmentName}/api`,
@@ -338,7 +349,7 @@ export class OshiScheduleStack extends Stack {
       ...Object.fromEntries(
         Object.entries(referencedSecrets).map(([name, secret]) => [
           name,
-          ecs.Secret.fromSecretsManager(secret),
+          new EcsSecretsManagerSecret(secret),
         ]),
       ),
     };

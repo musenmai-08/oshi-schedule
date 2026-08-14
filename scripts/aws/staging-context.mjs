@@ -20,6 +20,10 @@ export const repositoryContextKeys = Object.freeze([
   'webDomainName',
   'apiDomainName',
   'certificateArn',
+  'supabaseServiceRoleSecretArn',
+  'googleClientSecretArn',
+  'youtubeApiKeySecretArn',
+  'tokenEncryptionKeysSecretArn',
   'monthlyBudgetUsd',
   'githubOwner',
   'githubRepository',
@@ -88,6 +92,15 @@ const requireInteger = (context, key, { minimum = 0, maximum = Number.MAX_SAFE_I
 const domainPattern = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+const applicationSecretArnDefinitions = Object.freeze([
+  ['supabaseServiceRoleSecretArn', 'app/supabase-service-role-key'],
+  ['googleClientSecretArn', 'app/google-client-secret'],
+  ['youtubeApiKeySecretArn', 'app/youtube-api-key'],
+  ['tokenEncryptionKeysSecretArn', 'app/token-encryption-keys'],
+]);
+
+const escapeRegularExpression = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 export const validateRepositoryContext = (context) => {
   if (!isPlainObject(context)) fail('repository config must be a JSON object');
   const keys = Object.keys(context).sort();
@@ -124,6 +137,16 @@ export const validateRepositoryContext = (context) => {
       '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
   );
   if (!certificatePattern.test(certificateArn)) fail('certificateArn is malformed or mismatched');
+  for (const [key, secretNameSuffix] of applicationSecretArnDefinitions) {
+    const expectedSecretName = `oshi-schedule-staging/${secretNameSuffix}`;
+    const completeArnPattern = new RegExp(
+      `^arn:(?:aws|aws-us-gov|aws-cn):secretsmanager:${escapeRegularExpression(region)}:` +
+        `${escapeRegularExpression(account)}:secret:${escapeRegularExpression(expectedSecretName)}-[A-Za-z0-9]{6}$`,
+    );
+    if (!completeArnPattern.test(requireString(context, key))) {
+      fail(`${key} must be the complete ARN for ${expectedSecretName}`);
+    }
+  }
   if (!/^sha256:[0-9a-f]{64}$/.test(requireString(context, 'imageTag')))
     fail('imageTag must be an immutable sha256 digest');
 

@@ -17,6 +17,8 @@ GitHubのdefault branchが`main`、`staging`/`production` Environmentが作成�
 
 実値のSecretはissue、commit、CloudFormation context、CLI outputへ書かない。
 
+外部管理Secretのcomplete ARNはSecret値ではないためrepository-managed contextへ保存できる。ただし、Secret値、OAuth client secret、API key、暗号鍵は保存しない。
+
 stagingの`stagingMonthlyBudgetUsd`既定値は25、productionの`productionMonthlyBudgetUsd`既定値は75であり、staging値をproductionへ流用しない。deploy時の`monthlyBudgetUsd`は対象環境の値を明示的に上書きする。Budgetは通知基準であってhard spending limitや自動停止ではない。
 
 staging Budgetはユーザー定義cost allocation tag `Environment=staging`で絞り込む。full deploy前にBilling ConsoleのCost allocation tagsで`Environment`が`Active`であることを確認する。未有効または反映待ちの状態では、25 USD Budgetがstaging費用を正しく追跡する前提を満たさない。
@@ -88,6 +90,8 @@ oshi-schedule-staging/app/youtube-api-key
 oshi-schedule-staging/app/token-encryption-keys
 ```
 
+作成後、`DescribeSecret`で各Secretの6文字suffix付きcomplete ARNを確認し、[`infra/config/staging-deploy.json`](../../infra/config/staging-deploy.json)の対応する4項目へ記録する。値を取得する`GetSecretValue`はこの確認に使わない。CDKは外部Secretを`fromSecretCompleteArn`でimportし、ECS Task Definitionの`ValueFrom`とExecution Roleの`secretsmanager:GetSecretValue` Resourceを同じcomplete ARNへ揃え、この契約を回帰テストで保証する。Secret名だけ、またはsuffixなしpartial ARNを渡さない。AWS管理キー利用時は`kms:Decrypt`を追加せず、customer managed keyへ変更する場合だけ最小権限を別途reviewする。
+
 次のSSM Parameterを事前作成する。
 
 ```text
@@ -104,7 +108,7 @@ Route 53 hosted zoneを確認し、staging API FQDNを含むACM certificateを�
 
 deploy前に`cdk diff`を読み、RDS/HTTP API/VPC Link/Cloud Map/SQS/Pipes/ECS/Budgetとremoval policyを確認する。
 
-`deployReady=true`かつ`bootstrapOnly=false`では、domain/certificate、通知先、GitHub、公開Supabase設定、既存immutable image tagを必須にする。入力不足または不正boolean contextのままfull stackをsynth/deployしない。
+`deployReady=true`かつ`bootstrapOnly=false`では、domain/certificate、通知先、GitHub、公開Supabase設定、既存immutable image tag、環境固有の4つのapplication Secret complete ARNを必須にする。ARNは対象account/region、期待するSecret名、6文字suffixまで検証する。productionのARNを推測せず、staging ARNも流用しない。入力不足または不正contextのままfull stackをsynth/deployしない。
 
 ```bash
 pnpm staging:context:show -- phase1

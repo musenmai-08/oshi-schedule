@@ -30,6 +30,14 @@ const repositoryContext = {
   apiDomainName: 'api-staging.example.com',
   certificateArn:
     'arn:aws:acm:ap-northeast-1:123456789012:certificate/12345678-1234-1234-1234-123456789abc',
+  supabaseServiceRoleSecretArn:
+    'arn:aws:secretsmanager:ap-northeast-1:123456789012:secret:oshi-schedule-staging/app/supabase-service-role-key-Ab12Cd',
+  googleClientSecretArn:
+    'arn:aws:secretsmanager:ap-northeast-1:123456789012:secret:oshi-schedule-staging/app/google-client-secret-Ef34Gh',
+  youtubeApiKeySecretArn:
+    'arn:aws:secretsmanager:ap-northeast-1:123456789012:secret:oshi-schedule-staging/app/youtube-api-key-Ij56Kl',
+  tokenEncryptionKeysSecretArn:
+    'arn:aws:secretsmanager:ap-northeast-1:123456789012:secret:oshi-schedule-staging/app/token-encryption-keys-Mn78Op',
   monthlyBudgetUsd: 25,
   githubOwner: 'example-owner',
   githubRepository: 'example-repository',
@@ -168,6 +176,46 @@ describe('staging common deploy context', () => {
     ['digest', { imageTag: 'latest' }, /imageTag/],
     ['budget', { monthlyBudgetUsd: 0 }, /monthlyBudgetUsd/],
     ['worker schedule', { workerScheduleEnabled: true }, /workerScheduleEnabled/],
+    [
+      'partial secret ARN',
+      {
+        googleClientSecretArn:
+          'arn:aws:secretsmanager:ap-northeast-1:123456789012:secret:oshi-schedule-staging/app/google-client-secret',
+      },
+      /googleClientSecretArn/,
+    ],
+    [
+      'mismatched secret name',
+      {
+        youtubeApiKeySecretArn:
+          'arn:aws:secretsmanager:ap-northeast-1:123456789012:secret:oshi-schedule-staging/app/google-client-secret-Ab12Cd',
+      },
+      /youtubeApiKeySecretArn/,
+    ],
+    [
+      'mismatched secret account',
+      {
+        tokenEncryptionKeysSecretArn:
+          'arn:aws:secretsmanager:ap-northeast-1:999999999999:secret:oshi-schedule-staging/app/token-encryption-keys-Ab12Cd',
+      },
+      /tokenEncryptionKeysSecretArn/,
+    ],
+    [
+      'mismatched secret region',
+      {
+        supabaseServiceRoleSecretArn:
+          'arn:aws:secretsmanager:us-east-1:123456789012:secret:oshi-schedule-staging/app/supabase-service-role-key-Ab12Cd',
+      },
+      /supabaseServiceRoleSecretArn/,
+    ],
+    [
+      'secret suffix',
+      {
+        googleClientSecretArn:
+          'arn:aws:secretsmanager:ap-northeast-1:123456789012:secret:oshi-schedule-staging/app/google-client-secret-short',
+      },
+      /googleClientSecretArn/,
+    ],
   ]) {
     it(`rejects malformed ${name} configuration`, () => {
       assert.throws(() => validateRepositoryContext({ ...repositoryContext, ...patch }), expected);
