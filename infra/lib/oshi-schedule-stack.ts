@@ -43,6 +43,25 @@ interface OshiScheduleStackProps extends StackProps {
   config: DeploymentConfig;
 }
 
+class EcsSsmParameterSecret extends ecs.Secret {
+  readonly arn: string;
+  readonly hasField = false;
+
+  constructor(parameter: ssm.IParameter) {
+    super();
+    this.arn = parameter.parameterArn;
+  }
+
+  grantRead(grantee: iam.IGrantable): iam.Grant {
+    // ECS resolves task-definition secrets with the execution role and only calls GetParameters.
+    return iam.Grant.addToPrincipal({
+      grantee,
+      actions: ['ssm:GetParameters'],
+      resourceArns: [this.arn],
+    });
+  }
+}
+
 export class OshiScheduleStack extends Stack {
   constructor(scope: Construct, id: string, props: OshiScheduleStackProps) {
     super(scope, id, props);
@@ -215,12 +234,12 @@ export class OshiScheduleStack extends Stack {
         tier: ssm.ParameterTier.STANDARD,
       },
     );
+    const allowedEmailsParameter = ssm.StringParameter.fromSecureStringParameterAttributes(
+      this,
+      'AllowedEmailsParameter',
+      { parameterName: `/${prefix}/runtime/allowed-emails`, simpleName: false },
+    );
     const referencedParameters = {
-      ALLOWED_EMAILS: ssm.StringParameter.fromStringParameterAttributes(
-        this,
-        'AllowedEmailsParameter',
-        { parameterName: `/${prefix}/runtime/allowed-emails`, simpleName: false },
-      ),
       SUPABASE_URL: ssm.StringParameter.fromStringParameterAttributes(
         this,
         'SupabaseUrlParameter',
@@ -302,7 +321,7 @@ export class OshiScheduleStack extends Stack {
       DB_USER: ecs.Secret.fromSecretsManager(database.secret!, 'username'),
       DB_PASSWORD: ecs.Secret.fromSecretsManager(database.secret!, 'password'),
     };
-    const applicationSecrets: Record<string, ecs.Secret> = {
+    const sharedApplicationSecrets: Record<string, ecs.Secret> = {
       ...databaseSecrets,
       ...Object.fromEntries(
         Object.entries(runtimeParameters).map(([name, parameter]) => [
@@ -322,6 +341,10 @@ export class OshiScheduleStack extends Stack {
           ecs.Secret.fromSecretsManager(secret),
         ]),
       ),
+    };
+    const apiApplicationSecrets: Record<string, ecs.Secret> = {
+      ...sharedApplicationSecrets,
+      ALLOWED_EMAILS: new EcsSsmParameterSecret(allowedEmailsParameter),
     };
 
     const apiTaskDefinition = new ecs.FargateTaskDefinition(this, 'ApiTaskDefinition', {
@@ -347,7 +370,7 @@ export class OshiScheduleStack extends Stack {
         SYNC_JOB_QUEUE_URL: syncJobQueue.queueUrl,
         ...databaseEnvironment,
       },
-      secrets: applicationSecrets,
+      secrets: apiApplicationSecrets,
       healthCheck: {
         command: [
           'CMD-SHELL',
@@ -486,7 +509,7 @@ export class OshiScheduleStack extends Stack {
         SYNC_JOB_QUEUE_URL: syncJobQueue.queueUrl,
         ...databaseEnvironment,
       },
-      secrets: applicationSecrets,
+      secrets: sharedApplicationSecrets,
     });
 
     const syncPipeRole = new iam.Role(this, 'SyncPipeRole', {

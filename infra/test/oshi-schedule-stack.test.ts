@@ -514,6 +514,78 @@ describe('OshiScheduleStack', () => {
     expect(secrets.map(({ Name }) => Name).sort()).toEqual(['DB_PASSWORD', 'DB_USER']);
   });
 
+  it('injects allowed emails only into the API from the secure SSM parameter', () => {
+    const template = render();
+    const rendered = template.toJSON();
+    const taskDefinitions = Object.values(template.findResources('AWS::ECS::TaskDefinition'));
+    const findContainer = (familySuffix: string) =>
+      taskDefinitions.find((resource) => String(resource.Properties?.Family).endsWith(familySuffix))
+        ?.Properties?.ContainerDefinitions?.[0];
+    const api = findContainer('-api');
+    const worker = findContainer('-worker');
+    const migration = findContainer('-migration');
+
+    expect(api?.Secrets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          Name: 'ALLOWED_EMAILS',
+          ValueFrom: {
+            'Fn::Join': [
+              '',
+              [
+                'arn:',
+                { Ref: 'AWS::Partition' },
+                ':ssm:ap-northeast-1:111111111111:parameter/oshi-schedule-staging/runtime/allowed-emails',
+              ],
+            ],
+          },
+        }),
+      ]),
+    );
+    expect((api?.Environment as Array<{ Name: string }>).map(({ Name }) => Name)).not.toContain(
+      'ALLOWED_EMAILS',
+    );
+    for (const container of [worker, migration]) {
+      expect((container?.Secrets as Array<{ Name: string }>).map(({ Name }) => Name)).not.toContain(
+        'ALLOWED_EMAILS',
+      );
+      expect(
+        (container?.Environment as Array<{ Name: string }>).map(({ Name }) => Name),
+      ).not.toContain('ALLOWED_EMAILS');
+    }
+
+    expect(JSON.stringify(rendered.Parameters ?? {})).not.toContain('allowed-emails');
+    expect(JSON.stringify(rendered)).not.toContain('{{resolve:ssm-secure:');
+  });
+
+  it('grants the API execution role scoped read access to allowed emails', () => {
+    const template = render();
+    const policies = template.findResources('AWS::IAM::Policy');
+    const allowedEmailPolicies = Object.entries(policies).filter(([, resource]) =>
+      JSON.stringify(resource).includes('parameter/oshi-schedule-staging/runtime/allowed-emails'),
+    );
+
+    expect(allowedEmailPolicies).toHaveLength(1);
+    expect(allowedEmailPolicies[0]?.[0]).toMatch(/^ApiTaskDefinitionExecutionRole/);
+    const policyText = JSON.stringify(allowedEmailPolicies[0]?.[1]);
+    expect(policyText).toContain('ssm:GetParameters');
+    expect(policyText).not.toContain('"ssm:*"');
+    expect(policyText).not.toContain('"kms:*"');
+    expect(policyText).not.toContain('kms:Decrypt');
+    const statements = allowedEmailPolicies[0]?.[1].Properties?.PolicyDocument?.Statement as Array<{
+      Action: string | string[];
+      Resource: unknown;
+    }>;
+    const allowedEmailStatement = statements.find((statement) =>
+      JSON.stringify(statement.Resource).includes(
+        'parameter/oshi-schedule-staging/runtime/allowed-emails',
+      ),
+    );
+    expect(allowedEmailStatement).toBeDefined();
+    expect(allowedEmailStatement?.Action).toBe('ssm:GetParameters');
+    expect(allowedEmailStatement?.Resource).not.toBe('*');
+  });
+
   it('contains no literal credential values in the CloudFormation template', () => {
     const serialized = JSON.stringify(render().toJSON());
     expect(serialized).not.toMatch(/sb_secret_|AIza[0-9A-Za-z_-]{20,}|v1:[A-Za-z0-9+/]{30,}/);

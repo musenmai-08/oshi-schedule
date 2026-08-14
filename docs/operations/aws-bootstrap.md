@@ -96,7 +96,7 @@ oshi-schedule-staging/app/token-encryption-keys
 /oshi-schedule-staging/runtime/google-client-id
 ```
 
-`ALLOWED_EMAILS`はカンマ区切りで、個人情報としてSecureStringを推奨する。customer managed KMS keyを使う場合はECS execution roleの`kms:Decrypt`をCDKへ追加する。CDKは`APP_MODE=real`、`TRUST_PROXY_HOPS=1`、Web origin、log/quota parameterを作る。RDS username/passwordはRDS managed secretが生成する。
+`ALLOWED_EMAILS`はカンマ区切りのSecureStringとして事前作成し、API taskだけへECS native secretsで注入する。CloudFormationの通常SSM String Parameterとして値を解決しない。Parameter更新後は既存taskへ自動反映されないため、APIの新しいtaskを起動する。既定のAWS managed key `alias/aws/ssm`では追加の`kms:Decrypt`を付与せず、customer managed KMS keyへ変更する場合だけECS execution roleへの権限追加をreviewする。workerとmigrationは`ALLOWED_EMAILS`を受け取らない。CDKは`APP_MODE=real`、`TRUST_PROXY_HOPS=1`、Web origin、log/quota parameterを作る。RDS username/passwordはRDS managed secretが生成する。
 
 Route 53 hosted zoneを確認し、staging API FQDNを含むACM certificateを同regionで発行・検証する。Web custom domainはAmplify domain associationで検証する。domain購入、certificate発行、DNS変更はユーザー操作である。
 
