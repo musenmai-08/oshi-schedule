@@ -4,7 +4,7 @@
 
 ## 現在状態
 
-2026-08-22 18:59 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
+2026-08-22 19:18 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
 
 | 項目                   | 状態                              |
 | ---------------------- | --------------------------------- |
@@ -20,7 +20,7 @@
 
 Scheduler実行との競合を避けるため、文書の値だけでAWS writeを判断せず、write前に用途別preflightを再実行する。
 
-AmplifyはApp `oshi-schedule-staging-web`を同じApp IDで維持し、GitHub repository接続済み、Branch 0件、DomainAssociation 0件である。repository-managed phaseは`connected`へ切り替え済みで、Branch/Domainの再作成deploy待ちである。Appの公開環境変数は設定済みで、Amplify jobはまだない。`https://staging.oshi-schedule.com`はDomainAssociationを再作成するまで計画停止中である。
+AmplifyはApp `oshi-schedule-staging-web`を同じApp IDで維持し、GitHub repository接続済み、`main` Branch 1件、`AVAILABLE`のDomainAssociation 1件という`connected` phaseである。`staging.oshi-schedule.com`はverifiedで`main`に関連付いている。Appの公開環境変数は設定済みで、Amplify jobはまだないため初回build待ちである。
 
 ## Task Definitionとruntime image
 
@@ -73,10 +73,10 @@ sha256:724b4edd23c7b9b71790623414895aa53f0ddc82249b164b9798d09cf756b99e
 8. configを`connected`へ変更し、`pnpm staging:preflight -- --amplify-to-connected`を通す。diffがBranch/Domain各1件の作成だけであることを確認して承認済みdeployを行う。
 9. `pnpm staging:preflight -- --amplify-connected`でDomain `AVAILABLE`まで確認してから、別途承認された初回buildを行う。
 
-2026-08-22に手順1〜7を完了した。`domain-detached` deployはDomainAssociation 1件、`detached` deployは`main` Branch 1件の削除だけで、各deploy後のCDK diffは0だった。Appは同じApp IDで維持し、Branch/Domainは0件、repositoryは接続済みである。次回は手順8から再開し、Branch/Domain再作成の明示承認なしにdeployしない。
+2026-08-22に手順1〜8と手順9のconnected preflightまで完了した。`domain-detached` deployはDomainAssociation 1件、`detached` deployは`main` Branch 1件の削除だけだった。`connected` deployはBranch/Domain各1件の作成だけで、DomainはBranch作成後に作成され、各deploy後のCDK diffは0だった。Appは同じApp IDで維持し、repository接続済み、Branch/Domain各1件、Domain `AVAILABLE`である。次回は別途承認された初回buildから再開する。
 
 DomainAssociationを削除してから`connected`で再作成し`AVAILABLE`になるまで、`https://staging.oshi-schedule.com`は停止する。Route 53のAPI用record、API Gateway、Amplify App ID、App環境変数は変更対象外である。Branch/DomainをConsoleやAmplify CLIで直接削除せず、各段階のCloudFormation rollback可能性を維持する。
 
 ## 次工程
 
-次は`connected` phaseのBranch/Domain再作成deployである。`pnpm staging:preflight --amplify-to-connected`を通し、diffがAmplify BranchとDomainAssociation各1件の作成だけで、DomainがBranchへ依存することを確認してから、別途明示承認されたdeployだけを行う。Amplify build、Google OAuth、同期試験はさらに後続の独立工程とする。
+次は`main`のAmplify初回buildとWeb疎通確認である。`pnpm staging:preflight --amplify-connected`を再実行し、build設定と公開環境変数を値を露出せずread-only確認してから、別途明示承認されたbuildだけを行う。Google OAuthと同期試験はさらに後続の独立工程とする。
