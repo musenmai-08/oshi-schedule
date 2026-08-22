@@ -6,6 +6,11 @@
   "engines": {
     "node": ">=22.23.1 <23"
   },
+  "pnpm": {
+    "overrides": {
+      "deepmerge-ts": "8.0.0"
+    }
+  },
   "scripts": {
     "postinstall": "prisma generate",
     "prebuild": "prisma generate",
