@@ -4,7 +4,7 @@
 
 ## 現在状態
 
-2026-08-22 21:45 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
+2026-08-22 22:06 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
 
 | 項目                   | 状態                               |
 | ---------------------- | ---------------------------------- |
@@ -20,7 +20,7 @@
 
 Scheduler実行との競合を避けるため、文書の値だけでAWS writeを判断せず、write前に用途別preflightを再実行する。
 
-AmplifyはApp `oshi-schedule-staging-web`を同じApp IDで維持し、GitHub repository接続済み、`main` Branch 1件、`AVAILABLE`のDomainAssociation 1件という`connected` phaseである。`staging.oshi-schedule.com`はverifiedで`main`に関連付いている。初回job `1`と再実行job `2`はBUILDで失敗し、Deploy/Verifyは実行されていない。URLは2xxだがAmplifyの`Welcome`プレースホルダーで、アプリは未deployである。job `2`後にrepository/CDK BuildSpecのcwd恒久修正を実装したが、AWSへは未反映でjobも再実行していない。
+AmplifyはApp `oshi-schedule-staging-web`を同じApp IDで維持し、GitHub repository接続済み、`main` Branch 1件、`AVAILABLE`のDomainAssociation 1件という`connected` phaseである。`staging.oshi-schedule.com`はverifiedで`main`に関連付いている。初回job `1`と再実行job `2`はBUILDで失敗し、Deploy/Verifyは実行されていない。URLは2xxだがAmplifyの`Welcome`プレースホルダーで、アプリは未deployである。job `2`後のcwd恒久修正BuildSpecはAWSへ反映済みで、deploy後のCDK diffは0である。Amplify jobは再実行していない。
 
 ## Task Definitionとruntime image
 
@@ -41,11 +41,16 @@ sha256:724b4edd23c7b9b71790623414895aa53f0ddc82249b164b9798d09cf756b99e
 - Secret ARN: API/Workerの4 external Secretを6文字suffix付きcomplete ARNへ統一し、Execution Roleの`secretsmanager:GetSecretValue` Resourceと4/4一致させた。以前の`AccessDenied`は解消済み。
 - Prisma Client: production runtime image内で正式schemaからClientを生成するよう修正した。CIのruntime contractでgenerated/importable/constructable、API/Worker/Migration smoke、CA permissionを検証済み。
 
+## 未解消障害
+
+- Auto sleep: wake deadlineは期限切れだが、2026-08-22 21:39 JST以降のLambda実行が`ECS_API`で`AUTO_SLEEP_PARTIAL`となり、APIは1/1、RDSは`AVAILABLE`のまま残っている。BuildSpec deploy前後でruntime状態は変化しておらず、この作業ではwake/sleep操作を行っていない。
+
 ## 恒久的なAWS安全ルール
 
 - AWS CLI/CDKは`--profile oshi-schedule`、account `741448960817`、region `ap-northeast-1`だけを使用し、`default`を使わない。
 - AWS write、migration、ECR変更、ECS scale、Pipe/Scheduler変更、Amplify build、同期実行は、その工程の明示承認後だけ行う。
 - 作業前に用途別preflightを実行し、1件でもFAILならwriteへ進まない。既定の`pnpm staging:preflight`はAmplify前を検証する。Phase 2前は`pnpm staging:preflight -- --phase2`を使う。
+- sleep中のAmplify control-planeだけを変更する場合は`pnpm staging:preflight --amplify-control-plane`を使い、CDK diffがAmplify Appだけであることを別途確認する。このprofileは意図的にAPI、RDS、Pipe、Queue、wake deadlineを評価しないため、runtime変更には使用しない。
 - Worker Schedulerは明示承認なしに有効化しない。migrationは承認済みone-off Task以外で実行しない。
 - runtime imageはimmutable digestで固定し、Secret値・credential・DATABASE_URL・個人情報をログや文書へ出さない。
 - 利用終了時は`pnpm staging:sleep`を使い、Auto sleep Schedulerを削除・無効化しない。
@@ -79,4 +84,4 @@ DomainAssociationを削除してから`connected`で再作成し`AVAILABLE`に�
 
 ## 次工程
 
-job `2`のcwd障害は、各phase冒頭で`CODEBUILD_SRC_DIR`を検証してから同じ絶対checkout rootへ移動するよう修正した。CDKはrepositoryの`amplify.yml`を直接読み込み、BuildSpecの二重定義を廃止した。cwd累積を拒否する回帰テストを追加し、Amplify相当のclean copyで同一shellのpreBuild→build、8 workspaceのinstall、`shared`→`web`のbuildと成果物生成まで成功した。AWS read-only diffはAmplify AppのBuildSpec UPDATEだけである。次は別途承認されたCDK deployでBuildSpecを反映し、その後さらに別途承認されたAmplify buildを1回だけ実行する。Google OAuthと同期試験には進まない。
+job `2`のcwd障害は、各phase冒頭で`CODEBUILD_SRC_DIR`を検証してから同じ絶対checkout rootへ移動するよう修正した。CDKはrepositoryの`amplify.yml`を直接読み込み、BuildSpecの二重定義を廃止した。cwd累積を拒否する回帰テストを追加し、Amplify相当のclean copyで同一shellのpreBuild→build、8 workspaceのinstall、`shared`→`web`のbuildと成果物生成まで成功した。BuildSpec-only CDK deployも完了した。次はauto-sleepの`ECS_API`失敗を解消して実際のsleep状態を回復し、その後に別途承認されたAmplify buildを1回だけ実行する。Google OAuthと同期試験には進まない。
