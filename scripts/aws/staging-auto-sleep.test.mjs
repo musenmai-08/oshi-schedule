@@ -6,7 +6,11 @@ import {
   formatRemaining,
   inspectWakeDeadline,
 } from './staging-auto-sleep/deadline.mjs';
-import { runAutoSleep } from './staging-auto-sleep/index.mjs';
+import {
+  ecsDescribeServicesInput,
+  ecsUpdateServiceInput,
+  runAutoSleep,
+} from './staging-auto-sleep/index.mjs';
 
 const settings = Object.freeze({
   TARGET_ENVIRONMENT: 'staging',
@@ -124,6 +128,18 @@ describe('wake deadline', () => {
 });
 
 describe('staging auto sleep Lambda', () => {
+  it('uses the lower camel case input names required by the ECS SDK', () => {
+    assert.deepEqual(ecsDescribeServicesInput('cluster', 'service'), {
+      cluster: 'cluster',
+      services: ['service'],
+    });
+    assert.deepEqual(ecsUpdateServiceInput('cluster', 'service', 0), {
+      cluster: 'cluster',
+      service: 'service',
+      desiredCount: 0,
+    });
+  });
+
   it('does nothing while the deadline is in the future', async () => {
     const aws = new FakeAws({ deadline: '2026-08-12T10:00:00.000Z' });
     const { result } = await run(aws);

@@ -16,6 +16,17 @@ const requireSetting = (settings, name) => {
   return value;
 };
 
+export const ecsDescribeServicesInput = (cluster, service) => ({
+  cluster,
+  services: [service],
+});
+
+export const ecsUpdateServiceInput = (cluster, service, desiredCount) => ({
+  cluster,
+  service,
+  desiredCount,
+});
+
 export const runAutoSleep = async ({ aws, settings, now = new Date(), log = console.log }) => {
   const environment = requireSetting(settings, 'TARGET_ENVIRONMENT');
   const expectedAccountId = requireSetting(settings, 'EXPECTED_ACCOUNT_ID');
@@ -118,7 +129,7 @@ const createAwsSdkAdapter = async (region) => {
     updateSchedule: (input) => schedulerClient.send(new scheduler.UpdateScheduleCommand(input)),
     async describeService(cluster, service) {
       const response = await ecsClient.send(
-        new ecs.DescribeServicesCommand({ Cluster: cluster, Services: [service] }),
+        new ecs.DescribeServicesCommand(ecsDescribeServicesInput(cluster, service)),
       );
       if (!response.services?.[0] || response.failures?.length) {
         throw new Error('ECS API service is unavailable');
@@ -127,11 +138,7 @@ const createAwsSdkAdapter = async (region) => {
     },
     updateService: (cluster, service, desiredCount) =>
       ecsClient.send(
-        new ecs.UpdateServiceCommand({
-          Cluster: cluster,
-          Service: service,
-          DesiredCount: desiredCount,
-        }),
+        new ecs.UpdateServiceCommand(ecsUpdateServiceInput(cluster, service, desiredCount)),
       ),
     async describeDatabase(identifier) {
       const response = await rdsClient.send(

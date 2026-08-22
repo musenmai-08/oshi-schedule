@@ -4,7 +4,7 @@
 
 ## 現在状態
 
-2026-08-22 22:06 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
+2026-08-22 22:16 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
 
 | 項目                   | 状態                               |
 | ---------------------- | ---------------------------------- |
@@ -43,7 +43,7 @@ sha256:724b4edd23c7b9b71790623414895aa53f0ddc82249b164b9798d09cf756b99e
 
 ## 未解消障害
 
-- Auto sleep: wake deadlineは期限切れだが、2026-08-22 21:39 JST以降のLambda実行が`ECS_API`で`AUTO_SLEEP_PARTIAL`となり、APIは1/1、RDSは`AVAILABLE`のまま残っている。BuildSpec deploy前後でruntime状態は変化しておらず、この作業ではwake/sleep操作を行っていない。
+- Auto sleep: wake deadlineは期限切れだが、2026-08-22 21:39 JST以降のLambda実行が`ECS_API`で`AUTO_SLEEP_PARTIAL`となり、APIは1/1、RDSは`AVAILABLE`のまま残っている。CloudTrailでは`DescribeServices`が`InvalidParameterException: Services cannot be empty`で3回失敗し、`UpdateService`には到達していない。原因はAWS SDK v3のECS inputへ`Cluster`/`Services`を渡していたことで、正しい`cluster`/`services`としてserializeされずservice一覧が空になったためである。`UpdateService`側も`cluster`/`service`/`desiredCount`へ修正し、回帰テストとCDK synthに成功した。AWS未deployであり、read-only diffはauto-sleep Lambda Code asset更新1件だけである。
 
 ## 恒久的なAWS安全ルール
 
@@ -84,4 +84,4 @@ DomainAssociationを削除してから`connected`で再作成し`AVAILABLE`に�
 
 ## 次工程
 
-job `2`のcwd障害は、各phase冒頭で`CODEBUILD_SRC_DIR`を検証してから同じ絶対checkout rootへ移動するよう修正した。CDKはrepositoryの`amplify.yml`を直接読み込み、BuildSpecの二重定義を廃止した。cwd累積を拒否する回帰テストを追加し、Amplify相当のclean copyで同一shellのpreBuild→build、8 workspaceのinstall、`shared`→`web`のbuildと成果物生成まで成功した。BuildSpec-only CDK deployも完了した。次はauto-sleepの`ECS_API`失敗を解消して実際のsleep状態を回復し、その後に別途承認されたAmplify buildを1回だけ実行する。Google OAuthと同期試験には進まない。
+job `2`のcwd障害は、各phase冒頭で`CODEBUILD_SRC_DIR`を検証してから同じ絶対checkout rootへ移動するよう修正した。CDKはrepositoryの`amplify.yml`を直接読み込み、BuildSpecの二重定義を廃止した。cwd累積を拒否する回帰テストを追加し、Amplify相当のclean copyで同一shellのpreBuild→build、8 workspaceのinstall、`shared`→`web`のbuildと成果物生成まで成功した。BuildSpec-only CDK deployも完了した。次は別途承認されたCDK deployでauto-sleep Lambda Code assetだけを更新し、Scheduler→API desired 0→RDS stopの順で次回実行が成功することを確認する。deadline更新は不要である。実sleep復旧後に、別途承認されたAmplify buildを1回だけ実行する。Google OAuthと同期試験には進まない。
