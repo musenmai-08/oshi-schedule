@@ -1,0 +1,25 @@
+scripts/aws/staging-preflight.test.mjs
+  s_3a50bad78ea1cd::t_b417a9bc143df6 63,134-161
+  s_3a50bad78ea1cd::t_8aab036fc7d9fe 162-166
+  s_3a50bad78ea1cd::t_c78046c20959d1 167-169
+scripts/aws/staging-preflight.mjs
+  s_3a50bad78ea1cd::t_8aab036fc7d9fe 39-43,89
+  s_3a50bad78ea1cd::t_b417a9bc143df6 36-38,44,62,88,137-148
+  s_3a50bad78ea1cd::t_cd8d572d85fe67 118-120
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "9594a1416177b2fb61b8e74835122e0206d5241a",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
