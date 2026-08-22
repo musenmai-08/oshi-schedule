@@ -1,0 +1,29 @@
+package.json
+  s_3a50bad78ea1cd::t_84692a33a7842e 9-13
+docs/security/container-vulnerability-exceptions.md
+  s_3a50bad78ea1cd::t_9d063f747af28a 62
+  s_3a50bad78ea1cd::t_84692a33a7842e 45-46
+  s_3a50bad78ea1cd::t_1810047f346f93 64-80
+  s_3a50bad78ea1cd::t_81db143b99b070 63
+.trivyignore
+  s_3a50bad78ea1cd::t_c0aa3ee1097059 11
+  s_3a50bad78ea1cd::t_84692a33a7842e 16
+pnpm-lock.yaml
+  s_3a50bad78ea1cd::t_fa905c1fa75305 7-9,1838-1839,3669,4343
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "a235f174cc7ea4d78e465fb7eab8500cbcfd20ed",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
