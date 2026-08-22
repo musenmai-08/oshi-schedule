@@ -4,7 +4,7 @@
 
 ## 現在状態
 
-2026-08-22 17:01 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
+2026-08-22 17:41 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
 
 | 項目                   | 状態                              |
 | ---------------------- | --------------------------------- |
@@ -16,11 +16,11 @@
 | Worker Scheduler       | `DISABLED`                        |
 | Queue                  | visible `0`                       |
 | Cloud Map              | registered instances `1`          |
-| Auto sleep             | `2026-08-22 13:28 JST`で期限切れ  |
+| Auto sleep             | `2026-08-22 21:35 JST`まで有効    |
 
-期限切れ時点でもAPI/RDSは稼働していた。Scheduler実行との競合を避けるため、文書の値だけでAWS writeを判断せず、write前に用途別preflightを再実行する。
+Scheduler実行との競合を避けるため、文書の値だけでAWS writeを判断せず、write前に用途別preflightを再実行する。
 
-AmplifyはApp `oshi-schedule-staging-web`を維持し、repository未接続、manual `main` Branch 1件、`AVAILABLE`のDomainAssociation 1件という`manual` phaseである。Appの公開環境変数は設定済みで、Amplify jobはまだない。
+AmplifyはApp `oshi-schedule-staging-web`を同じApp IDで維持し、repository未接続、manual `main` Branch 1件、DomainAssociation 0件という`domain-detached` phaseである。Appの公開環境変数は設定済みで、Amplify jobはまだない。`https://staging.oshi-schedule.com`はDomainAssociationを再作成するまで計画停止中である。
 
 ## Task Definitionとruntime image
 
@@ -73,8 +73,10 @@ sha256:724b4edd23c7b9b71790623414895aa53f0ddc82249b164b9798d09cf756b99e
 8. configを`connected`へ変更し、`pnpm staging:preflight -- --amplify-to-connected`を通す。diffがBranch/Domain各1件の作成だけであることを確認して承認済みdeployを行う。
 9. `pnpm staging:preflight -- --amplify-connected`でDomain `AVAILABLE`まで確認してから、別途承認された初回buildを行う。
 
+2026-08-22に手順1〜3を完了した。`domain-detached` deployの実差分とCloudFormation eventはDomainAssociation 1件の削除だけで、deploy後のCDK diffは0、Appと`main` Branchは維持、repositoryは未接続である。次回は手順4から再開し、Branch削除の明示承認なしに進めない。
+
 DomainAssociationを削除してから`connected`で再作成し`AVAILABLE`になるまで、`https://staging.oshi-schedule.com`は停止する。Route 53のAPI用record、API Gateway、Amplify App ID、App環境変数は変更対象外である。Branch/DomainをConsoleやAmplify CLIで直接削除せず、各段階のCloudFormation rollback可能性を維持する。
 
 ## 次工程
 
-次は`manual`から`domain-detached`への最初の移行deployである。直前に`pnpm staging:preflight -- --amplify-manual`を実行し、PASS後にdiffを再確認して別途承認されたdeployだけを行う。Google OAuthと同期試験は後続の独立工程とする。
+次は`domain-detached`から`detached`へのBranch削除工程である。configを変更する前に`pnpm staging:preflight --amplify-domain-detached`で実状態を確認し、変更後は`pnpm staging:preflight --amplify-to-detached`を通す。diffがAmplify Branch 1件の削除だけであることを確認し、別途明示承認されたdeployだけを行う。repository接続、Domain再作成、Amplify build、Google OAuth、同期試験はさらに後続の独立工程とする。
