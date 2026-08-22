@@ -29,6 +29,21 @@ const repositoryAmplifyBuildSpec = readFileSync(
   'utf8',
 );
 
+const extractAmplifyPhaseCommands = (buildSpec: string) => {
+  const phases: Record<'preBuild' | 'build', string[]> = { preBuild: [], build: [] };
+  let phase: keyof typeof phases | undefined;
+  for (const line of buildSpec.split(/\r?\n/)) {
+    const phaseMatch = line.match(/^ {8}(preBuild|build):$/);
+    if (phaseMatch) {
+      phase = phaseMatch[1] as keyof typeof phases;
+      continue;
+    }
+    const commandMatch = line.match(/^ {12}- (.+)$/);
+    if (phase && commandMatch) phases[phase].push(commandMatch[1]!);
+  }
+  return phases;
+};
+
 const assertValueFromIamContract = (valueFromArns: unknown[], iamResources: unknown[]): void => {
   for (const valueFromArn of valueFromArns) {
     if (!iamResources.includes(valueFromArn)) {
@@ -267,6 +282,25 @@ describe('OshiScheduleStack', () => {
       expect(buildSpec).toContain(dependencyGraphBuildCommand);
       expect(buildSpec).not.toContain('pnpm --filter @oshi-schedule/web build');
       expect(buildSpec).not.toContain('pnpm --filter @oshi-schedule/shared build');
+    }
+    expect(managedBuildSpec).toBe(repositoryAmplifyBuildSpec.trimEnd());
+  });
+
+  it('anchors every Amplify phase to the checkout root without accumulating cwd changes', () => {
+    const phases = extractAmplifyPhaseCommands(repositoryAmplifyBuildSpec);
+    const checkoutRoot = '/codebuild/output/src/checkout';
+    const rootAnchor = ['test -n "$CODEBUILD_SRC_DIR"', 'cd "$CODEBUILD_SRC_DIR"'];
+
+    expect(phases.preBuild.slice(0, 2)).toEqual(rootAnchor);
+    expect(phases.build.slice(0, 2)).toEqual(rootAnchor);
+    expect(repositoryAmplifyBuildSpec).not.toContain('cd ../..');
+
+    let cwd = `${checkoutRoot}/apps/web`;
+    for (const commands of [phases.preBuild, phases.build]) {
+      for (const command of commands) {
+        if (command === 'cd "$CODEBUILD_SRC_DIR"') cwd = checkoutRoot;
+      }
+      expect(cwd).toBe(checkoutRoot);
     }
   });
 

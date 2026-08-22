@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
   Arn,
@@ -96,6 +96,14 @@ export class OshiScheduleStack extends Stack {
       .map((url) => fileURLToPath(url))
       .find(existsSync);
     if (!autoSleepCodePath) throw new Error('Staging auto-sleep Lambda source was not found');
+    const amplifyBuildSpecPath = [
+      new URL('../../amplify.yml', import.meta.url),
+      new URL('../../../amplify.yml', import.meta.url),
+    ]
+      .map((url) => fileURLToPath(url))
+      .find(existsSync);
+    if (!amplifyBuildSpecPath) throw new Error('Amplify build specification was not found');
+    const amplifyBuildSpec = readFileSync(amplifyBuildSpecPath, 'utf8').trimEnd();
     const webOrigin = config.webDomainName
       ? `https://${config.webDomainName}`
       : 'https://domain-required.invalid';
@@ -1018,29 +1026,7 @@ export class OshiScheduleStack extends Stack {
       name: `${prefix}-web`,
       description: 'Next.js SSR web application; GitHub connection is completed manually',
       platform: 'WEB_COMPUTE',
-      buildSpec: [
-        'version: 1',
-        'applications:',
-        '  - appRoot: apps/web',
-        '    frontend:',
-        '      phases:',
-        '        preBuild:',
-        '          commands:',
-        '            - corepack enable',
-        '            - corepack prepare pnpm@9.15.9 --activate',
-        '            - pnpm install --frozen-lockfile',
-        '        build:',
-        '          commands:',
-        '            - pnpm --workspace-root exec turbo build --filter=@oshi-schedule/web',
-        '      artifacts:',
-        '        baseDirectory: apps/web/.next',
-        '        files:',
-        '          - "**/*"',
-        '      cache:',
-        '        paths:',
-        '          - node_modules/.pnpm/**/*',
-        '          - apps/web/.next/cache/**/*',
-      ].join('\n'),
+      buildSpec: amplifyBuildSpec,
       environmentVariables: [
         { name: '_CUSTOM_IMAGE', value: 'amplify:al2023' },
         { name: 'AMPLIFY_MONOREPO_APP_ROOT', value: 'apps/web' },

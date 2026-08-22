@@ -4,23 +4,23 @@
 
 ## 現在状態
 
-2026-08-22 20:56 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
+2026-08-22 21:45 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
 
-| 項目                   | 状態                              |
-| ---------------------- | --------------------------------- |
-| CloudFormation         | `UPDATE_COMPLETE`                 |
-| Application activation | `READY`（`true`）                 |
-| API                    | `desired/running/pending = 1/1/0` |
-| RDS                    | `AVAILABLE`                       |
-| Pipe                   | `RUNNING`                         |
-| Worker Scheduler       | `DISABLED`                        |
-| Queue                  | visible `0`                       |
-| Cloud Map              | registered instances `1`          |
-| Auto sleep             | `2026-08-22 21:35 JST`まで有効    |
+| 項目                   | 状態                               |
+| ---------------------- | ---------------------------------- |
+| CloudFormation         | `UPDATE_COMPLETE`                  |
+| Application activation | `READY`（`true`）                  |
+| API                    | `desired/running/pending = 1/1/0`  |
+| RDS                    | `AVAILABLE`                        |
+| Pipe                   | `RUNNING`                          |
+| Worker Scheduler       | `DISABLED`                         |
+| Queue                  | visible `0`                        |
+| Cloud Map              | registered instances `1`           |
+| Auto sleep             | deadline expired（延長していない） |
 
 Scheduler実行との競合を避けるため、文書の値だけでAWS writeを判断せず、write前に用途別preflightを再実行する。
 
-AmplifyはApp `oshi-schedule-staging-web`を同じApp IDで維持し、GitHub repository接続済み、`main` Branch 1件、`AVAILABLE`のDomainAssociation 1件という`connected` phaseである。`staging.oshi-schedule.com`はverifiedで`main`に関連付いている。初回job `1`と再実行job `2`はBUILDで失敗し、Deploy/Verifyは実行されていない。URLは2xxだがAmplifyの`Welcome`プレースホルダーで、アプリは未deployである。CloudFormation管理のBuildSpecはTurborepo方式へ更新済みで、deploy後のCDK diffは0である。
+AmplifyはApp `oshi-schedule-staging-web`を同じApp IDで維持し、GitHub repository接続済み、`main` Branch 1件、`AVAILABLE`のDomainAssociation 1件という`connected` phaseである。`staging.oshi-schedule.com`はverifiedで`main`に関連付いている。初回job `1`と再実行job `2`はBUILDで失敗し、Deploy/Verifyは実行されていない。URLは2xxだがAmplifyの`Welcome`プレースホルダーで、アプリは未deployである。job `2`後にrepository/CDK BuildSpecのcwd恒久修正を実装したが、AWSへは未反映でjobも再実行していない。
 
 ## Task Definitionとruntime image
 
@@ -79,4 +79,4 @@ DomainAssociationを削除してから`connected`で再作成し`AVAILABLE`に�
 
 ## 次工程
 
-job `2`の失敗原因はrepository側`amplify.yml`の作業directory制御である。preBuildとbuildの両phaseに`cd ../..`があり、preBuildではrepository rootへ移動して8 workspaceのinstallに成功するが、同じshellでbuildの2回目を実行するとrepository rootの外へ移動する。その結果、`pnpm --workspace-root exec turbo build --filter=@oshi-schedule/web`が`--workspace-root may only be used inside a workspace`で失敗した。jobは再実行しない。次はrepository buildSpecをAmplifyの実行modelに合わせて恒久修正し、Amplify相当のphase連続実行を回帰検証する。修正のcommit/push/CIとBuildSpec反映を終えた後、別途明示承認されたbuildだけを実行する。Google OAuthと同期試験には進まない。
+job `2`のcwd障害は、各phase冒頭で`CODEBUILD_SRC_DIR`を検証してから同じ絶対checkout rootへ移動するよう修正した。CDKはrepositoryの`amplify.yml`を直接読み込み、BuildSpecの二重定義を廃止した。cwd累積を拒否する回帰テストを追加し、Amplify相当のclean copyで同一shellのpreBuild→build、8 workspaceのinstall、`shared`→`web`のbuildと成果物生成まで成功した。AWS read-only diffはAmplify AppのBuildSpec UPDATEだけである。次は別途承認されたCDK deployでBuildSpecを反映し、その後さらに別途承認されたAmplify buildを1回だけ実行する。Google OAuthと同期試験には進まない。
