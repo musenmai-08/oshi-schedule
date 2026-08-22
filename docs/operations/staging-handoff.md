@@ -4,7 +4,7 @@
 
 ## 現在状態
 
-2026-08-22 19:37 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
+2026-08-22 19:48 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
 
 | 項目                   | 状態                              |
 | ---------------------- | --------------------------------- |
@@ -79,4 +79,4 @@ DomainAssociationを削除してから`connected`で再作成し`AVAILABLE`に�
 
 ## 次工程
 
-次はAmplify buildSpecの恒久修正である。現在は`pnpm --filter @oshi-schedule/web build`だけを実行するため、`dist`をexportするworkspace依存`@oshi-schedule/shared`が未buildとなる。sharedを含む依存graphを先にbuildするようIaCと契約テストを修正し、commit/push/CI後、別途承認されたCDK deployでbuildSpecを反映する。修正反映と新しいbuildの明示承認前にjobを再実行しない。Google OAuthと同期試験はさらに後続の独立工程とする。
+buildSpecの恒久修正はrepositoryへ実装済みである。workspace rootの`pnpm exec turbo build --filter=@oshi-schedule/web`を使い、既存の`build.dependsOn=["^build"]`で依存graphを先にbuildする。Amplify相当のclean環境で旧commandの失敗と新commandの成功を確認し、CDK diffはAmplify AppのBuildSpec更新だけだった。次は別途承認されたCDK deployでbuildSpecを反映する。反映後の新しいbuildも別途明示承認されるまでjobを再実行しない。Google OAuthと同期試験はさらに後続の独立工程とする。

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { App } from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import { describe, expect, it } from 'vitest';
@@ -22,6 +23,11 @@ const applicationSecretEnvironmentVariables = [
   'TOKEN_ENCRYPTION_KEYS',
   'YOUTUBE_API_KEY',
 ] as const;
+
+const repositoryAmplifyBuildSpec = readFileSync(
+  new URL('../../amplify.yml', import.meta.url),
+  'utf8',
+);
 
 const assertValueFromIamContract = (valueFromArns: unknown[], iamResources: unknown[]): void => {
   for (const valueFromArn of valueFromArns) {
@@ -248,6 +254,20 @@ describe('OshiScheduleStack', () => {
         'YOUTUBE_API_KEY',
       ]),
     );
+  });
+
+  it('builds the Amplify web app through the existing Turbo workspace dependency graph', () => {
+    const template = renderFromCliContext(fullStagingContext);
+    const app = Object.values(template.findResources('AWS::Amplify::App'))[0];
+    const managedBuildSpec = app?.Properties?.BuildSpec as string;
+    const dependencyGraphBuildCommand =
+      'pnpm --workspace-root exec turbo build --filter=@oshi-schedule/web';
+
+    for (const buildSpec of [managedBuildSpec, repositoryAmplifyBuildSpec]) {
+      expect(buildSpec).toContain(dependencyGraphBuildCommand);
+      expect(buildSpec).not.toContain('pnpm --filter @oshi-schedule/web build');
+      expect(buildSpec).not.toContain('pnpm --filter @oshi-schedule/shared build');
+    }
   });
 
   it('synthesizes the exact Amplify resources for every connection phase', () => {

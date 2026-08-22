@@ -18,7 +18,7 @@ applications:
             - test -n "$NEXT_PUBLIC_API_URL"
             - test -n "$NEXT_PUBLIC_SUPABASE_URL"
             - test -n "$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"
-            - pnpm --filter @oshi-schedule/web build
+            - pnpm --workspace-root exec turbo build --filter=@oshi-schedule/web
       artifacts:
         baseDirectory: apps/web/.next
         files:

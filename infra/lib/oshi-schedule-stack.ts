@@ -1031,7 +1031,7 @@ export class OshiScheduleStack extends Stack {
         '            - pnpm install --frozen-lockfile',
         '        build:',
         '          commands:',
-        '            - pnpm --filter @oshi-schedule/web build',
+        '            - pnpm --workspace-root exec turbo build --filter=@oshi-schedule/web',
         '      artifacts:',
         '        baseDirectory: apps/web/.next',
         '        files:',
