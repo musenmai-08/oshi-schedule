@@ -1,0 +1,28 @@
+infra/test/oshi-schedule-stack.test.ts
+  s_3a50bad78ea1cd::t_03c9b7b535e27b 32-35,37-40,42-46,286-304
+  s_3a50bad78ea1cd::t_8cb7dedb0550c1 36,41
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_fb08764c93f711 9-19
+  s_3a50bad78ea1cd::t_eb774d06fed15e 7,23,82
+  s_3a50bad78ea1cd::t_d3a30cc645f041 8
+infra/lib/oshi-schedule-stack.ts
+  s_3a50bad78ea1cd::t_03c9b7b535e27b 1,99-106,1029
+amplify.yml
+  s_3a50bad78ea1cd::t_03c9b7b535e27b 8-9,17-18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "3f0f03ccd99fef5b1dea8c862e48b97d8b6a0187",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
