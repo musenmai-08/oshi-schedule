@@ -2,6 +2,7 @@ import { App } from 'aws-cdk-lib';
 import { describe, expect, it } from 'vitest';
 import {
   loadConfig,
+  parseAmplifyConnectionPhase,
   parseBooleanContext,
   parseNonNegativeIntegerContext,
   parseSyncPipeDesiredState,
@@ -59,6 +60,19 @@ describe('parseSyncPipeDesiredState', () => {
   });
 });
 
+describe('parseAmplifyConnectionPhase', () => {
+  it.each(['manual', 'domain-detached', 'detached', 'connected'] as const)(
+    'accepts %s',
+    (value) => {
+      expect(parseAmplifyConnectionPhase(value, 'manual')).toBe(value);
+    },
+  );
+
+  it.each(['', 'connection', 'DOMAIN-DETACHED', true, 1, null])('rejects %j', (value) => {
+    expect(() => parseAmplifyConnectionPhase(value, 'manual')).toThrow(/amplifyConnectionPhase/);
+  });
+});
+
 describe('loadConfig', () => {
   const completeDeployContext = {
     environment: 'staging',
@@ -85,6 +99,7 @@ describe('loadConfig', () => {
       'arn:aws:secretsmanager:ap-northeast-1:111111111111:secret:oshi-schedule-staging/app/token-encryption-keys-Mn78Op',
     githubOwner: 'example-owner',
     githubRepository: 'example-repository',
+    amplifyConnectionPhase: 'manual',
     imageTag: `sha256:${'a'.repeat(64)}`,
   };
 
@@ -96,6 +111,7 @@ describe('loadConfig', () => {
     expect(config.apiDesiredCount).toBe(0);
     expect(config.syncPipeDesiredState).toBe('STOPPED');
     expect(config.applicationActivated).toBe(false);
+    expect(config.amplifyConnectionPhase).toBe('manual');
     expect(config.webDomainName).toBeUndefined();
     expect(config.monthlyBudgetUsd).toBe(25);
   });
@@ -109,6 +125,7 @@ describe('loadConfig', () => {
       apiDesiredCount: 1,
       syncPipeDesiredState: 'RUNNING',
       applicationActivated: true,
+      amplifyConnectionPhase: 'connected',
     });
   });
 
@@ -167,6 +184,7 @@ describe('loadConfig', () => {
       applicationActivated: 'true',
       apiDesiredCount: '1',
       syncPipeDesiredState: 'RUNNING',
+      amplifyConnectionPhase: 'connected',
     };
     expect(() => loadConfig(new App({ context: productionContext }))).toThrow(
       /supabaseServiceRoleSecretArn must be the complete ARN for oshi-schedule-production/,
@@ -220,6 +238,17 @@ describe('loadConfig', () => {
   it('requires an explicit production acknowledgement', () => {
     const app = new App({ context: { environment: 'production' } });
     expect(() => loadConfig(app)).toThrow(/confirmProduction=DEPLOY_PRODUCTION/);
+  });
+
+  it('does not allow staging Amplify transition phases in production', () => {
+    const app = new App({
+      context: {
+        environment: 'production',
+        confirmProduction: 'DEPLOY_PRODUCTION',
+        amplifyConnectionPhase: 'detached',
+      },
+    });
+    expect(() => loadConfig(app)).toThrow(/production requires amplifyConnectionPhase=connected/);
   });
 
   it('rejects application activation bypasses outside bootstrap-only mode', () => {

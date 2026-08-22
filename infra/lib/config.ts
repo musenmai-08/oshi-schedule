@@ -2,6 +2,7 @@ import type { App } from 'aws-cdk-lib';
 
 export type EnvironmentName = 'staging' | 'production';
 export type SyncPipeDesiredState = 'STOPPED' | 'RUNNING';
+export type AmplifyConnectionPhase = 'manual' | 'domain-detached' | 'detached' | 'connected';
 
 export const applicationSecretArnDefinitions = [
   {
@@ -54,6 +55,7 @@ export interface DeploymentConfig {
   monthlyBudgetUsd: number;
   githubOwner: string;
   githubRepository: string;
+  amplifyConnectionPhase: AmplifyConnectionPhase;
   imageTag: string;
   apiCpu: number;
   apiMemoryMiB: number;
@@ -111,6 +113,19 @@ export const parseSyncPipeDesiredState = (
     throw new Error('CDK context syncPipeDesiredState must be STOPPED or RUNNING');
   }
   return parsed;
+};
+
+export const parseAmplifyConnectionPhase = (
+  value: unknown,
+  defaultValue: AmplifyConnectionPhase,
+): AmplifyConnectionPhase => {
+  const parsed = value === undefined ? defaultValue : value;
+  if (!['manual', 'domain-detached', 'detached', 'connected'].includes(String(parsed))) {
+    throw new Error(
+      'CDK context amplifyConnectionPhase must be manual, domain-detached, detached, or connected',
+    );
+  }
+  return parsed as AmplifyConnectionPhase;
 };
 
 const requiredForDeploy = (config: DeploymentConfig, name: keyof DeploymentConfig): void => {
@@ -192,6 +207,10 @@ export const loadConfig = (app: App): DeploymentConfig => {
     ),
     githubOwner: optionalString(app, 'githubOwner') ?? 'REQUIRED_GITHUB_OWNER',
     githubRepository: optionalString(app, 'githubRepository') ?? 'REQUIRED_GITHUB_REPOSITORY',
+    amplifyConnectionPhase: parseAmplifyConnectionPhase(
+      app.node.tryGetContext('amplifyConnectionPhase'),
+      environmentName === 'staging' ? 'manual' : 'connected',
+    ),
     imageTag: optionalString(app, 'imageTag') ?? 'bootstrap-required',
     apiCpu: Number(app.node.tryGetContext('apiCpu') ?? 256),
     apiMemoryMiB: Number(app.node.tryGetContext('apiMemoryMiB') ?? 512),
@@ -215,6 +234,9 @@ export const loadConfig = (app: App): DeploymentConfig => {
 
   if (!Number.isFinite(config.monthlyBudgetUsd) || config.monthlyBudgetUsd <= 0) {
     throw new Error('monthlyBudgetUsd must be a positive number');
+  }
+  if (environmentName === 'production' && config.amplifyConnectionPhase !== 'connected') {
+    throw new Error('production requires amplifyConnectionPhase=connected');
   }
   if (
     !config.bootstrapOnly &&

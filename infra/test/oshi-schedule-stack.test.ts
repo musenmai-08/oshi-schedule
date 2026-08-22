@@ -1,7 +1,12 @@
 import { App } from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import { describe, expect, it } from 'vitest';
-import { loadConfig, type DeploymentConfig, type EnvironmentName } from '../lib/config.js';
+import {
+  loadConfig,
+  type AmplifyConnectionPhase,
+  type DeploymentConfig,
+  type EnvironmentName,
+} from '../lib/config.js';
 import { OshiScheduleStack } from '../lib/oshi-schedule-stack.js';
 
 const applicationSecretArns = (environment: EnvironmentName, account = '111111111111') => ({
@@ -47,6 +52,7 @@ const fullStagingContext: Record<string, unknown> = {
   nextPublicSupabasePublishableKey: 'sb_publishable_synth_only',
   githubOwner: 'example-owner',
   githubRepository: 'oshi-schedule',
+  amplifyConnectionPhase: 'manual',
   imageTag: `sha256:${'a'.repeat(64)}`,
 };
 
@@ -63,6 +69,7 @@ const configFor = (environmentName: EnvironmentName): DeploymentConfig => ({
   monthlyBudgetUsd: environmentName === 'staging' ? 25 : 75,
   githubOwner: 'example-owner',
   githubRepository: 'oshi-schedule',
+  amplifyConnectionPhase: environmentName === 'staging' ? 'manual' : 'connected',
   imageTag: `sha256:${'a'.repeat(64)}`,
   apiCpu: 256,
   apiMemoryMiB: 512,
@@ -83,6 +90,35 @@ const render = (environmentName: EnvironmentName = 'staging'): Template => {
     config: configFor(environmentName),
   });
   return Template.fromStack(stack);
+};
+
+const renderAmplifyPhase = (amplifyConnectionPhase: AmplifyConnectionPhase): Template => {
+  const app = new App();
+  const stack = new OshiScheduleStack(app, 'test-amplify', {
+    env: { account: '111111111111', region: 'ap-northeast-1' },
+    config: {
+      ...configFor('staging'),
+      hostedZoneName: 'example.invalid',
+      webDomainName: 'staging.example.invalid',
+      amplifyConnectionPhase,
+    },
+  });
+  return Template.fromStack(stack);
+};
+
+const resourceDiff = (from: Template, to: Template) => {
+  const fromResources = from.toJSON().Resources as Record<string, unknown>;
+  const toResources = to.toJSON().Resources as Record<string, unknown>;
+  const fromIds = new Set(Object.keys(fromResources));
+  const toIds = new Set(Object.keys(toResources));
+  return {
+    added: [...toIds].filter((id) => !fromIds.has(id)).sort(),
+    removed: [...fromIds].filter((id) => !toIds.has(id)).sort(),
+    changed: [...fromIds]
+      .filter((id) => toIds.has(id))
+      .filter((id) => JSON.stringify(fromResources[id]) !== JSON.stringify(toResources[id]))
+      .sort(),
+  };
 };
 
 const renderFromCliContext = (context: Record<string, unknown>): Template => {
@@ -211,6 +247,57 @@ describe('OshiScheduleStack', () => {
         'TOKEN_ENCRYPTION_KEYS',
         'YOUTUBE_API_KEY',
       ]),
+    );
+  });
+
+  it('synthesizes the exact Amplify resources for every connection phase', () => {
+    const expectedCounts = {
+      manual: { branch: 1, domain: 1 },
+      'domain-detached': { branch: 1, domain: 0 },
+      detached: { branch: 0, domain: 0 },
+      connected: { branch: 1, domain: 1 },
+    } as const;
+
+    for (const [phase, expected] of Object.entries(expectedCounts)) {
+      const template = renderAmplifyPhase(phase as AmplifyConnectionPhase);
+      template.resourceCountIs('AWS::Amplify::App', 1);
+      template.resourceCountIs('AWS::Amplify::Branch', expected.branch);
+      template.resourceCountIs('AWS::Amplify::Domain', expected.domain);
+      const app = Object.values(template.findResources('AWS::Amplify::App'))[0];
+      expect(app?.Properties).not.toHaveProperty('Repository');
+    }
+
+    renderAmplifyPhase('manual').hasResource('AWS::Amplify::Domain', {
+      DependsOn: ['AmplifyBranch'],
+    });
+    renderAmplifyPhase('connected').hasResource('AWS::Amplify::Domain', {
+      DependsOn: ['AmplifyBranch'],
+    });
+  });
+
+  it('fixes the allowed resource diff for the staged Amplify migration', () => {
+    const manual = renderAmplifyPhase('manual');
+    const domainDetached = renderAmplifyPhase('domain-detached');
+    const detached = renderAmplifyPhase('detached');
+    const connected = renderAmplifyPhase('connected');
+
+    expect(resourceDiff(manual, domainDetached)).toEqual({
+      added: [],
+      removed: ['AmplifyDomain'],
+      changed: [],
+    });
+    expect(resourceDiff(domainDetached, detached)).toEqual({
+      added: [],
+      removed: ['AmplifyBranch'],
+      changed: [],
+    });
+    expect(resourceDiff(detached, connected)).toEqual({
+      added: ['AmplifyBranch', 'AmplifyDomain'],
+      removed: [],
+      changed: [],
+    });
+    expect(Object.keys(manual.findResources('AWS::Amplify::App'))).toEqual(
+      Object.keys(connected.findResources('AWS::Amplify::App')),
     );
   });
 

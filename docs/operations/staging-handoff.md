@@ -4,7 +4,7 @@
 
 ## 現在状態
 
-2026-08-22 10:04 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
+2026-08-22 17:01 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
 
 | 項目                   | 状態                              |
 | ---------------------- | --------------------------------- |
@@ -16,9 +16,11 @@
 | Worker Scheduler       | `DISABLED`                        |
 | Queue                  | visible `0`                       |
 | Cloud Map              | registered instances `1`          |
-| Auto sleep             | `2026-08-22 13:28 JST`までACTIVE  |
+| Auto sleep             | `2026-08-22 13:28 JST`で期限切れ  |
 
-Auto sleep後はこのsnapshotと実状態が異なるため、文書の値だけでAWS writeを判断しない。
+期限切れ時点でもAPI/RDSは稼働していた。Scheduler実行との競合を避けるため、文書の値だけでAWS writeを判断せず、write前に用途別preflightを再実行する。
+
+AmplifyはApp `oshi-schedule-staging-web`を維持し、repository未接続、manual `main` Branch 1件、`AVAILABLE`のDomainAssociation 1件という`manual` phaseである。Appの公開環境変数は設定済みで、Amplify jobはまだない。
 
 ## Task Definitionとruntime image
 
@@ -48,6 +50,31 @@ sha256:724b4edd23c7b9b71790623414895aa53f0ddc82249b164b9798d09cf756b99e
 - runtime imageはimmutable digestで固定し、Secret値・credential・DATABASE_URL・個人情報をログや文書へ出さない。
 - 利用終了時は`pnpm staging:sleep`を使い、Auto sleep Schedulerを削除・無効化しない。
 
+## Amplify GitHub接続の段階移行
+
+`infra/config/staging-deploy.json`の`amplifyConnectionPhase`をrepository-managed source of truthとする。Appは全phaseで維持し、`repository`はCloudFormation管理外の一回限りの外部設定とする。
+
+| Phase             | Amplify App | `main` Branch | DomainAssociation | repository期待値 |
+| ----------------- | ----------- | ------------- | ----------------- | ---------------- |
+| `manual`          | 維持        | あり          | あり              | 未接続           |
+| `domain-detached` | 維持        | あり          | なし              | 未接続           |
+| `detached`        | 維持        | なし          | なし              | 未接続           |
+| `connected`       | 維持        | あり          | あり              | GitHub接続済み   |
+
+移行順は次に固定する。
+
+1. `manual`で`pnpm staging:preflight -- --amplify-manual`を通す。
+2. configを`domain-detached`へ変更し、`pnpm staging:preflight -- --amplify-to-domain-detached`を通す。diffがDomain 1件の削除だけであることを確認して承認済みdeployを行う。
+3. `pnpm staging:preflight -- --amplify-domain-detached`でDomain 0件、manual Branch 1件を確認する。
+4. configを`detached`へ変更し、`pnpm staging:preflight -- --amplify-to-detached`を通す。diffがBranch 1件の削除だけであることを確認して承認済みdeployを行う。
+5. `pnpm staging:preflight -- --amplify-detached`でBranch/Domain 0件、repository未接続を確認する。
+6. repository accessを許可した短命PATを値が履歴・引数・ログへ残らない方法で一度だけ使い、`UpdateApp`でGitHub repositoryを外部設定する。成功確認後すぐPATを破棄する。
+7. `pnpm staging:preflight -- --amplify-repository-connected`でrepository接続済み、Branch/Domain 0件を確認する。
+8. configを`connected`へ変更し、`pnpm staging:preflight -- --amplify-to-connected`を通す。diffがBranch/Domain各1件の作成だけであることを確認して承認済みdeployを行う。
+9. `pnpm staging:preflight -- --amplify-connected`でDomain `AVAILABLE`まで確認してから、別途承認された初回buildを行う。
+
+DomainAssociationを削除してから`connected`で再作成し`AVAILABLE`になるまで、`https://staging.oshi-schedule.com`は停止する。Route 53のAPI用record、API Gateway、Amplify App ID、App環境変数は変更対象外である。Branch/DomainをConsoleやAmplify CLIで直接削除せず、各段階のCloudFormation rollback可能性を維持する。
+
 ## 次工程
 
-次はAmplifyのGitHub App接続と`main`初回buildである。直前に`pnpm staging:preflight`（または明示的に`pnpm staging:preflight -- --amplify`）を実行し、PASS後に別途承認された操作だけを行う。Google OAuthと同期試験は後続の独立工程とする。
+次は`manual`から`domain-detached`への最初の移行deployである。直前に`pnpm staging:preflight -- --amplify-manual`を実行し、PASS後にdiffを再確認して別途承認されたdeployだけを行う。Google OAuthと同期試験は後続の独立工程とする。

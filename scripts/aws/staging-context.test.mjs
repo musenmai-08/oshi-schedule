@@ -41,6 +41,7 @@ const repositoryContext = {
   monthlyBudgetUsd: 25,
   githubOwner: 'example-owner',
   githubRepository: 'example-repository',
+  amplifyConnectionPhase: 'manual',
   imageTag: `sha256:${'a'.repeat(64)}`,
   apiCpu: 256,
   apiMemoryMiB: 512,
@@ -176,6 +177,7 @@ describe('staging common deploy context', () => {
     ['digest', { imageTag: 'latest' }, /imageTag/],
     ['budget', { monthlyBudgetUsd: 0 }, /monthlyBudgetUsd/],
     ['worker schedule', { workerScheduleEnabled: true }, /workerScheduleEnabled/],
+    ['Amplify connection phase', { amplifyConnectionPhase: 'invalid' }, /amplifyConnectionPhase/],
     [
       'partial secret ARN',
       {

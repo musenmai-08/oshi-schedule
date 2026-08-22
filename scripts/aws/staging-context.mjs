@@ -27,6 +27,7 @@ export const repositoryContextKeys = Object.freeze([
   'monthlyBudgetUsd',
   'githubOwner',
   'githubRepository',
+  'amplifyConnectionPhase',
   'imageTag',
   'apiCpu',
   'apiMemoryMiB',
@@ -165,6 +166,10 @@ export const validateRepositoryContext = (context) => {
     fail('githubOwner is malformed');
   if (!/^[A-Za-z0-9_.-]+$/.test(requireString(context, 'githubRepository')))
     fail('githubRepository is malformed');
+  if (
+    !['manual', 'domain-detached', 'detached', 'connected'].includes(context.amplifyConnectionPhase)
+  )
+    fail('amplifyConnectionPhase must be manual, domain-detached, detached, or connected');
   return context;
 };
 

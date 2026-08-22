@@ -42,6 +42,20 @@ class FakeAws {
     deadline = '2099-01-01T00:00:00.000Z',
     applicationActivated = true,
     pipe = 'RUNNING',
+    amplifyRepository = '',
+    amplifyBranches = [{ branchName: 'main', enableAutoBuild: false, totalNumberOfJobs: '0' }],
+    amplifyDomains = [
+      {
+        domainName: 'oshi-schedule.com',
+        domainStatus: 'AVAILABLE',
+        subDomains: [
+          {
+            subDomainSetting: { prefix: 'staging', branchName: 'main' },
+            verified: true,
+          },
+        ],
+      },
+    ],
     failOn,
   } = {}) {
     this.deployed = deployed;
@@ -53,6 +67,9 @@ class FakeAws {
     this.deadline = deadline;
     this.applicationActivated = applicationActivated;
     this.pipe = pipe;
+    this.amplifyRepository = amplifyRepository;
+    this.amplifyBranches = amplifyBranches;
+    this.amplifyDomains = amplifyDomains;
     this.failOn = failOn;
     this.calls = [];
   }
@@ -148,7 +165,11 @@ class FakeAws {
       case 'pipes describe-pipe':
         return { DesiredState: this.pipe, CurrentState: this.pipe };
       case 'amplify get-app':
-        return { app: { appId: 'app-id' } };
+        return { app: { appId: 'app-id', repository: this.amplifyRepository } };
+      case 'amplify list-branches':
+        return { branches: this.amplifyBranches };
+      case 'amplify list-domain-associations':
+        return { domainAssociations: this.amplifyDomains };
       default:
         throw new Error(`Unexpected JSON command: ${args.join(' ')}`);
     }
@@ -207,6 +228,39 @@ describe('staging status', () => {
 
   it('reports RUNNING', async () => {
     assert.equal((await collectStatus(new FakeAws())).overall, 'RUNNING');
+  });
+
+  it('reports the manual Amplify connection checkpoint without exposing repository values', async () => {
+    const status = await collectStatus(new FakeAws());
+    assert.deepEqual(status.amplify, {
+      state: 'DEPLOYED',
+      repositoryState: 'DISCONNECTED',
+      branchCount: 1,
+      mainBranch: { state: 'DEPLOYED', enableAutoBuild: false, totalNumberOfJobs: 0 },
+      domainCount: 1,
+      domain: {
+        state: 'AVAILABLE',
+        updateState: undefined,
+        stagingSubdomainVerified: true,
+      },
+    });
+    assert.doesNotMatch(formatStatus(status), /github\.com/);
+  });
+
+  it('reports detached and repository-connected Amplify checkpoints', async () => {
+    const detached = await collectStatus(new FakeAws({ amplifyBranches: [], amplifyDomains: [] }));
+    assert.equal(detached.amplify.repositoryState, 'DISCONNECTED');
+    assert.equal(detached.amplify.branchCount, 0);
+    assert.equal(detached.amplify.domainCount, 0);
+
+    const connected = await collectStatus(
+      new FakeAws({
+        amplifyRepository: STAGING.repository,
+        amplifyBranches: [],
+        amplifyDomains: [],
+      }),
+    );
+    assert.equal(connected.amplify.repositoryState, 'CONNECTED');
   });
 
   it('reports SLEEPING', async () => {

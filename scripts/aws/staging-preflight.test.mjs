@@ -4,6 +4,7 @@ import {
   evaluatePreflight,
   formatPreflight,
   parsePreflightArguments,
+  resolvePreflightPurpose,
 } from './staging-preflight.mjs';
 
 const runningStatus = () => ({
@@ -20,20 +21,48 @@ const runningStatus = () => ({
   },
   scheduler: { state: 'DISABLED' },
   autoSleep: { state: 'ACTIVE' },
+  amplify: {
+    state: 'DEPLOYED',
+    repositoryState: 'DISCONNECTED',
+    branchCount: 1,
+    mainBranch: { state: 'DEPLOYED', enableAutoBuild: false },
+    domainCount: 1,
+    domain: { state: 'AVAILABLE', stagingSubdomainVerified: true },
+  },
 });
 
 const inputs = (status = runningStatus()) => ({
-  purpose: 'amplify',
+  purpose: 'amplify-manual',
   identity: { Account: '741448960817' },
   region: 'ap-northeast-1',
   gitClean: true,
   status,
+  configuredAmplifyPhase: 'manual',
 });
 
 describe('staging preflight arguments', () => {
   it('defaults to the next Amplify handoff', () => {
-    assert.equal(parsePreflightArguments([]), 'amplify');
-    assert.equal(parsePreflightArguments(['--amplify']), 'amplify');
+    assert.equal(parsePreflightArguments([]), 'amplify-configured');
+    assert.equal(parsePreflightArguments(['--amplify']), 'amplify-configured');
+    assert.equal(
+      resolvePreflightPurpose('amplify-configured', 'domain-detached'),
+      'amplify-domain-detached',
+    );
+  });
+
+  it('supports every explicit Amplify migration checkpoint', () => {
+    for (const phase of [
+      'manual',
+      'to-domain-detached',
+      'domain-detached',
+      'to-detached',
+      'detached',
+      'repository-connected',
+      'to-connected',
+      'connected',
+    ]) {
+      assert.equal(parsePreflightArguments([`--amplify-${phase}`]), `amplify-${phase}`);
+    }
   });
 
   it('supports the Phase 2 preparation profile', () => {
@@ -49,12 +78,74 @@ describe('staging preflight arguments', () => {
 describe('staging preflight checks', () => {
   it('passes the current Amplify-ready contract', () => {
     const checks = evaluatePreflight(inputs());
-    assert.equal(checks.length, 11);
+    assert.equal(checks.length, 16);
     assert.equal(
       checks.every(({ ok }) => ok),
       true,
     );
-    assert.match(formatPreflight({ purpose: 'amplify', checks, ok: true }), /Preflight passed/);
+    assert.match(
+      formatPreflight({ purpose: 'amplify-manual', checks, ok: true }),
+      /Preflight passed/,
+    );
+  });
+
+  it('passes every staged Amplify migration contract', () => {
+    const cases = [
+      ['amplify-manual', 'manual', 'DISCONNECTED', true, true],
+      ['amplify-to-domain-detached', 'domain-detached', 'DISCONNECTED', true, true],
+      ['amplify-domain-detached', 'domain-detached', 'DISCONNECTED', true, false],
+      ['amplify-to-detached', 'detached', 'DISCONNECTED', true, false],
+      ['amplify-detached', 'detached', 'DISCONNECTED', false, false],
+      ['amplify-repository-connected', 'detached', 'CONNECTED', false, false],
+      ['amplify-to-connected', 'connected', 'CONNECTED', false, false],
+      ['amplify-connected', 'connected', 'CONNECTED', true, true],
+    ];
+    for (const [
+      purpose,
+      configuredAmplifyPhase,
+      repositoryState,
+      branchPresent,
+      domainPresent,
+    ] of cases) {
+      const status = runningStatus();
+      status.amplify.repositoryState = repositoryState;
+      status.amplify.branchCount = branchPresent ? 1 : 0;
+      status.amplify.mainBranch = branchPresent
+        ? { state: 'DEPLOYED', enableAutoBuild: false }
+        : { state: 'NOT_DEPLOYED' };
+      status.amplify.domainCount = domainPresent ? 1 : 0;
+      status.amplify.domain = domainPresent
+        ? { state: 'AVAILABLE', stagingSubdomainVerified: true }
+        : { state: 'NOT_DEPLOYED', stagingSubdomainVerified: false };
+      const checks = evaluatePreflight({
+        ...inputs(status),
+        purpose,
+        configuredAmplifyPhase,
+      });
+      assert.equal(
+        checks.every(({ ok }) => ok),
+        true,
+        purpose,
+      );
+    }
+  });
+
+  it('rejects a repository state or configured phase from another checkpoint', () => {
+    const value = inputs();
+    value.status.amplify.repositoryState = 'CONNECTED';
+    value.configuredAmplifyPhase = 'detached';
+    const checks = evaluatePreflight(value);
+    assert.equal(checks.find(({ name }) => name === 'Configured Amplify phase')?.ok, false);
+    assert.equal(checks.find(({ name }) => name === 'Amplify repository')?.ok, false);
+  });
+
+  it('rejects skipping directly from manual to detached', () => {
+    const checks = evaluatePreflight({
+      ...inputs(),
+      purpose: 'amplify-to-detached',
+      configuredAmplifyPhase: 'detached',
+    });
+    assert.equal(checks.find(({ name }) => name === 'Amplify domains/status/verified')?.ok, false);
   });
 
   it('passes the safe Phase 1 contract before Phase 2', () => {

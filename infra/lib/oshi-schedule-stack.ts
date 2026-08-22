@@ -1059,13 +1059,6 @@ export class OshiScheduleStack extends Stack {
         },
       ],
     });
-    const amplifyBranch = new amplify.CfnBranch(this, 'AmplifyBranch', {
-      appId: amplifyApp.attrAppId,
-      branchName: deploymentBranch,
-      stage: isProduction ? 'PRODUCTION' : 'BETA',
-      enableAutoBuild: false,
-      enablePullRequestPreview: false,
-    });
     githubRole.addToPolicy(
       new iam.PolicyStatement({
         actions: ['amplify:GetApp', 'amplify:GetBranch', 'amplify:GetJob', 'amplify:StartJob'],
@@ -1082,15 +1075,27 @@ export class OshiScheduleStack extends Stack {
         ],
       }),
     );
-    if (config.webDomainName && config.hostedZoneName) {
-      const prefixPart = config.webDomainName.endsWith(`.${config.hostedZoneName}`)
-        ? config.webDomainName.slice(0, -(config.hostedZoneName.length + 1))
-        : config.webDomainName;
-      new amplify.CfnDomain(this, 'AmplifyDomain', {
+    const createAmplifyBranch = config.amplifyConnectionPhase !== 'detached';
+    const createAmplifyDomain = ['manual', 'connected'].includes(config.amplifyConnectionPhase);
+    if (createAmplifyBranch) {
+      const amplifyBranch = new amplify.CfnBranch(this, 'AmplifyBranch', {
         appId: amplifyApp.attrAppId,
-        domainName: config.hostedZoneName,
-        subDomainSettings: [{ branchName: amplifyBranch.branchName, prefix: prefixPart }],
+        branchName: deploymentBranch,
+        stage: isProduction ? 'PRODUCTION' : 'BETA',
+        enableAutoBuild: false,
+        enablePullRequestPreview: false,
       });
+      if (createAmplifyDomain && config.webDomainName && config.hostedZoneName) {
+        const prefixPart = config.webDomainName.endsWith(`.${config.hostedZoneName}`)
+          ? config.webDomainName.slice(0, -(config.hostedZoneName.length + 1))
+          : config.webDomainName;
+        const amplifyDomain = new amplify.CfnDomain(this, 'AmplifyDomain', {
+          appId: amplifyApp.attrAppId,
+          domainName: config.hostedZoneName,
+          subDomainSettings: [{ branchName: deploymentBranch, prefix: prefixPart }],
+        });
+        amplifyDomain.addResourceDependency(amplifyBranch);
+      }
     }
 
     new CfnOutput(this, 'EcrRepositoryUri', { value: repository.repositoryUri });
@@ -1126,7 +1131,7 @@ export class OshiScheduleStack extends Stack {
       value: migrationTaskDefinition.taskDefinitionArn,
     });
     new CfnOutput(this, 'AmplifyAppId', { value: amplifyApp.attrAppId });
-    new CfnOutput(this, 'AmplifyBranchName', { value: amplifyBranch.branchName });
+    new CfnOutput(this, 'AmplifyBranchName', { value: deploymentBranch });
     new CfnOutput(this, 'GitHubActionsRoleArn', { value: githubRole.roleArn });
   }
 }

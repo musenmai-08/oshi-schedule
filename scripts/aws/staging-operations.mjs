@@ -24,6 +24,10 @@ export const STAGING = Object.freeze({
   profile: 'oshi-schedule',
   environment: 'staging',
   stackName: 'oshi-schedule-staging',
+  repository: 'https://github.com/musenmai-08/oshi-schedule',
+  webDomainName: 'oshi-schedule.com',
+  webSubdomainPrefix: 'staging',
+  amplifyBranchName: 'main',
 });
 
 const waitDefaults = Object.freeze({
@@ -351,8 +355,49 @@ export const collectStatus = async (aws, { now = new Date() } = {}) => {
 
   const amplify = outputs.AmplifyAppId
     ? await probe(async () => {
-        const response = await aws.json(['amplify', 'get-app', '--app-id', outputs.AmplifyAppId]);
-        return { state: response.app ? 'DEPLOYED' : 'NOT_DEPLOYED' };
+        const [appResponse, branchResponse, domainResponse] = await Promise.all([
+          aws.json(['amplify', 'get-app', '--app-id', outputs.AmplifyAppId]),
+          aws.json(['amplify', 'list-branches', '--app-id', outputs.AmplifyAppId]),
+          aws.json(['amplify', 'list-domain-associations', '--app-id', outputs.AmplifyAppId]),
+        ]);
+        if (!appResponse.app) return { state: 'NOT_DEPLOYED' };
+        const branches = branchResponse.branches ?? [];
+        const domains = domainResponse.domainAssociations ?? [];
+        const mainBranch = branches.find(
+          ({ branchName }) => branchName === STAGING.amplifyBranchName,
+        );
+        const domain = domains.find(({ domainName }) => domainName === STAGING.webDomainName);
+        const stagingSubdomain = domain?.subDomains?.find(
+          ({ subDomainSetting }) =>
+            subDomainSetting?.prefix === STAGING.webSubdomainPrefix &&
+            subDomainSetting?.branchName === STAGING.amplifyBranchName,
+        );
+        const repository = appResponse.app.repository ?? '';
+        return {
+          state: 'DEPLOYED',
+          repositoryState:
+            repository === ''
+              ? 'DISCONNECTED'
+              : repository === STAGING.repository
+                ? 'CONNECTED'
+                : 'UNEXPECTED',
+          branchCount: branches.length,
+          mainBranch: mainBranch
+            ? {
+                state: 'DEPLOYED',
+                enableAutoBuild: mainBranch.enableAutoBuild,
+                totalNumberOfJobs: Number(mainBranch.totalNumberOfJobs ?? 0),
+              }
+            : { state: 'NOT_DEPLOYED' },
+          domainCount: domains.length,
+          domain: domain
+            ? {
+                state: domain.domainStatus ?? 'UNKNOWN',
+                updateState: domain.updateStatus,
+                stagingSubdomainVerified: stagingSubdomain?.verified === true,
+              }
+            : { state: 'NOT_DEPLOYED', stagingSubdomainVerified: false },
+        };
       })
     : { state: 'NOT_DEPLOYED' };
 
@@ -494,6 +539,11 @@ export const formatStatus = (status) => {
   if (status.syncJobs.queuedMessages !== undefined)
     lines.push(`  queuedMessages: ${status.syncJobs.queuedMessages}`);
   lines.push(`Amplify: ${status.amplify.state}`);
+  if (status.amplify.repositoryState) lines.push(`  repository: ${status.amplify.repositoryState}`);
+  if (status.amplify.branchCount !== undefined)
+    lines.push(`  branches: ${status.amplify.branchCount}`);
+  if (status.amplify.domainCount !== undefined)
+    lines.push(`  domains: ${status.amplify.domainCount}`);
   if (status.apiUrl) lines.push(`API URL: ${status.apiUrl}`);
   if (status.webUrl) lines.push(`Web URL: ${status.webUrl}`);
   lines.push('Auto sleep:');
