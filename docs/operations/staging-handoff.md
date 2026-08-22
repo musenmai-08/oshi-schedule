@@ -4,19 +4,19 @@
 
 ## 現在状態
 
-2026-08-22 22:16 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
+2026-08-22 22:49 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
 
-| 項目                   | 状態                               |
-| ---------------------- | ---------------------------------- |
-| CloudFormation         | `UPDATE_COMPLETE`                  |
-| Application activation | `READY`（`true`）                  |
-| API                    | `desired/running/pending = 1/1/0`  |
-| RDS                    | `AVAILABLE`                        |
-| Pipe                   | `RUNNING`                          |
-| Worker Scheduler       | `DISABLED`                         |
-| Queue                  | visible `0`                        |
-| Cloud Map              | registered instances `1`           |
-| Auto sleep             | deadline expired（延長していない） |
+| 項目                   | 状態                              |
+| ---------------------- | --------------------------------- |
+| CloudFormation         | `UPDATE_COMPLETE`                 |
+| Application activation | `READY`（`true`）                 |
+| API                    | `desired/running/pending = 0/0/0` |
+| RDS                    | `STOPPED`                         |
+| Pipe                   | `RUNNING`                         |
+| Worker Scheduler       | `DISABLED`                        |
+| Queue                  | visible `0`                       |
+| Cloud Map              | registered instances `0`          |
+| Auto sleep             | deadline expired / sleep完了      |
 
 Scheduler実行との競合を避けるため、文書の値だけでAWS writeを判断せず、write前に用途別preflightを再実行する。
 
@@ -40,10 +40,11 @@ sha256:724b4edd23c7b9b71790623414895aa53f0ddc82249b164b9798d09cf756b99e
 
 - Secret ARN: API/Workerの4 external Secretを6文字suffix付きcomplete ARNへ統一し、Execution Roleの`secretsmanager:GetSecretValue` Resourceと4/4一致させた。以前の`AccessDenied`は解消済み。
 - Prisma Client: production runtime image内で正式schemaからClientを生成するよう修正した。CIのruntime contractでgenerated/importable/constructable、API/Worker/Migration smoke、CA permissionを検証済み。
+- Auto sleep: AWS SDK v3のECS inputを`cluster`/`services`および`cluster`/`service`/`desiredCount`へ修正したLambda Code assetを2026-08-22 22:26 JSTにdeployした。CloudFormationは`UPDATE_COMPLETE`、deploy後のCDK diffは0である。22:39 JSTの既存Scheduler実行は`AUTO_SLEEP_TRIGGERED`で完了し、API 0/0/0の後にRDSが`STOPPED`へ遷移した。今回実行の`AUTO_SLEEP_PARTIAL`、`AUTO_SLEEP_FAILED`、Lambda Errorsはいずれも0である。
 
 ## 未解消障害
 
-- Auto sleep: wake deadlineは期限切れだが、2026-08-22 21:39 JST以降のLambda実行が`ECS_API`で`AUTO_SLEEP_PARTIAL`となり、APIは1/1、RDSは`AVAILABLE`のまま残っている。CloudTrailでは`DescribeServices`が`InvalidParameterException: Services cannot be empty`で3回失敗し、`UpdateService`には到達していない。原因はAWS SDK v3のECS inputへ`Cluster`/`Services`を渡していたことで、正しい`cluster`/`services`としてserializeされずservice一覧が空になったためである。`UpdateService`側も`cluster`/`service`/`desiredCount`へ修正し、回帰テストとCDK synthに成功した。AWS未deployであり、read-only diffはauto-sleep Lambda Code asset更新1件だけである。
+- Amplify job `2`は旧BuildSpecのcwd累積により失敗した。恒久修正版BuildSpecはAWSへ反映済みだが、修正後のAmplify buildは未実行である。
 
 ## 恒久的なAWS安全ルール
 
@@ -84,4 +85,4 @@ DomainAssociationを削除してから`connected`で再作成し`AVAILABLE`に�
 
 ## 次工程
 
-job `2`のcwd障害は、各phase冒頭で`CODEBUILD_SRC_DIR`を検証してから同じ絶対checkout rootへ移動するよう修正した。CDKはrepositoryの`amplify.yml`を直接読み込み、BuildSpecの二重定義を廃止した。cwd累積を拒否する回帰テストを追加し、Amplify相当のclean copyで同一shellのpreBuild→build、8 workspaceのinstall、`shared`→`web`のbuildと成果物生成まで成功した。BuildSpec-only CDK deployも完了した。次は別途承認されたCDK deployでauto-sleep Lambda Code assetだけを更新し、Scheduler→API desired 0→RDS stopの順で次回実行が成功することを確認する。deadline更新は不要である。実sleep復旧後に、別途承認されたAmplify buildを1回だけ実行する。Google OAuthと同期試験には進まない。
+job `2`のcwd障害は、各phase冒頭で`CODEBUILD_SRC_DIR`を検証してから同じ絶対checkout rootへ移動するよう修正した。CDKはrepositoryの`amplify.yml`を直接読み込み、BuildSpecの二重定義を廃止した。cwd累積を拒否する回帰テストを追加し、Amplify相当のclean copyで同一shellのpreBuild→build、8 workspaceのinstall、`shared`→`web`のbuildと成果物生成まで成功した。BuildSpec-only CDK deployとauto-sleep実AWS検証は完了した。次はsleep状態を維持したまま、別途明示承認を得てAmplify buildを1回だけ再実行する。Google OAuthと同期試験には進まない。
