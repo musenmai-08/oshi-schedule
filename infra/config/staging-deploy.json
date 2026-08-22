@@ -16,7 +16,7 @@
   "monthlyBudgetUsd": 25,
   "githubOwner": "musenmai-08",
   "githubRepository": "oshi-schedule",
-  "amplifyConnectionPhase": "domain-detached",
+  "amplifyConnectionPhase": "detached",
   "imageTag": "sha256:724b4edd23c7b9b71790623414895aa53f0ddc82249b164b9798d09cf756b99e",
   "apiCpu": 256,
   "apiMemoryMiB": 512,
