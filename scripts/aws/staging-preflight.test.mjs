@@ -60,6 +60,7 @@ describe('staging preflight arguments', () => {
       'repository-connected',
       'to-connected',
       'connected',
+      'control-plane',
     ]) {
       assert.equal(parsePreflightArguments([`--amplify-${phase}`]), `amplify-${phase}`);
     }
@@ -126,6 +127,42 @@ describe('staging preflight checks', () => {
         checks.every(({ ok }) => ok),
         true,
         purpose,
+      );
+    }
+  });
+
+  it('checks only the Amplify control plane when runtime is sleeping and the deadline expired', () => {
+    const status = runningStatus();
+    status.api = { desiredCount: 0, runningCount: 0, pendingCount: 0 };
+    status.rds.state = 'stopped';
+    status.syncJobs.desiredState = 'STOPPED';
+    status.syncJobs.state = 'STOPPED';
+    status.autoSleep.state = 'EXPIRED';
+    status.amplify.repositoryState = 'CONNECTED';
+    const checks = evaluatePreflight({
+      ...inputs(status),
+      purpose: 'amplify-control-plane',
+      configuredAmplifyPhase: 'connected',
+    });
+
+    assert.equal(
+      checks.every(({ ok }) => ok),
+      true,
+    );
+    for (const omitted of [
+      'Application activation',
+      'API desired/running/pending',
+      'RDS',
+      'Pipe desired state',
+      'Pipe current state',
+      'Worker Scheduler',
+      'Queue visible/in-flight/delayed',
+      'Wake deadline',
+    ]) {
+      assert.equal(
+        checks.some(({ name }) => name === omitted),
+        false,
+        omitted,
       );
     }
   });

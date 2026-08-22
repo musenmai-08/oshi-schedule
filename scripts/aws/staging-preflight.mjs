@@ -33,6 +33,15 @@ const profiles = Object.freeze({
   'amplify-repository-connected': amplifyProfile('detached', 'CONNECTED', false, false),
   'amplify-to-connected': amplifyProfile('connected', 'CONNECTED', false, false),
   'amplify-connected': amplifyProfile('connected', 'CONNECTED', true, true),
+  'amplify-control-plane': Object.freeze({
+    controlPlaneOnly: true,
+    configuredPhase: 'connected',
+    amplify: Object.freeze({
+      repositoryState: 'CONNECTED',
+      branchPresent: true,
+      domainPresent: true,
+    }),
+  }),
   phase2: Object.freeze({
     applicationActivation: 'NOT_READY',
     api: Object.freeze({ desiredCount: 0, runningCount: 0, pendingCount: 0 }),
@@ -50,6 +59,7 @@ const amplifyArguments = Object.freeze([
   'repository-connected',
   'to-connected',
   'connected',
+  'control-plane',
 ]);
 
 export const resolvePreflightPurpose = (purpose, configuredAmplifyPhase) => {
@@ -75,7 +85,8 @@ export const parsePreflightArguments = (args = []) => {
   throw new Error(
     'Usage: staging:preflight [--amplify|--amplify-manual|--amplify-to-domain-detached|' +
       '--amplify-domain-detached|--amplify-to-detached|--amplify-detached|' +
-      '--amplify-repository-connected|--amplify-to-connected|--amplify-connected|--phase2]',
+      '--amplify-repository-connected|--amplify-to-connected|--amplify-connected|' +
+      '--amplify-control-plane|--phase2]',
   );
 };
 
@@ -104,7 +115,9 @@ export const evaluatePreflight = ({
   const pipeState = queue.state;
   const pipeDesiredState = queue.desiredState;
   const queueState = `${queue.queuedMessages ?? 'unknown'}/${queue.inFlightMessages ?? 'unknown'}/${queue.delayedMessages ?? 'unknown'}`;
-  const expectedApi = `${expected.api.desiredCount}/${expected.api.runningCount}/${expected.api.pendingCount}`;
+  const expectedApi = expected.api
+    ? `${expected.api.desiredCount}/${expected.api.runningCount}/${expected.api.pendingCount}`
+    : 'not checked';
   const actualApi = `${api.desiredCount ?? 'unknown'}/${api.runningCount ?? 'unknown'}/${api.pendingCount ?? 'unknown'}`;
 
   const checks = [
@@ -120,15 +133,19 @@ export const evaluatePreflight = ({
       'terminal',
       terminalStackStatuses.has(status.stack?.state),
     ),
-    check('Application activation', activation ?? 'unknown', expected.applicationActivation),
-    check('API desired/running/pending', actualApi, expectedApi),
-    check('RDS', status.rds?.state ?? 'unknown', expected.rds),
-    check('Pipe desired state', pipeDesiredState ?? 'unknown', expected.pipe),
-    check('Pipe current state', pipeState ?? 'unknown', expected.pipe),
-    check('Worker Scheduler', status.scheduler?.state ?? 'unknown', 'DISABLED'),
-    check('Queue visible/in-flight/delayed', queueState, '0/0/0'),
-    check('Wake deadline', deadline ?? 'unknown', 'ACTIVE'),
   ];
+  if (!expected.controlPlaneOnly) {
+    checks.push(
+      check('Application activation', activation ?? 'unknown', expected.applicationActivation),
+      check('API desired/running/pending', actualApi, expectedApi),
+      check('RDS', status.rds?.state ?? 'unknown', expected.rds),
+      check('Pipe desired state', pipeDesiredState ?? 'unknown', expected.pipe),
+      check('Pipe current state', pipeState ?? 'unknown', expected.pipe),
+      check('Worker Scheduler', status.scheduler?.state ?? 'unknown', 'DISABLED'),
+      check('Queue visible/in-flight/delayed', queueState, '0/0/0'),
+      check('Wake deadline', deadline ?? 'unknown', 'ACTIVE'),
+    );
+  }
   if (expected.amplify) {
     const amplify = status.amplify ?? {};
     const branchActual = `${amplify.branchCount ?? 'unknown'}/${amplify.mainBranch?.state ?? 'unknown'}/${
