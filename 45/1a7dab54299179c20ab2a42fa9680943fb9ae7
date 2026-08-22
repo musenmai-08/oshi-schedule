@@ -1,0 +1,35 @@
+scripts/aws/staging-preflight.test.mjs
+  s_3a50bad78ea1cd::t_c5d6cc9b2556ec 53-56,67-70,90-93
+  s_3a50bad78ea1cd::t_7d3dd471c49ea2 1-52,57-66,71-74,76-80,82-89,94-96
+  s_3a50bad78ea1cd::t_ebbba48af983c6 75,81
+scripts/aws/staging-operations.mjs
+  s_3a50bad78ea1cd::t_7d3dd471c49ea2 337-338,344,347
+  s_3a50bad78ea1cd::t_c5d6cc9b2556ec 346
+package.json
+  s_3a50bad78ea1cd::t_7d3dd471c49ea2 26
+scripts/aws/staging-operations.test.mjs
+  s_3a50bad78ea1cd::t_7d3dd471c49ea2 141-147,149
+scripts/aws/staging-preflight.mjs
+  s_3a50bad78ea1cd::t_7d3dd471c49ea2 1-136
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_61fe37a75ab095 1-8,20-24,30-53
+  s_3a50bad78ea1cd::t_c5d6cc9b2556ec 9-19,25-29
+AGENTS.md
+  s_3a50bad78ea1cd::t_61fe37a75ab095 1-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "451a7dab54299179c20ab2a42fa9680943fb9ae7",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
