@@ -4,7 +4,7 @@
 
 ## 現在状態
 
-2026-08-22 19:48 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
+2026-08-22 20:02 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
 
 | 項目                   | 状態                              |
 | ---------------------- | --------------------------------- |
@@ -20,7 +20,7 @@
 
 Scheduler実行との競合を避けるため、文書の値だけでAWS writeを判断せず、write前に用途別preflightを再実行する。
 
-AmplifyはApp `oshi-schedule-staging-web`を同じApp IDで維持し、GitHub repository接続済み、`main` Branch 1件、`AVAILABLE`のDomainAssociation 1件という`connected` phaseである。`staging.oshi-schedule.com`はverifiedで`main`に関連付いている。初回job `1`はBUILDで失敗し、Deploy/Verifyは実行されていない。URLは2xxだがAmplifyの`Welcome`プレースホルダーで、アプリは未deployである。
+AmplifyはApp `oshi-schedule-staging-web`を同じApp IDで維持し、GitHub repository接続済み、`main` Branch 1件、`AVAILABLE`のDomainAssociation 1件という`connected` phaseである。`staging.oshi-schedule.com`はverifiedで`main`に関連付いている。初回job `1`はBUILDで失敗し、Deploy/Verifyは実行されていない。URLは2xxだがAmplifyの`Welcome`プレースホルダーで、アプリは未deployである。恒久修正済みのTurborepo方式BuildSpecはCloudFormationで反映済みで、deploy後のCDK diffは0である。BuildSpec更新ではAmplify jobを開始していない。
 
 ## Task Definitionとruntime image
 
@@ -79,4 +79,4 @@ DomainAssociationを削除してから`connected`で再作成し`AVAILABLE`に�
 
 ## 次工程
 
-buildSpecの恒久修正はrepositoryへ実装済みである。workspace rootの`pnpm exec turbo build --filter=@oshi-schedule/web`を使い、既存の`build.dependsOn=["^build"]`で依存graphを先にbuildする。Amplify相当のclean環境で旧commandの失敗と新commandの成功を確認し、CDK diffはAmplify AppのBuildSpec更新だけだった。次は別途承認されたCDK deployでbuildSpecを反映する。反映後の新しいbuildも別途明示承認されるまでjobを再実行しない。Google OAuthと同期試験はさらに後続の独立工程とする。
+buildSpecの恒久修正はrepositoryとAWSへ反映済みである。`pnpm --workspace-root exec turbo build --filter=@oshi-schedule/web`を使い、既存の`build.dependsOn=["^build"]`で依存graphを先にbuildする。Amplify相当のclean環境で旧commandの失敗と新commandの成功を確認し、CDK deployはAmplify AppのBuildSpec更新だけ、deploy後diffは0だった。次は別途明示承認されたAmplify buildの再実行と疎通確認である。それまではjobを再実行しない。Google OAuthと同期試験はさらに後続の独立工程とする。
