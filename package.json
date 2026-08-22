@@ -23,6 +23,7 @@
     "aws:cdk": "bash scripts/aws/with-project-node.sh pnpm --filter @oshi-schedule/infra cdk",
     "smoke:staging": "bash scripts/smoke-staging.sh",
     "staging:status": "bash scripts/aws/with-project-node.sh node scripts/aws/staging-operations.mjs status",
+    "staging:preflight": "bash scripts/aws/with-project-node.sh node scripts/aws/staging-preflight.mjs",
     "staging:wake": "bash scripts/aws/with-project-node.sh node scripts/aws/staging-operations.mjs wake",
     "staging:sleep": "bash scripts/aws/with-project-node.sh node scripts/aws/staging-operations.mjs sleep",
     "staging:context:show": "bash scripts/aws/with-project-node.sh node scripts/aws/staging-context.mjs show",

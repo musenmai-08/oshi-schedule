@@ -334,12 +334,17 @@ export const collectStatus = async (aws, { now = new Date() } = {}) => {
               outputs.SyncJobQueueUrl,
               '--attribute-names',
               'ApproximateNumberOfMessages',
+              'ApproximateNumberOfMessagesNotVisible',
+              'ApproximateNumberOfMessagesDelayed',
             ]),
             aws.json(['pipes', 'describe-pipe', '--name', outputs.SyncJobPipeName]),
           ]);
           return {
             state: pipe.CurrentState ?? 'NOT_DEPLOYED',
+            desiredState: pipe.DesiredState ?? 'NOT_DEPLOYED',
             queuedMessages: Number(queue.Attributes?.ApproximateNumberOfMessages ?? 0),
+            inFlightMessages: Number(queue.Attributes?.ApproximateNumberOfMessagesNotVisible ?? 0),
+            delayedMessages: Number(queue.Attributes?.ApproximateNumberOfMessagesDelayed ?? 0),
           };
         })
       : { state: 'NOT_DEPLOYED' };

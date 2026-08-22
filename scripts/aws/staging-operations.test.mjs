@@ -138,9 +138,15 @@ class FakeAws {
       case 'servicediscovery list-instances':
         return { Instances: this.api.desiredCount === 1 ? [{ Id: 'task' }] : [] };
       case 'sqs get-queue-attributes':
-        return { Attributes: { ApproximateNumberOfMessages: '0' } };
+        return {
+          Attributes: {
+            ApproximateNumberOfMessages: '0',
+            ApproximateNumberOfMessagesNotVisible: '0',
+            ApproximateNumberOfMessagesDelayed: '0',
+          },
+        };
       case 'pipes describe-pipe':
-        return { CurrentState: this.pipe };
+        return { DesiredState: this.pipe, CurrentState: this.pipe };
       case 'amplify get-app':
         return { app: { appId: 'app-id' } };
       default:
