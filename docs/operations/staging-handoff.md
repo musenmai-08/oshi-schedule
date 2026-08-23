@@ -4,19 +4,19 @@
 
 ## 現在状態
 
-2026-08-23 21:12 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
+2026-08-23 22:14 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
 
 | 項目                   | 状態                              |
 | ---------------------- | --------------------------------- |
 | CloudFormation         | `UPDATE_COMPLETE`                 |
 | Application activation | `READY`（`true`）                 |
-| API                    | `desired/running/pending = 0/0/0` |
-| RDS                    | `STOPPED`                         |
+| API                    | `desired/running/pending = 1/1/0` |
+| RDS                    | `AVAILABLE`                       |
 | Pipe                   | `RUNNING`                         |
 | Worker Scheduler       | `DISABLED`                        |
 | Queue                  | visible `0`                       |
-| Cloud Map              | registered instances `0`          |
-| Auto sleep             | deadline `2026-08-23 20:18 JST`   |
+| Cloud Map              | registered instances `1`          |
+| Auto sleep             | deadline `2026-08-23 23:04 JST`   |
 
 Scheduler実行との競合を避けるため、文書の値だけでAWS writeを判断せず、write前に用途別preflightを再実行する。
 
@@ -24,7 +24,7 @@ AmplifyはApp `oshi-schedule-staging-web`を同じApp IDで維持し、GitHub re
 
 2026-08-23 18:18 JSTに`pnpm staging:wake --hours 2`でwakeした。RDS `AVAILABLE`、API 1/1/0となり、外部`/health`と`/ready`はいずれもHTTP 200で期待する`oshi-schedule-api`応答を返した。wake後preflightは全項目PASSである。
 
-21:12 JST時点でAPI 0/0/0、RDS `STOPPED`である。今回のAmplify jobではwake・deadline延長を行わず、このsleep状態を維持した。
+22:04 JSTに`pnpm staging:wake --hours 1`を1回実行した。22:14 JST時点でRDS `AVAILABLE`、API 1/1/0、Pipe `RUNNING`、Worker Scheduler `DISABLED`、queue 0/0/0で、post-wake preflightは全項目PASSした。外部`/health`と`/ready`はいずれもHTTP 200でservice identityは`oshi-schedule-api`である。wake deadlineは23:04 JSTである。
 
 ## Task Definitionとruntime image
 
