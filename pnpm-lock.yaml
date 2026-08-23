@@ -11,6 +11,9 @@ importers:
 
   .:
     devDependencies:
+      '@oshi-schedule/eslint-config':
+        specifier: workspace:*
+        version: link:packages/eslint-config
       '@eslint/js':
         specifier: 9.39.4
         version: 9.39.4

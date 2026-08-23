@@ -44,7 +44,7 @@ sha256:724b4edd23c7b9b71790623414895aa53f0ddc82249b164b9798d09cf756b99e
 
 ## 未解消障害
 
-- Amplify job `3`: 実Amplifyではrepositoryが`$CODEBUILD_SRC_DIR/oshi-schedule`へcloneされる一方、旧BuildSpecが`$CODEBUILD_SRC_DIR`自体をworkspace rootと仮定したため、`pnpm install`が`ERR_PNPM_NO_PKG_MANIFEST`で失敗した。AWS公式monorepo構成に合わせて`appRoot: apps/web`、`frontend.buildPath: /`、`AMPLIFY_MONOREPO_APP_ROOT=apps/web`を一致させ、cwdを変更するcommandを除去した。pnpm/Turborepo向けroot `.npmrc`も追加し、clean copyでfrozen install、`shared`から`web`へのTurbo build、成果物生成まで成功した。read-only CDK diffはAmplify AppのBuildSpec UPDATE 1件だけである。AWS未deployであり、job再実行もしていない。
+- Amplify job `3`: 実Amplifyではrepositoryが`$CODEBUILD_SRC_DIR/oshi-schedule`へcloneされる一方、旧BuildSpecが`$CODEBUILD_SRC_DIR`自体をworkspace rootと仮定したため、`pnpm install`が`ERR_PNPM_NO_PKG_MANIFEST`で失敗した。AWS公式monorepo構成に合わせて`appRoot: apps/web`、`frontend.buildPath: /`、`AMPLIFY_MONOREPO_APP_ROOT=apps/web`を一致させ、cwdを変更するcommandを除去した。pnpm/Turborepo向けroot `.npmrc`を追加し、hoisted構成でroot ESLint configが使うworkspace依存もroot devDependencyとして明示した。clean copyでfrozen install、全workspace lint、`shared`から`web`へのTurbo build、成果物生成まで成功した。read-only CDK diffはAmplify AppのBuildSpec UPDATE 1件だけである。AWS未deployであり、job再実行もしていない。
 
 ## 恒久的なAWS安全ルール
 

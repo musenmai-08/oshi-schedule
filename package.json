@@ -41,6 +41,7 @@
     "sync:scheduled": "pnpm --filter @oshi-schedule/worker sync:scheduled"
   },
   "devDependencies": {
+    "@oshi-schedule/eslint-config": "workspace:*",
     "@eslint/js": "9.39.4",
     "@playwright/test": "1.61.1",
     "@prisma/client": "6.19.3",
