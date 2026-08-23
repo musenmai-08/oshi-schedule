@@ -6,6 +6,7 @@ playwright-report
 test-results
 .env
 .env.local
+apps/web/.env.production
 !.env.example
 *.log
 *.tsbuildinfo

@@ -4,7 +4,7 @@
 
 ## 現在状態
 
-2026-08-23 20:19 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
+2026-08-23 20:38 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
 
 | 項目                   | 状態                              |
 | ---------------------- | --------------------------------- |
@@ -24,7 +24,7 @@ AmplifyはApp `oshi-schedule-staging-web`を同じApp IDで維持し、GitHub re
 
 2026-08-23 18:18 JSTに`pnpm staging:wake --hours 2`でwakeした。RDS `AVAILABLE`、API 1/1/0となり、外部`/health`と`/ready`はいずれもHTTP 200で期待する`oshi-schedule-api`応答を返した。wake後preflightは全項目PASSである。
 
-20:19 JST時点でwake deadlineは期限切れだが、次回Auto sleep Scheduler実行前のためAPI 1/1/0、RDS `AVAILABLE`である。job `5`のためのwake・deadline延長は行っていない。
+20:38 JST時点でwake deadlineは期限切れだが、次回Auto sleep Scheduler実行前のためAPI 1/1/0、RDS `AVAILABLE`である。job `5`および今回のローカル修正のためのwake・deadline延長は行っていない。
 
 ## Task Definitionとruntime image
 
@@ -49,7 +49,7 @@ sha256:724b4edd23c7b9b71790623414895aa53f0ddc82249b164b9798d09cf756b99e
 
 ## 未解消障害
 
-- Google OAuth callback origin: `request.url`由来の内部origin使用は解消したが、Amplify HostingはApp環境変数をNext.js SSR runtimeへ既定では渡さない。job `5`ではbuild時の`test -n "$WEB_ORIGIN"`は成功した一方、公開`/auth/callback`はfail-closedの`Web origin is not configured`でHTTP 500となった。monorepoではBuildSpecから非Secretの`WEB_ORIGIN`だけを`apps/web/.env.production`へ書き出してからNext.js buildする恒久修正が必要である。jobの再実行はしていない。
+- Google OAuth callback origin: `request.url`由来の内部origin使用は解消したが、Amplify HostingはApp環境変数をNext.js SSR runtimeへ既定では渡さない。job `5`ではbuild時の`test -n "$WEB_ORIGIN"`は成功した一方、公開`/auth/callback`はfail-closedの`Web origin is not configured`でHTTP 500となった。BuildSpecから検証済みの非Secret `WEB_ORIGIN` 1行だけを`apps/web/.env.production`へ生成する恒久修正をrepositoryへ実装済みで、既存ファイルを上書きせずSecret環境変数をコピーしない。Amplify相当clean buildではbuild環境から`WEB_ORIGIN`を外したSSR callbackがstaging originへ307 redirectすることを確認した。未deployのため公開callbackは引き続きHTTP 500であり、jobの再実行はしていない。
 - Supabase Dashboardのstaging Site URL、Redirect URL allowlist、Google CloudのSupabase callback URIは管理API認証なしでは実値を確認できていない。OAuth再試行前に手動設定を照合する。
 
 ## 恒久的なAWS安全ルール
@@ -91,4 +91,4 @@ DomainAssociationを削除してから`connected`で再作成し`AVAILABLE`に�
 
 ## 次工程
 
-次はAWS writeなしでBuildSpecを修正し、`WEB_ORIGIN`だけを`apps/web/.env.production`へ安全に永続化する回帰テストを追加してcommit/push/CIを完了する。その後は別途明示承認のもと、Amplify AppのBuildSpec updateだけをdeployし、Amplify `main` buildを1回だけ実行して公開callbackのstaging origin redirectを確認する。Supabase/Googleのstaging URL設定を手動照合してからOAuth/login受入確認を再開する。OAuth再試行、チャンネル追加、同期実行は未実施である。
+次は別途明示承認のもと、CDK diffどおりAmplify AppのBuildSpec update 1件だけをdeployする。deploy後diff 0を確認してから、さらに別途承認されたAmplify `main` buildを1回だけ実行し、公開callbackのstaging origin redirectを確認する。Supabase/Googleのstaging URL設定を手動照合してからOAuth/login受入確認を再開する。OAuth再試行、チャンネル追加、同期実行は未実施である。

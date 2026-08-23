@@ -286,10 +286,24 @@ describe('OshiScheduleStack', () => {
     for (const buildSpec of [managedBuildSpec, repositoryAmplifyBuildSpec]) {
       expect(buildSpec).toContain(dependencyGraphBuildCommand);
       expect(buildSpec).toContain('test -n "$WEB_ORIGIN"');
+      expect(buildSpec).toContain('node scripts/aws/write-amplify-web-runtime-env.mjs');
       expect(buildSpec).not.toContain('pnpm --filter @oshi-schedule/web build');
       expect(buildSpec).not.toContain('pnpm --filter @oshi-schedule/shared build');
     }
     expect(managedBuildSpec).toBe(repositoryAmplifyBuildSpec.trimEnd());
+  });
+
+  it('generates the SSR runtime env before building without copying all process variables', () => {
+    const phases = extractAmplifyPhaseCommands(repositoryAmplifyBuildSpec);
+    const envCommand = 'node scripts/aws/write-amplify-web-runtime-env.mjs';
+    const buildCommand = 'pnpm --workspace-root exec turbo build --filter=@oshi-schedule/web';
+
+    expect(phases.build.indexOf(envCommand)).toBeGreaterThan(
+      phases.build.indexOf('test -n "$WEB_ORIGIN"'),
+    );
+    expect(phases.build.indexOf(envCommand)).toBeLessThan(phases.build.indexOf(buildCommand));
+    expect(repositoryAmplifyBuildSpec).not.toMatch(/(?:env|printenv).*>>? .*\.env\.production/);
+    expect(repositoryAmplifyBuildSpec).not.toContain('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY >>');
   });
 
   it('uses the Amplify monorepo root without manual cwd manipulation', () => {
