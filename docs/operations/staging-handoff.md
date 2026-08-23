@@ -4,7 +4,7 @@
 
 ## 現在状態
 
-2026-08-23 17:29 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
+2026-08-23 17:49 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
 
 | 項目                   | 状態                              |
 | ---------------------- | --------------------------------- |
@@ -20,7 +20,7 @@
 
 Scheduler実行との競合を避けるため、文書の値だけでAWS writeを判断せず、write前に用途別preflightを再実行する。
 
-AmplifyはApp `oshi-schedule-staging-web`を同じApp IDで維持し、GitHub repository接続済み、`main` Branch 1件、`AVAILABLE`のDomainAssociation 1件という`connected` phaseである。`staging.oshi-schedule.com`はverifiedで`main`に関連付いている。job `1`〜`3`はBUILDで失敗し、Deploy/Verifyは実行されていない。URLは2xxだがAmplifyの`Welcome`プレースホルダーで、アプリは未deployである。job `3`は2026-08-23に1回だけ実行し、再実行していない。
+AmplifyはApp `oshi-schedule-staging-web`を同じApp IDで維持し、GitHub repository接続済み、`main` Branch 1件、`AVAILABLE`のDomainAssociation 1件という`connected` phaseである。`staging.oshi-schedule.com`はverifiedで`main`に関連付いている。AWS公式monorepo構成へ修正したBuildSpecは2026-08-23 17:48 JSTにdeploy済みで、CloudFormationは`UPDATE_COMPLETE`、deploy後CDK diffは0である。job `1`〜`3`はBUILDで失敗し、Deploy/Verifyは実行されていない。URLは2xxだがAmplifyの`Welcome`プレースホルダーで、アプリは未deployである。修正後のAmplify jobはまだ実行していない。
 
 ## Task Definitionとruntime image
 
@@ -44,7 +44,7 @@ sha256:724b4edd23c7b9b71790623414895aa53f0ddc82249b164b9798d09cf756b99e
 
 ## 未解消障害
 
-- Amplify job `3`: 実Amplifyではrepositoryが`$CODEBUILD_SRC_DIR/oshi-schedule`へcloneされる一方、旧BuildSpecが`$CODEBUILD_SRC_DIR`自体をworkspace rootと仮定したため、`pnpm install`が`ERR_PNPM_NO_PKG_MANIFEST`で失敗した。AWS公式monorepo構成に合わせて`appRoot: apps/web`、`frontend.buildPath: /`、`AMPLIFY_MONOREPO_APP_ROOT=apps/web`を一致させ、cwdを変更するcommandを除去した。pnpm/Turborepo向けroot `.npmrc`を追加し、hoisted構成でroot ESLint configが使うworkspace依存もroot devDependencyとして明示した。clean copyでfrozen install、全workspace lint、`shared`から`web`へのTurbo build、成果物生成まで成功した。read-only CDK diffはAmplify AppのBuildSpec UPDATE 1件だけである。AWS未deployであり、job再実行もしていない。
+- Amplify実deploy: job `3`のcwd障害に対するBuildSpec remediationはAWSへ反映済みだが、修正後のAmplify buildを未実行のため実build/deployは未検証である。新しいjobは別途明示承認後に1回だけ実行する。
 
 ## 恒久的なAWS安全ルール
 
@@ -85,4 +85,4 @@ DomainAssociationを削除してから`connected`で再作成し`AVAILABLE`に�
 
 ## 次工程
 
-別途明示承認を得て、sleep状態のままAmplify AppのBuildSpec UPDATE 1件だけをCDK deployする。deploy後diff 0を確認してから、さらに別工程としてAmplify buildを1回だけ再実行する。Google OAuthと同期試験には進まない。
+別途明示承認を得て、sleep状態のままAmplify buildを1回だけ再実行し、SUCCESS、実Web表示、Domain `AVAILABLE`を確認する。Google OAuthと同期試験には進まない。
