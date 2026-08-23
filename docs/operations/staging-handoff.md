@@ -4,7 +4,7 @@
 
 ## 現在状態
 
-2026-08-23 18:28 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
+2026-08-23 20:04 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
 
 | 項目                   | 状態                              |
 | ---------------------- | --------------------------------- |
@@ -20,7 +20,7 @@
 
 Scheduler実行との競合を避けるため、文書の値だけでAWS writeを判断せず、write前に用途別preflightを再実行する。
 
-AmplifyはApp `oshi-schedule-staging-web`を同じApp IDで維持し、GitHub repository接続済み、`main` Branch 1件、`AVAILABLE`のDomainAssociation 1件という`connected` phaseである。`staging.oshi-schedule.com`はverifiedで`main`に関連付いている。AWS公式monorepo構成へ修正したBuildSpecは2026-08-23 17:48 JSTにdeploy済みで、CloudFormationは`UPDATE_COMPLETE`、deploy後CDK diffは0である。修正後のjob `4`はBUILD・DEPLOY・VERIFYがすべて`SUCCEED`した。WebはHTTP 200で実アプリ固有の表示とNext.js assetsを返し、Amplifyの`Welcome`プレースホルダーではない。
+AmplifyはApp `oshi-schedule-staging-web`を同じApp IDで維持し、GitHub repository接続済み、`main` Branch 1件、`AVAILABLE`のDomainAssociation 1件という`connected` phaseである。`staging.oshi-schedule.com`はverifiedで`main`に関連付いている。2026-08-23 20:02 JSTにOAuth callback remediationとしてAmplify Appだけをin-place updateし、`WEB_ORIGIN=https://staging.oshi-schedule.com`とBuildSpecの`WEB_ORIGIN`存在gateを反映した。CloudFormationは`UPDATE_COMPLETE`、deploy後CDK diffは0である。新しいAmplify buildは開始しておらず、最新jobは引き続き`4`でBUILD・DEPLOY・VERIFYがすべて`SUCCEED`しているため、公開artifactはcallback修正前のままである。
 
 2026-08-23 18:18 JSTに`pnpm staging:wake --hours 2`でwakeした。RDS `AVAILABLE`、API 1/1/0となり、外部`/health`と`/ready`はいずれもHTTP 200で期待する`oshi-schedule-api`応答を返した。wake後preflightは全項目PASSである。
 
@@ -47,7 +47,7 @@ sha256:724b4edd23c7b9b71790623414895aa53f0ddc82249b164b9798d09cf756b99e
 
 ## 未解消障害
 
-- Google OAuth callback origin: 2026-08-23のstaging受入確認で、Amplify SSR上の`request.url`が内部origin `https://localhost:3000`となり、callbackが成功・失敗時とも内部originへredirectする不具合を確認した。repositoryでは既存`webDomainName`から生成する`WEB_ORIGIN=https://staging.oshi-schedule.com`をAmplifyへ渡し、callbackの全redirectを正規originへ固定する修正と回帰テストを追加済み。AWSへのBuildSpec/EnvironmentVariables反映と修正後Amplify buildは未実施である。
+- Google OAuth callback origin: 2026-08-23のstaging受入確認で、Amplify SSR上の`request.url`が内部origin `https://localhost:3000`となり、callbackが成功・失敗時とも内部originへredirectする不具合を確認した。repository修正とAmplify Appの`WEB_ORIGIN`/BuildSpec設定deployは完了したが、修正後artifactを作るAmplify buildは未実施である。
 - Supabase Dashboardのstaging Site URL、Redirect URL allowlist、Google CloudのSupabase callback URIは管理API認証なしでは実値を確認できていない。OAuth再試行前に手動設定を照合する。
 
 ## 恒久的なAWS安全ルール
@@ -89,4 +89,4 @@ DomainAssociationを削除してから`connected`で再作成し`AVAILABLE`に�
 
 ## 次工程
 
-staging Webの初回deployとAPI wakeは完了した。自動sleep期限は2026-08-23 20:18 JSTである。次は別途明示承認後、callback修正に必要なAmplify AppのBuildSpec/EnvironmentVariables updateだけをCDK deployし、Amplify `main` buildを1回実行する。deploy前diffの期待値はAmplify App 1件のin-place update（BuildSpecの`WEB_ORIGIN` gate追加とEnvironmentVariablesへの`WEB_ORIGIN=https://staging.oshi-schedule.com`追加）のみで、CREATE/REPLACE/DELETEおよびBranch/Domain/repository変更は0である。その後、Supabase/Googleのstaging URL設定を手動照合してからOAuth/login受入確認を再開する。OAuth再試行、チャンネル追加、同期実行は未実施である。
+OAuth callback remediationのAmplify App設定deployは完了した。次は別途明示承認後、Amplify `main` buildを1回だけ実行し、job成功と公開`/auth/callback`が`localhost`ではなくstaging originへredirectすることを確認する。その後、Supabase/Googleのstaging URL設定を手動照合してからOAuth/login受入確認を再開する。OAuth再試行、チャンネル追加、同期実行は未実施である。
