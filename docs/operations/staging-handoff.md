@@ -4,23 +4,25 @@
 
 ## 現在状態
 
-2026-08-23 18:07 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
+2026-08-23 18:28 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
 
 | 項目                   | 状態                              |
 | ---------------------- | --------------------------------- |
 | CloudFormation         | `UPDATE_COMPLETE`                 |
 | Application activation | `READY`（`true`）                 |
-| API                    | `desired/running/pending = 0/0/0` |
-| RDS                    | `STOPPED`                         |
+| API                    | `desired/running/pending = 1/1/0` |
+| RDS                    | `AVAILABLE`                       |
 | Pipe                   | `RUNNING`                         |
 | Worker Scheduler       | `DISABLED`                        |
 | Queue                  | visible `0`                       |
-| Cloud Map              | registered instances `0`          |
-| Auto sleep             | deadline expired / sleep完了      |
+| Cloud Map              | registered instances `1`          |
+| Auto sleep             | deadline `2026-08-23 20:18 JST`   |
 
 Scheduler実行との競合を避けるため、文書の値だけでAWS writeを判断せず、write前に用途別preflightを再実行する。
 
 AmplifyはApp `oshi-schedule-staging-web`を同じApp IDで維持し、GitHub repository接続済み、`main` Branch 1件、`AVAILABLE`のDomainAssociation 1件という`connected` phaseである。`staging.oshi-schedule.com`はverifiedで`main`に関連付いている。AWS公式monorepo構成へ修正したBuildSpecは2026-08-23 17:48 JSTにdeploy済みで、CloudFormationは`UPDATE_COMPLETE`、deploy後CDK diffは0である。修正後のjob `4`はBUILD・DEPLOY・VERIFYがすべて`SUCCEED`した。WebはHTTP 200で実アプリ固有の表示とNext.js assetsを返し、Amplifyの`Welcome`プレースホルダーではない。
+
+2026-08-23 18:18 JSTに`pnpm staging:wake --hours 2`でwakeした。RDS `AVAILABLE`、API 1/1/0となり、外部`/health`と`/ready`はいずれもHTTP 200で期待する`oshi-schedule-api`応答を返した。wake後preflightは全項目PASSである。
 
 ## Task Definitionとruntime image
 
@@ -86,4 +88,4 @@ DomainAssociationを削除してから`connected`で再作成し`AVAILABLE`に�
 
 ## 次工程
 
-staging Webのdeployは完了した。次は別途明示承認と用途別preflightの後に、stagingのGoogle OAuth/login受入確認へ進む。現在API/RDSはsleep中であり、wake、OAuth、同期実行は未実施である。
+staging WebのdeployとAPI wakeは完了した。自動sleep期限は2026-08-23 20:18 JSTである。次は別途明示承認と用途別preflightの後に、stagingのGoogle OAuth/login受入確認へ進む。OAuth、チャンネル追加、同期実行は未実施である。
