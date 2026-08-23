@@ -4,7 +4,7 @@
 
 ## 現在状態
 
-2026-08-23 17:49 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
+2026-08-23 18:07 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
 
 | 項目                   | 状態                              |
 | ---------------------- | --------------------------------- |
@@ -20,7 +20,7 @@
 
 Scheduler実行との競合を避けるため、文書の値だけでAWS writeを判断せず、write前に用途別preflightを再実行する。
 
-AmplifyはApp `oshi-schedule-staging-web`を同じApp IDで維持し、GitHub repository接続済み、`main` Branch 1件、`AVAILABLE`のDomainAssociation 1件という`connected` phaseである。`staging.oshi-schedule.com`はverifiedで`main`に関連付いている。AWS公式monorepo構成へ修正したBuildSpecは2026-08-23 17:48 JSTにdeploy済みで、CloudFormationは`UPDATE_COMPLETE`、deploy後CDK diffは0である。job `1`〜`3`はBUILDで失敗し、Deploy/Verifyは実行されていない。URLは2xxだがAmplifyの`Welcome`プレースホルダーで、アプリは未deployである。修正後のAmplify jobはまだ実行していない。
+AmplifyはApp `oshi-schedule-staging-web`を同じApp IDで維持し、GitHub repository接続済み、`main` Branch 1件、`AVAILABLE`のDomainAssociation 1件という`connected` phaseである。`staging.oshi-schedule.com`はverifiedで`main`に関連付いている。AWS公式monorepo構成へ修正したBuildSpecは2026-08-23 17:48 JSTにdeploy済みで、CloudFormationは`UPDATE_COMPLETE`、deploy後CDK diffは0である。修正後のjob `4`はBUILD・DEPLOY・VERIFYがすべて`SUCCEED`した。WebはHTTP 200で実アプリ固有の表示とNext.js assetsを返し、Amplifyの`Welcome`プレースホルダーではない。
 
 ## Task Definitionとruntime image
 
@@ -41,10 +41,11 @@ sha256:724b4edd23c7b9b71790623414895aa53f0ddc82249b164b9798d09cf756b99e
 - Secret ARN: API/Workerの4 external Secretを6文字suffix付きcomplete ARNへ統一し、Execution Roleの`secretsmanager:GetSecretValue` Resourceと4/4一致させた。以前の`AccessDenied`は解消済み。
 - Prisma Client: production runtime image内で正式schemaからClientを生成するよう修正した。CIのruntime contractでgenerated/importable/constructable、API/Worker/Migration smoke、CA permissionを検証済み。
 - Auto sleep: AWS SDK v3のECS inputを`cluster`/`services`および`cluster`/`service`/`desiredCount`へ修正したLambda Code assetを2026-08-22 22:26 JSTにdeployした。CloudFormationは`UPDATE_COMPLETE`、deploy後のCDK diffは0である。22:39 JSTの既存Scheduler実行は`AUTO_SLEEP_TRIGGERED`で完了し、API 0/0/0の後にRDSが`STOPPED`へ遷移した。今回実行の`AUTO_SLEEP_PARTIAL`、`AUTO_SLEEP_FAILED`、Lambda Errorsはいずれも0である。
+- Amplify monorepo build: job `3`のcwd障害をAWS公式の`appRoot`/`buildPath`構成で解消し、remediation deploy後のjob `4`でBUILD・DEPLOY・VERIFYすべての成功と実Web表示を確認した。
 
 ## 未解消障害
 
-- Amplify実deploy: job `3`のcwd障害に対するBuildSpec remediationはAWSへ反映済みだが、修正後のAmplify buildを未実行のため実build/deployは未検証である。新しいjobは別途明示承認後に1回だけ実行する。
+- なし。
 
 ## 恒久的なAWS安全ルール
 
@@ -85,4 +86,4 @@ DomainAssociationを削除してから`connected`で再作成し`AVAILABLE`に�
 
 ## 次工程
 
-別途明示承認を得て、sleep状態のままAmplify buildを1回だけ再実行し、SUCCESS、実Web表示、Domain `AVAILABLE`を確認する。Google OAuthと同期試験には進まない。
+staging Webのdeployは完了した。次は別途明示承認と用途別preflightの後に、stagingのGoogle OAuth/login受入確認へ進む。現在API/RDSはsleep中であり、wake、OAuth、同期実行は未実施である。
