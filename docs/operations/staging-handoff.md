@@ -4,7 +4,7 @@
 
 ## 現在状態
 
-2026-08-22 22:49 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
+2026-08-23 17:04 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
 
 | 項目                   | 状態                              |
 | ---------------------- | --------------------------------- |
@@ -20,7 +20,7 @@
 
 Scheduler実行との競合を避けるため、文書の値だけでAWS writeを判断せず、write前に用途別preflightを再実行する。
 
-AmplifyはApp `oshi-schedule-staging-web`を同じApp IDで維持し、GitHub repository接続済み、`main` Branch 1件、`AVAILABLE`のDomainAssociation 1件という`connected` phaseである。`staging.oshi-schedule.com`はverifiedで`main`に関連付いている。初回job `1`と再実行job `2`はBUILDで失敗し、Deploy/Verifyは実行されていない。URLは2xxだがAmplifyの`Welcome`プレースホルダーで、アプリは未deployである。job `2`後のcwd恒久修正BuildSpecはAWSへ反映済みで、deploy後のCDK diffは0である。Amplify jobは再実行していない。
+AmplifyはApp `oshi-schedule-staging-web`を同じApp IDで維持し、GitHub repository接続済み、`main` Branch 1件、`AVAILABLE`のDomainAssociation 1件という`connected` phaseである。`staging.oshi-schedule.com`はverifiedで`main`に関連付いている。job `1`〜`3`はBUILDで失敗し、Deploy/Verifyは実行されていない。URLは2xxだがAmplifyの`Welcome`プレースホルダーで、アプリは未deployである。job `3`は2026-08-23に1回だけ実行し、再実行していない。
 
 ## Task Definitionとruntime image
 
@@ -44,7 +44,7 @@ sha256:724b4edd23c7b9b71790623414895aa53f0ddc82249b164b9798d09cf756b99e
 
 ## 未解消障害
 
-- Amplify job `2`は旧BuildSpecのcwd累積により失敗した。恒久修正版BuildSpecはAWSへ反映済みだが、修正後のAmplify buildは未実行である。
+- Amplify job `3`: 実Amplifyではrepositoryが`$CODEBUILD_SRC_DIR/oshi-schedule`へcloneされる一方、BuildSpecが`$CODEBUILD_SRC_DIR`自体をworkspace rootと仮定して移動した。このため`pnpm install --frozen-lockfile`が`package.json`のない親ディレクトリで`ERR_PNPM_NO_PKG_MANIFEST`となった。現在の回帰テストも`CODEBUILD_SRC_DIR`をcheckout rootとして模擬しており、この実配置を再現できていない。実配置からworkspace rootをphaseごとに安全に解決する恒久修正と回帰テストが必要である。
 
 ## 恒久的なAWS安全ルール
 
@@ -85,4 +85,4 @@ DomainAssociationを削除してから`connected`で再作成し`AVAILABLE`に�
 
 ## 次工程
 
-job `2`のcwd障害は、各phase冒頭で`CODEBUILD_SRC_DIR`を検証してから同じ絶対checkout rootへ移動するよう修正した。CDKはrepositoryの`amplify.yml`を直接読み込み、BuildSpecの二重定義を廃止した。cwd累積を拒否する回帰テストを追加し、Amplify相当のclean copyで同一shellのpreBuild→build、8 workspaceのinstall、`shared`→`web`のbuildと成果物生成まで成功した。BuildSpec-only CDK deployとauto-sleep実AWS検証は完了した。次はsleep状態を維持したまま、別途明示承認を得てAmplify buildを1回だけ再実行する。Google OAuthと同期試験には進まない。
+job `3`で判明した実Amplifyのclone配置を再現し、repository basenameのハードコードに依存せずworkspace rootをphaseごとに解決するようBuildSpecと回帰テストを恒久修正する。その後、BuildSpec-only CDK deployとAmplify build再実行について別途明示承認を得る。Google OAuthと同期試験には進まない。
