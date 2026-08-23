@@ -28,6 +28,7 @@ const repositoryAmplifyBuildSpec = readFileSync(
   new URL('../../amplify.yml', import.meta.url),
   'utf8',
 );
+const repositoryNpmConfig = readFileSync(new URL('../../.npmrc', import.meta.url), 'utf8');
 
 const extractAmplifyPhaseCommands = (buildSpec: string) => {
   const phases: Record<'preBuild' | 'build', string[]> = { preBuild: [], build: [] };
@@ -286,22 +287,24 @@ describe('OshiScheduleStack', () => {
     expect(managedBuildSpec).toBe(repositoryAmplifyBuildSpec.trimEnd());
   });
 
-  it('anchors every Amplify phase to the checkout root without accumulating cwd changes', () => {
+  it('uses the Amplify monorepo root without manual cwd manipulation', () => {
+    const template = renderFromCliContext(fullStagingContext);
+    const app = Object.values(template.findResources('AWS::Amplify::App'))[0];
+    const monorepoRoot = (
+      app?.Properties?.EnvironmentVariables as Array<{
+        Name: string;
+        Value: string;
+      }>
+    ).find(({ Name }) => Name === 'AMPLIFY_MONOREPO_APP_ROOT');
     const phases = extractAmplifyPhaseCommands(repositoryAmplifyBuildSpec);
-    const checkoutRoot = '/codebuild/output/src/checkout';
-    const rootAnchor = ['test -n "$CODEBUILD_SRC_DIR"', 'cd "$CODEBUILD_SRC_DIR"'];
 
-    expect(phases.preBuild.slice(0, 2)).toEqual(rootAnchor);
-    expect(phases.build.slice(0, 2)).toEqual(rootAnchor);
-    expect(repositoryAmplifyBuildSpec).not.toContain('cd ../..');
-
-    let cwd = `${checkoutRoot}/apps/web`;
-    for (const commands of [phases.preBuild, phases.build]) {
-      for (const command of commands) {
-        if (command === 'cd "$CODEBUILD_SRC_DIR"') cwd = checkoutRoot;
-      }
-      expect(cwd).toBe(checkoutRoot);
-    }
+    expect(repositoryAmplifyBuildSpec).toContain('  - appRoot: apps/web');
+    expect(repositoryAmplifyBuildSpec).toContain('      buildPath: /');
+    expect(monorepoRoot).toEqual({ Name: 'AMPLIFY_MONOREPO_APP_ROOT', Value: 'apps/web' });
+    expect(repositoryNpmConfig.trim()).toBe('node-linker=hoisted');
+    expect([...phases.preBuild, ...phases.build]).not.toEqual(
+      expect.arrayContaining([expect.stringMatching(/^(?:cd\b|.*CODEBUILD_SRC_DIR)/)]),
+    );
   });
 
   it('synthesizes the exact Amplify resources for every connection phase', () => {

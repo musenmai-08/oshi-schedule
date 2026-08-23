@@ -4,7 +4,7 @@
 
 ## 現在状態
 
-2026-08-23 17:04 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
+2026-08-23 17:29 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
 
 | 項目                   | 状態                              |
 | ---------------------- | --------------------------------- |
@@ -44,7 +44,7 @@ sha256:724b4edd23c7b9b71790623414895aa53f0ddc82249b164b9798d09cf756b99e
 
 ## 未解消障害
 
-- Amplify job `3`: 実Amplifyではrepositoryが`$CODEBUILD_SRC_DIR/oshi-schedule`へcloneされる一方、BuildSpecが`$CODEBUILD_SRC_DIR`自体をworkspace rootと仮定して移動した。このため`pnpm install --frozen-lockfile`が`package.json`のない親ディレクトリで`ERR_PNPM_NO_PKG_MANIFEST`となった。現在の回帰テストも`CODEBUILD_SRC_DIR`をcheckout rootとして模擬しており、この実配置を再現できていない。実配置からworkspace rootをphaseごとに安全に解決する恒久修正と回帰テストが必要である。
+- Amplify job `3`: 実Amplifyではrepositoryが`$CODEBUILD_SRC_DIR/oshi-schedule`へcloneされる一方、旧BuildSpecが`$CODEBUILD_SRC_DIR`自体をworkspace rootと仮定したため、`pnpm install`が`ERR_PNPM_NO_PKG_MANIFEST`で失敗した。AWS公式monorepo構成に合わせて`appRoot: apps/web`、`frontend.buildPath: /`、`AMPLIFY_MONOREPO_APP_ROOT=apps/web`を一致させ、cwdを変更するcommandを除去した。pnpm/Turborepo向けroot `.npmrc`も追加し、clean copyでfrozen install、`shared`から`web`へのTurbo build、成果物生成まで成功した。read-only CDK diffはAmplify AppのBuildSpec UPDATE 1件だけである。AWS未deployであり、job再実行もしていない。
 
 ## 恒久的なAWS安全ルール
 
@@ -85,4 +85,4 @@ DomainAssociationを削除してから`connected`で再作成し`AVAILABLE`に�
 
 ## 次工程
 
-job `3`で判明した実Amplifyのclone配置を再現し、repository basenameのハードコードに依存せずworkspace rootをphaseごとに解決するようBuildSpecと回帰テストを恒久修正する。その後、BuildSpec-only CDK deployとAmplify build再実行について別途明示承認を得る。Google OAuthと同期試験には進まない。
+別途明示承認を得て、sleep状態のままAmplify AppのBuildSpec UPDATE 1件だけをCDK deployする。deploy後diff 0を確認してから、さらに別工程としてAmplify buildを1回だけ再実行する。Google OAuthと同期試験には進まない。
