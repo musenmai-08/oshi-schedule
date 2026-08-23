@@ -1,0 +1,26 @@
+amplify.yml
+  s_3a50bad78ea1cd::t_f0ffb3652a4a94 5
+.npmrc
+  s_3a50bad78ea1cd::t_f0ffb3652a4a94 1
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_c45e299e5d134e 7,47,88
+infra/test/oshi-schedule-stack.test.ts
+  s_3a50bad78ea1cd::t_49242e77da08ed 293-298
+  s_3a50bad78ea1cd::t_f0ffb3652a4a94 31,290-292,301-307
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "acac1ec5299c8c087ea7ad588f97000b79938cc4",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
