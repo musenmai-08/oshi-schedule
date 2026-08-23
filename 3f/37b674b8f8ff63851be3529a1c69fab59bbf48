@@ -1,0 +1,23 @@
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_0385cc8744853c 47
+package.json
+  s_3a50bad78ea1cd::t_35edc39256a7e3 44
+pnpm-lock.yaml
+  s_3a50bad78ea1cd::t_f1fdbffb3e352d 14-16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "3f37b674b8f8ff63851be3529a1c69fab59bbf48",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
