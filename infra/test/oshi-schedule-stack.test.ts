@@ -255,12 +255,16 @@ describe('OshiScheduleStack', () => {
     expect(environmentNames.sort()).toEqual(
       [
         'AMPLIFY_MONOREPO_APP_ROOT',
+        'WEB_ORIGIN',
         'NEXT_PUBLIC_API_URL',
         'NEXT_PUBLIC_DEMO_MODE',
         'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
         'NEXT_PUBLIC_SUPABASE_URL',
         '_CUSTOM_IMAGE',
       ].sort(),
+    );
+    expect(app!.Properties?.EnvironmentVariables).toEqual(
+      expect.arrayContaining([{ Name: 'WEB_ORIGIN', Value: 'https://staging.example.invalid' }]),
     );
     expect(environmentNames).not.toEqual(
       expect.arrayContaining([
@@ -281,6 +285,7 @@ describe('OshiScheduleStack', () => {
 
     for (const buildSpec of [managedBuildSpec, repositoryAmplifyBuildSpec]) {
       expect(buildSpec).toContain(dependencyGraphBuildCommand);
+      expect(buildSpec).toContain('test -n "$WEB_ORIGIN"');
       expect(buildSpec).not.toContain('pnpm --filter @oshi-schedule/web build');
       expect(buildSpec).not.toContain('pnpm --filter @oshi-schedule/shared build');
     }

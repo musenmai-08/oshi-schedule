@@ -1030,6 +1030,7 @@ export class OshiScheduleStack extends Stack {
       environmentVariables: [
         { name: '_CUSTOM_IMAGE', value: 'amplify:al2023' },
         { name: 'AMPLIFY_MONOREPO_APP_ROOT', value: 'apps/web' },
+        { name: 'WEB_ORIGIN', value: webOrigin },
         {
           name: 'NEXT_PUBLIC_API_URL',
           value: config.apiDomainName ? `https://${config.apiDomainName}` : 'REQUIRED_AT_DEPLOY',

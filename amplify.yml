@@ -13,6 +13,7 @@ applications:
             - pnpm install --frozen-lockfile
         build:
           commands:
+            - test -n "$WEB_ORIGIN"
             - test "$NEXT_PUBLIC_DEMO_MODE" = "false"
             - test -n "$NEXT_PUBLIC_API_URL"
             - test -n "$NEXT_PUBLIC_SUPABASE_URL"

@@ -24,6 +24,8 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<publishable-key>
 
 Deploy staging gateは既存どおりdisabledのままとし、この変更ではworkflowを有効化しない。Secret key、service role key、OAuth secret、tokenはCDK contextへ渡さない。
 
+Amplify server-side callbackが使用する`WEB_ORIGIN`は、repository-managedな`webDomainName`からCDKがHTTPS originとして生成する。stagingでは`https://staging.oshi-schedule.com`であり、外部入力やSecretとして重複管理しない。
+
 入力をマスク表示し、Phase間で共通fingerprintが同じことを確認できる。
 
 ```bash

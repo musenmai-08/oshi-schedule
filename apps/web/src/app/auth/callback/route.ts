@@ -1,30 +1,21 @@
 import { NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { APP_ROUTES } from '@/lib/routes';
+import { handleAuthCallback } from '@/lib/auth-callback';
 import { publicEnv } from '@/lib/env';
+import { resolveWebOrigin } from '@/lib/server-web-origin';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 export async function GET(request: Request) {
-  const url = new URL(request.url);
-  const code = url.searchParams.get('code');
-  const destination = new URL(APP_ROUTES.dashboard, url.origin);
-  if (!code) return NextResponse.redirect(new URL(`${APP_ROUTES.root}?error=oauth`, url.origin));
+  let webOrigin: string;
+  try {
+    webOrigin = resolveWebOrigin();
+  } catch {
+    return NextResponse.json({ error: 'Web origin is not configured' }, { status: 500 });
+  }
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-  if (error || !data.session)
-    return NextResponse.redirect(new URL(`${APP_ROUTES.root}?error=oauth`, url.origin));
-  if (data.session.provider_refresh_token) {
-    const response = await fetch(`${publicEnv.apiUrl}/api/v1/onboarding`, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${data.session.access_token}`,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        providerRefreshToken: data.session.provider_refresh_token,
-        providerAccessToken: data.session.provider_token,
-      }),
-    });
-    if (!response.ok) destination.searchParams.set('setup', 'failed');
-  } else destination.searchParams.set('setup', 'reauth');
-  return NextResponse.redirect(destination);
+  return handleAuthCallback(request, {
+    webOrigin,
+    apiUrl: publicEnv.apiUrl,
+    exchangeCodeForSession: (code) => supabase.auth.exchangeCodeForSession(code),
+    fetch,
+  });
 }

@@ -172,6 +172,6 @@ scripts         YAML検証、ECS revision更新、staging smoke test
 
 Fake認証と既知の開発用暗号鍵は `production` で起動できません。実Google/Supabase/YouTube接続、OAuth審査、scheduler/Secret Manager/監視、DB backup、鍵ローテーション手順、負荷・クォータ試験を本番環境で確認してください。`/terms` と `/privacy` の文面は開発・動作確認用のデモであり、一般公開前に専門家の確認を受けて正式版に差し替えてください。第三者向けYouTube Data APIだけでプレミア公開を確定できない項目は、誤推測せず「種別未確定」として扱います。
 
-Webのproduction buildでは `NEXT_PUBLIC_API_URL`、`NEXT_PUBLIC_DEMO_MODE=false`、`NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` を明示してください。`NEXT_PUBLIC_*` はブラウザーへ公開されるため、service role key、OAuth client secret、暗号鍵などの秘密値を設定してはいけません。
+Webのproduction buildでは、server-side callbackの正規originとなる`WEB_ORIGIN`にWebのHTTPS originを設定し、`NEXT_PUBLIC_API_URL`、`NEXT_PUBLIC_DEMO_MODE=false`、`NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`も明示してください。`NEXT_PUBLIC_*` はブラウザーへ公開されるため、service role key、OAuth client secret、暗号鍵などの秘密値を設定してはいけません。
 
 Next.js開発サーバーのアクセスログはOAuth callbackのquery stringを表示する場合があるため、開発ログも機密情報として扱い、共有・永続保存しないでください。アプリケーションloggerはOAuth credentialとBearer値を共通サニタイズします。本番のreverse proxy・CDN・platform access logではquery stringを保存せず、`/auth/callback`はpathnameとHTTP statusだけを記録してください。

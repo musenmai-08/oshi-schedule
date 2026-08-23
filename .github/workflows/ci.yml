@@ -13,6 +13,7 @@ permissions:
 env:
   # Reserved, non-routable values used only to validate the production Web build contract.
   # Playwright overrides API URL and demo mode with its local fake-service values.
+  WEB_ORIGIN: https://web.ci.example.invalid
   NEXT_PUBLIC_API_URL: https://api.ci.example.invalid
   NEXT_PUBLIC_DEMO_MODE: 'false'
   NEXT_PUBLIC_SUPABASE_URL: https://supabase.ci.example.invalid

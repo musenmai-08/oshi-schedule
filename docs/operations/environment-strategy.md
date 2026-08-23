@@ -42,16 +42,17 @@ Supabase project refや実domainはSecretではないが環境設定として管
 
 ## 環境変数の分類と配置
 
-### Web公開設定
+### Web設定
 
-これらはbrowser bundleへ含まれるためSecretを入れてはならない。Amplify appの環境別build settingに設定する。
+Amplify appの環境別build settingに設定する。`WEB_ORIGIN`はserver-side callbackだけが参照し、`NEXT_PUBLIC_*`だけがbrowser bundleへ含まれる。いずれにもSecretを入れてはならない。
 
-| 変数                                   | 用途                        |
-| -------------------------------------- | --------------------------- |
-| `NEXT_PUBLIC_API_URL`                  | 環境別API HTTPS origin      |
-| `NEXT_PUBLIC_SUPABASE_URL`             | 環境別Supabase project URL  |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | browser向けpublishable key  |
-| `NEXT_PUBLIC_DEMO_MODE`                | staging/productionは`false` |
+| 変数                                   | 用途                                   |
+| -------------------------------------- | -------------------------------------- |
+| `NEXT_PUBLIC_API_URL`                  | 環境別API HTTPS origin                 |
+| `WEB_ORIGIN`                           | server-side callback用Web HTTPS origin |
+| `NEXT_PUBLIC_SUPABASE_URL`             | 環境別Supabase project URL             |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | browser向けpublishable key             |
+| `NEXT_PUBLIC_DEMO_MODE`                | staging/productionは`false`            |
 
 ### Secret
 
