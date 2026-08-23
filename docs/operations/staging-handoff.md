@@ -4,7 +4,7 @@
 
 ## 現在状態
 
-2026-08-23 20:58 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
+2026-08-23 21:12 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
 
 | 項目                   | 状態                              |
 | ---------------------- | --------------------------------- |
@@ -15,16 +15,16 @@
 | Pipe                   | `RUNNING`                         |
 | Worker Scheduler       | `DISABLED`                        |
 | Queue                  | visible `0`                       |
-| Cloud Map              | registered instances `1`          |
+| Cloud Map              | registered instances `0`          |
 | Auto sleep             | deadline `2026-08-23 20:18 JST`   |
 
 Scheduler実行との競合を避けるため、文書の値だけでAWS writeを判断せず、write前に用途別preflightを再実行する。
 
-AmplifyはApp `oshi-schedule-staging-web`を同じApp IDで維持し、GitHub repository接続済み、`main` Branch 1件、`AVAILABLE`のDomainAssociation 1件という`connected` phaseである。`staging.oshi-schedule.com`はverifiedで`main`に関連付いている。2026-08-23 20:56 JSTにSSR runtime remediationとしてAmplify AppのBuildSpecだけをin-place updateし、`WEB_ORIGIN`を`apps/web/.env.production`へ生成するコマンドを反映した。CloudFormationは`UPDATE_COMPLETE`、deploy後CDK diffは0である。Amplify buildは開始しておらず、最新jobは引き続き`5`でBUILD・DEPLOY・VERIFYすべて`SUCCEED`、公開callbackは旧artifactのため下記のとおりHTTP 500である。
+AmplifyはApp `oshi-schedule-staging-web`を同じApp IDで維持し、GitHub repository接続済み、`main` Branch 1件、`AVAILABLE`のDomainAssociation 1件という`connected` phaseである。`staging.oshi-schedule.com`はverifiedで`main`に関連付いている。2026-08-23 20:56 JSTにSSR runtime remediationとしてAmplify AppのBuildSpecだけをin-place updateし、`WEB_ORIGIN`を`apps/web/.env.production`へ生成するコマンドを反映した。CloudFormationは`UPDATE_COMPLETE`、deploy後CDK diffは0である。21:09 JSTにjob `6`を1回だけ開始し、BUILD・DEPLOY・VERIFYすべて`SUCCEED`した。公開トップはHTTP 200で実アプリを返し、認証コードなしの公開`/auth/callback`はHTTP 307で`https://staging.oshi-schedule.com/?error=oauth`へredirectする。
 
 2026-08-23 18:18 JSTに`pnpm staging:wake --hours 2`でwakeした。RDS `AVAILABLE`、API 1/1/0となり、外部`/health`と`/ready`はいずれもHTTP 200で期待する`oshi-schedule-api`応答を返した。wake後preflightは全項目PASSである。
 
-20:58 JST時点でAuto sleepが完了し、API 0/0/0、RDS `STOPPED`である。今回のBuildSpec deployではwake・deadline延長を行わず、このsleep状態を維持した。
+21:12 JST時点でAPI 0/0/0、RDS `STOPPED`である。今回のAmplify jobではwake・deadline延長を行わず、このsleep状態を維持した。
 
 ## Task Definitionとruntime image
 
@@ -46,10 +46,10 @@ sha256:724b4edd23c7b9b71790623414895aa53f0ddc82249b164b9798d09cf756b99e
 - Prisma Client: production runtime image内で正式schemaからClientを生成するよう修正した。CIのruntime contractでgenerated/importable/constructable、API/Worker/Migration smoke、CA permissionを検証済み。
 - Auto sleep: AWS SDK v3のECS inputを`cluster`/`services`および`cluster`/`service`/`desiredCount`へ修正したLambda Code assetを2026-08-22 22:26 JSTにdeployした。CloudFormationは`UPDATE_COMPLETE`、deploy後のCDK diffは0である。22:39 JSTの既存Scheduler実行は`AUTO_SLEEP_TRIGGERED`で完了し、API 0/0/0の後にRDSが`STOPPED`へ遷移した。今回実行の`AUTO_SLEEP_PARTIAL`、`AUTO_SLEEP_FAILED`、Lambda Errorsはいずれも0である。
 - Amplify monorepo build: job `3`のcwd障害をAWS公式の`appRoot`/`buildPath`構成で解消し、remediation deploy後のjob `4`でBUILD・DEPLOY・VERIFYすべての成功と実Web表示を確認した。
+- Google OAuth callback origin: BuildSpecから検証済みの非Secret `WEB_ORIGIN` 1行だけを`apps/web/.env.production`へ生成し、Next.js SSR runtimeへ渡すよう修正した。job `6`のbuild logで専用生成コマンドと`.env.production`読込を確認し、公開callbackがlocalhostではなくstaging originへredirectすることを確認した。
 
 ## 未解消障害
 
-- Google OAuth callback origin: `request.url`由来の内部origin使用は解消したが、Amplify HostingはApp環境変数をNext.js SSR runtimeへ既定では渡さない。job `5`ではbuild時の`test -n "$WEB_ORIGIN"`は成功した一方、公開`/auth/callback`はfail-closedの`Web origin is not configured`でHTTP 500となった。BuildSpecから検証済みの非Secret `WEB_ORIGIN` 1行だけを`apps/web/.env.production`へ生成する恒久修正をrepositoryとAmplify Appへ反映済みで、既存ファイルを上書きせずSecret環境変数をコピーしない。Amplify相当clean buildではbuild環境から`WEB_ORIGIN`を外したSSR callbackがstaging originへ307 redirectすることを確認した。未buildのため公開callbackは引き続き旧artifactのHTTP 500であり、jobの再実行はしていない。
 - Supabase Dashboardのstaging Site URL、Redirect URL allowlist、Google CloudのSupabase callback URIは管理API認証なしでは実値を確認できていない。OAuth再試行前に手動設定を照合する。
 
 ## 恒久的なAWS安全ルール
@@ -91,4 +91,4 @@ DomainAssociationを削除してから`connected`で再作成し`AVAILABLE`に�
 
 ## 次工程
 
-次は別途明示承認のもと、Amplify `main` buildを1回だけ実行し、公開callbackのstaging origin redirectを確認する。API/RDSはwakeせずsleepを維持できる。Supabase/Googleのstaging URL設定を手動照合してからOAuth/login受入確認を再開する。OAuth再試行、チャンネル追加、同期実行は未実施である。
+次はSupabase/Googleのstaging URL設定を手動照合し、別途明示承認のもと必要な時間だけAPI/RDSをwakeしてOAuth/login受入確認を再開する。OAuth実ログイン、チャンネル追加、同期実行は未実施である。
