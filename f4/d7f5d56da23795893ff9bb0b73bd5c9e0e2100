@@ -1,0 +1,31 @@
+scripts/aws/write-amplify-web-runtime-env.mjs
+  s_3a50bad78ea1cd::t_db9fd875e57f18 1,5
+  s_3a50bad78ea1cd::t_f6ed462c6eaec9 2-4,6-56
+.gitignore
+  s_3a50bad78ea1cd::t_f6ed462c6eaec9 9
+scripts/aws/write-amplify-web-runtime-env.test.mjs
+  s_3a50bad78ea1cd::t_f6ed462c6eaec9 1-79
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_cbfa4f0197e39d 7,27,52,94
+amplify.yml
+  s_3a50bad78ea1cd::t_f6ed462c6eaec9 17
+infra/test/oshi-schedule-stack.test.ts
+  s_3a50bad78ea1cd::t_f6ed462c6eaec9 289,296-306
+  s_3a50bad78ea1cd::t_a09f3bcce5859f 307-308
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "f4d7f5d56da23795893ff9bb0b73bd5c9e0e2100",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
