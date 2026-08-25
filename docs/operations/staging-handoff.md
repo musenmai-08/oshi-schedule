@@ -4,19 +4,19 @@
 
 ## 現在状態
 
-2026-08-25 21:50 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
+2026-08-25 22:16 JSTに`oshi-schedule` profile、`ap-northeast-1`で確認した。
 
 | 項目                   | 状態                              |
 | ---------------------- | --------------------------------- |
 | CloudFormation         | `UPDATE_COMPLETE`                 |
 | Application activation | `READY`（`true`）                 |
-| API                    | `desired/running/pending = 1/1/0` |
-| RDS                    | `AVAILABLE`                       |
+| API                    | `desired/running/pending = 0/0/0` |
+| RDS                    | `STOPPED`                         |
 | Pipe                   | `RUNNING`                         |
 | Worker Scheduler       | `DISABLED`                        |
 | Queue                  | visible `0`                       |
-| Cloud Map              | registered instances `1`          |
-| Auto sleep             | deadline `2026-08-25 23:18 JST`   |
+| Cloud Map              | registered instances `0`          |
+| Auto sleep             | deadline expired                  |
 
 Scheduler実行との競合を避けるため、文書の値だけでAWS writeを判断せず、write前に用途別preflightを再実行する。
 
@@ -33,6 +33,8 @@ AmplifyはApp `oshi-schedule-staging-web`を同じApp IDで維持し、GitHub re
 監査時点でsync queue、sync DLQ、Worker Scheduler DLQはいずれもvisible/in-flight/delayed `0/0/0`、Pipeは`RUNNING`、実行中Worker taskは0件、CloudWatch `ALARM`は0件だった。対象時間帯のWorker、API、API Gatewayログには高severity、HTTP 5xx、同期失敗、error codeがなく、YouTube quota reservationは全7件`granted=true`だった。Google CalendarまたはYouTube API由来の想定外エラーも記録されていない。
 
 Calendar同期は、同一user/videoから決定的event IDを生成し、既存mappingとmanaged-fields hashが一致してeventが存在する場合はwriteをskipし、決定的IDのinsertが`409`なら同じeventをpatchする。今回の再Sync・削除・再登録はすべて成功し、Calendarエラーやduplicate conflict failureはないため、重複event生成の兆候はない。RDSはprivate subnet内でECS Execも無効のため、AWS writeなしではSyncRun行やGoogle Calendar実イベント件数を独立して直接照会できない。上記SyncRun判定は、APIのrun polling、taskへ渡されたrun ID、exit code、terminal log、およびterminal log前に`finishSyncRun(SUCCESS)`を保存する実装の突合結果である。
+
+バックエンド最終監査後の22:06 JSTに`pnpm staging:sleep`を1回実行した。sleep前はpreflight全項目PASS、API 1/1/0、RDS `AVAILABLE`、全queue 0/0/0だった。22:16 JSTにAPI 0/0/0、RDS `STOPPED`、Cloud Map登録0、最終status `SLEEPING`を確認した。sync queue、sync DLQ、Worker Scheduler DLQはいずれもvisible/in-flight/delayed `0/0/0`を維持し、想定外エラーはなかった。これをもって今回のstaging手動受入テストを完了とする。
 
 ## Task Definitionとruntime image
 
@@ -99,4 +101,4 @@ DomainAssociationを削除してから`connected`で再作成し`AVAILABLE`に�
 
 ## 次工程
 
-今回のOAuth/login、チャンネル登録、再Sync、削除、再登録の手動受入とバックエンド監査は完了した。AWS writeは行わず、明示承認があるまで`pnpm staging:sleep`を含む次の操作へ進まない。
+今回のOAuth/login、チャンネル登録、再Sync、削除、再登録の手動受入、バックエンド監査、staging sleepは完了した。stagingは`SLEEPING`であり、次のruntime操作は別途明示承認を得て必要な時間だけ`pnpm staging:wake --hours <hours>`を実行するところから開始する。
