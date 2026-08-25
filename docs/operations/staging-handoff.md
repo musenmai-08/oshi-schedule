@@ -4,7 +4,7 @@
 
 ## 現在状態
 
-2026-08-25 21:29 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
+2026-08-25 21:50 JSTに`oshi-schedule` profile、`ap-northeast-1`でread-only確認した。
 
 | 項目                   | 状態                              |
 | ---------------------- | --------------------------------- |
@@ -24,7 +24,15 @@ AmplifyはApp `oshi-schedule-staging-web`を同じApp IDで維持し、GitHub re
 
 2026-08-23 18:18 JSTに`pnpm staging:wake --hours 2`でwakeした。RDS `AVAILABLE`、API 1/1/0となり、外部`/health`と`/ready`はいずれもHTTP 200で期待する`oshi-schedule-api`応答を返した。wake後preflightは全項目PASSである。
 
-2026-08-25 21:18 JSTに`pnpm staging:wake --hours 2`を1回実行した。21:29 JST時点でRDS `AVAILABLE`、API 1/1/0、Pipe `RUNNING`、Worker Scheduler `DISABLED`、queue 0/0/0で、post-wake preflightは全項目PASSした。外部`/health`と`/ready`はいずれもHTTP 200でservice identityは`oshi-schedule-api`である。wake deadlineは23:18 JSTである。OAuth、再Sync、削除、再登録は実行していない。
+2026-08-25 21:18 JSTに`pnpm staging:wake --hours 2`を1回実行した。21:50 JST時点でRDS `AVAILABLE`、API 1/1/0、Pipe `RUNNING`、Worker Scheduler `DISABLED`、queue 0/0/0で、post-wake preflightは全項目PASSした。外部`/health`と`/ready`はいずれもHTTP 200でservice identityは`oshi-schedule-api`である。wake deadlineは23:18 JSTである。
+
+## 2026-08-25 手動受入結果
+
+`@rindoumikoto`について、staging Webから登録、再Sync、削除、再登録を手動実施した。API Gatewayの匿名化した操作列では、21:34 JSTのresolve `200`・登録`201`、21:39 JSTの再Sync `202`、21:43 JSTの削除`204`、21:45 JSTのresolve `200`・再登録`201`を確認した。同期を伴う登録、再Sync、再登録の3件は、それぞれ独立したWorker taskがexit code `0`で完了し、各`scheduled_sync_completed`は`total=1 / success=1 / skipped=0 / deferred=0 / failed=0`だった。削除は同期を起動しない設計どおり、新しいSyncRunを作成していない。操作列の直前、21:32 JSTにも別の手動Sync 1件が同じ成功結果で完了しているが、ログへhandleを記録しない設計のため対象チャンネルへの帰属は断定していない。
+
+監査時点でsync queue、sync DLQ、Worker Scheduler DLQはいずれもvisible/in-flight/delayed `0/0/0`、Pipeは`RUNNING`、実行中Worker taskは0件、CloudWatch `ALARM`は0件だった。対象時間帯のWorker、API、API Gatewayログには高severity、HTTP 5xx、同期失敗、error codeがなく、YouTube quota reservationは全7件`granted=true`だった。Google CalendarまたはYouTube API由来の想定外エラーも記録されていない。
+
+Calendar同期は、同一user/videoから決定的event IDを生成し、既存mappingとmanaged-fields hashが一致してeventが存在する場合はwriteをskipし、決定的IDのinsertが`409`なら同じeventをpatchする。今回の再Sync・削除・再登録はすべて成功し、Calendarエラーやduplicate conflict failureはないため、重複event生成の兆候はない。RDSはprivate subnet内でECS Execも無効のため、AWS writeなしではSyncRun行やGoogle Calendar実イベント件数を独立して直接照会できない。上記SyncRun判定は、APIのrun polling、taskへ渡されたrun ID、exit code、terminal log、およびterminal log前に`finishSyncRun(SUCCESS)`を保存する実装の突合結果である。
 
 ## Task Definitionとruntime image
 
@@ -50,7 +58,7 @@ sha256:724b4edd23c7b9b71790623414895aa53f0ddc82249b164b9798d09cf756b99e
 
 ## 未解消障害
 
-- Supabase Dashboardのstaging Site URL、Redirect URL allowlist、Google CloudのSupabase callback URIは管理API認証なしでは実値を確認できていない。OAuth再試行前に手動設定を照合する。
+- バックエンド受入上の機能ブロッカーはない。private RDSとGoogle Calendarの実イベント一覧をAWS writeなしで直接照会する経路はないため、DB行と実イベント件数の独立確認は未実施である。
 
 ## 恒久的なAWS安全ルール
 
@@ -91,4 +99,4 @@ DomainAssociationを削除してから`connected`で再作成し`AVAILABLE`に�
 
 ## 次工程
 
-次はSupabase/Googleのstaging URL設定を手動照合し、別途明示承認のもと必要な時間だけAPI/RDSをwakeしてOAuth/login受入確認を再開する。OAuth実ログイン、チャンネル追加、同期実行は未実施である。
+今回のOAuth/login、チャンネル登録、再Sync、削除、再登録の手動受入とバックエンド監査は完了した。AWS writeは行わず、明示承認があるまで`pnpm staging:sleep`を含む次の操作へ進まない。
