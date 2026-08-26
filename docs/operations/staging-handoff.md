@@ -4,7 +4,7 @@
 
 ## 現在状態
 
-2026-08-25 22:16 JSTに`oshi-schedule` profile、`ap-northeast-1`で確認した。
+2026-08-26 22:38 JSTに`oshi-schedule` profile、`ap-northeast-1`で確認した。
 
 | 項目                   | 状態                              |
 | ---------------------- | --------------------------------- |
@@ -35,6 +35,16 @@ AmplifyはApp `oshi-schedule-staging-web`を同じApp IDで維持し、GitHub re
 Calendar同期は、同一user/videoから決定的event IDを生成し、既存mappingとmanaged-fields hashが一致してeventが存在する場合はwriteをskipし、決定的IDのinsertが`409`なら同じeventをpatchする。今回の再Sync・削除・再登録はすべて成功し、Calendarエラーやduplicate conflict failureはないため、重複event生成の兆候はない。RDSはprivate subnet内でECS Execも無効のため、AWS writeなしではSyncRun行やGoogle Calendar実イベント件数を独立して直接照会できない。上記SyncRun判定は、APIのrun polling、taskへ渡されたrun ID、exit code、terminal log、およびterminal log前に`finishSyncRun(SUCCESS)`を保存する実装の突合結果である。
 
 バックエンド最終監査後の22:06 JSTに`pnpm staging:sleep`を1回実行した。sleep前はpreflight全項目PASS、API 1/1/0、RDS `AVAILABLE`、全queue 0/0/0だった。22:16 JSTにAPI 0/0/0、RDS `STOPPED`、Cloud Map登録0、最終status `SLEEPING`を確認した。sync queue、sync DLQ、Worker Scheduler DLQはいずれもvisible/in-flight/delayed `0/0/0`を維持し、想定外エラーはなかった。これをもって今回のstaging手動受入テストを完了とする。
+
+## 2026-08-26 定期自動同期受入結果
+
+sleep中のstatusとAmplify control-plane preflightを確認後、`pnpm staging:wake --hours 2`でRDS `AVAILABLE`、API 1/1/0、外部`/health`・`/ready` HTTP成功まで確認した。Worker Schedulerは既存の`rate(1 hour)`、flexible window `OFF`、maximum event age 1時間、retry 2回、Fargate targetを保持し、22:24:45 JSTにStateだけを一時的に`ENABLED`へ変更した。
+
+実Schedulerは22:25:26 JSTに、`SYNC_RUN_ID` overrideのない定期全件Worker taskを1件だけ起動した。taskはexit code `0`で終了し、`scheduled_sync_completed`は`total=2 / success=2 / skipped=0 / deferred=0 / failed=0`だった。YouTube quota reservation 5件はすべて`granted=true`で、対象時間帯のWorker high-severity、同期失敗、error code、Calendar API・YouTube API由来エラーは0件だった。sync queue、sync DLQ、Worker Scheduler DLQはすべて0/0/0、CloudWatch `ALARM`も0件である。
+
+2対象ともterminal summaryがSUCCESSで、既存の決定的Calendar event ID・mapping/hash skip・insert conflict時patchにより、今回も重複Calendar event生成の兆候はない。private RDSとGoogle Calendar実イベント一覧を直接照会するread-only経路はないため、SyncRun行と実イベント件数の独立照会は未実施である。
+
+確認後の22:27 JSTにSchedulerを既存設定のまま`DISABLED`へ戻し、実行中Worker 0を確認した。22:29 JSTに`pnpm staging:sleep`を1回実行し、22:38 JSTにAPI 0/0/0、RDS `STOPPED`、Cloud Map登録0、status `SLEEPING`、全queue/DLQ 0/0/0を確認した。手動Worker起動、migration、ECR/CDK/Amplify変更は行っていない。
 
 ## Task Definitionとruntime image
 
@@ -101,4 +111,4 @@ DomainAssociationを削除してから`connected`で再作成し`AVAILABLE`に�
 
 ## 次工程
 
-今回のOAuth/login、チャンネル登録、再Sync、削除、再登録の手動受入、バックエンド監査、staging sleepは完了した。stagingは`SLEEPING`であり、次のruntime操作は別途明示承認を得て必要な時間だけ`pnpm staging:wake --hours <hours>`を実行するところから開始する。
+今回のOAuth/login、チャンネル登録、再Sync、削除、再登録、定期Scheduler同期の受入、バックエンド監査、staging sleepは完了した。stagingは`SLEEPING`であり、次のruntime操作は別途明示承認を得て必要な時間だけ`pnpm staging:wake --hours <hours>`を実行するところから開始する。
