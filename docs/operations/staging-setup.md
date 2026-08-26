@@ -2,7 +2,7 @@
 
 ## 現在地
 
-application、Docker、CDK、GitHub Actions、Amplify build、smoke scriptは実装済みである。CDK assertion/synthとlocal container/smokeは成功しているが、AWS resourceは未作成である。次へ進むにはユーザーによる費用、account、domain、external serviceの判断が必要になる。
+この文書はstagingを新規構築・再構築するときのチェックリストである。初回構築と実サービス受入は2026-08-26までに完了した。日々変わるAWS実状態と次工程は[staging handoff](staging-handoff.md)を正とし、再構築時も以下のgateを省略しない。
 
 ## 構築前gate
 
@@ -11,7 +11,7 @@ application、Docker、CDK、GitHub Actions、Amplify build、smoke scriptは実
 - [ ] domain/TLD、Route 53 hosted zone、staging Web/API FQDNを確定
 - [ ] alert emailとstaging monthly Budget 25 USDを最終承認
 - [ ] Billingのユーザー定義cost allocation tag `Environment`が`Active`
-- [ ] 自動sleepのSSM期限、毎時Scheduler、Lambda、Errors Alarmがstaging full synthにだけ存在することを確認
+- [ ] 自動sleepのSSM期限、`rate(1 hour)` Scheduler、Lambda、Errors Alarmがstaging full synthにだけ存在することを確認
 - [ ] RDS class/storage/retention/deletion protectionを最終承認
 - [ ] GitHub default branchを`main`へ変更し、`staging`/`production` Environmentを作成
 - [ ] Amplify source branchと`STAGING_AMPLIFY_BRANCH`/`PRODUCTION_AMPLIFY_BRANCH`がすべて`main`
@@ -34,7 +34,7 @@ application、Docker、CDK、GitHub Actions、Amplify build、smoke scriptは実
 7. Supabase Site URL/Redirect URLとGoogle Cloud authorized originをstaging URLへ変更する。
 8. OAuth、controlled async sync、Amplify smokeの順で確認する。
 9. SNS subscriptionを承認し、alarm/Budgetを確認する。
-10. workerを一度だけcontrolled runしてからhourly scheduleを有効化する。
+10. workerを一度だけcontrolled runし、`rate(1 hour)` を確認してからscheduleを有効化する。
 11. GitHub Variablesを設定し、最後にstaging自動deploy gateを有効化する。
 12. 受入確認ではPhase 2後に限り`pnpm staging:wake`（既定4時間、必要なら`--hours 1..24`）で利用期限を設定する。
 13. 確認終了後に`pnpm staging:sleep`を実行し、通常の低コスト状態へ移行する。自動sleepは停止忘れ時だけのsafety netとして扱う。
@@ -48,7 +48,7 @@ application、Docker、CDK、GitHub Actions、Amplify build、smoke scriptは実
 - `$default` HTTP_PROXY、Cloud Map SRV、stage path overwrite、Regional custom domain/Route 53 Aliasが機能し、ALB resourceが0
 - 初回/手動同期は201/202後にSQS/Pipesのtargeted taskで完了し、status APIで所有権を検証できる
 - API desired count 1、circuit breaker、graceful shutdown、CloudWatch Logsが機能
-- Schedulerはhourly、retry 2、DLQ、exit非0通知を持ち、lease/fencingを維持
+- Schedulerは`rate(1 hour)`、retry 2、DLQ、exit非0通知を持ち、lease/fencingを維持
 - app Secretがimage、CloudFormation output、Amplify、GitHub logsへ出ていない
 - migration task exit 0とstatus/drift確認の後だけPhase 2でAPI/Pipe/applicationを有効化する
 - smoke全項目とalarm通知経路が確認済み

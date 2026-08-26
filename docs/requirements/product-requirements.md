@@ -9,7 +9,7 @@
 - Supabase Google OAuth (PKCE) によるログイン、招待判定、初回設定、再連携を提供する。
 - `@handle` の解決・確認・登録、一覧、一時停止、再開、解除を提供する。登録確定後は既存の同期パイプラインを1回実行する。
 - チャンネル単位で YouTube 予定を取得して共有保存し、利用者単位で Calendar 差分同期する。
-- 1 時間ごとの CLI worker と、5 分のクールダウン付き手動同期を提供する。
+- EventBridge Scheduler の `rate(1 hour)` で起動する CLI worker と、5 分のクールダウン付き手動同期を提供する。
 - Calendar/イベントの削除を検知して未来分を再作成し、認証失効時は再認証状態にする。
 - アカウントと専用カレンダーを再実行可能な手順で削除する。
 - Fake 外部サービスにより、認証情報なしでも主要フローをテストできる。
@@ -30,7 +30,7 @@
 - 第三者向けYouTube Data APIだけでプレミアを確定できない項目は `UNKNOWN` とし、durationから推測しない。
 - Calendar event のタイトルは接頭辞を付けずYouTubeの配信タイトルをそのまま使う。説明欄はチャンネル名・配信種別・YouTube URLだけを含め、サムネイルURLは含めない。配信種別とサムネイルURLはDB・アプリ表示用データとして保持する。
 - Fake モードは開発・テスト限定。本番は環境変数不足なら起動失敗する。
-- 本番インフラは未確定。Web は Vercel、API/worker/DB は Cloud Run・Railway または AWS を候補とする。
+- 配置は AWS に統一し、Web は Amplify Hosting、API/worker は ECS Fargate、DB は RDS for MySQL、要求時同期は SQS/Pipes、定期同期は EventBridge Scheduler を採用する。環境ごとの詳細はデプロイアーキテクチャを正とする。
 
 ## 成功指標（将来計測）
 
@@ -38,4 +38,4 @@
 
 ## MVP実装結果
 
-2026-07-20 に設計・Web/API/worker/Prisma migration/Fake adapter/テストまで実装した。外部資格情報を要する実OAuth・実API接続と本番インフラは受入対象外であり、本番公開前の検証事項として残す。
+2026-08-26 までに staging の実 Supabase/Google OAuth/YouTube/Calendar、要求時同期、`rate(1 hour)` の定期同期、AWS/Amplify 配置を受入確認した。production は別 project・credential・stack を新規構築し、公開ポリシー、バックアップ、quota、負荷を別途確認する。

@@ -72,7 +72,7 @@ quota不足は `YOUTUBE_QUOTA_DEFERRED` と次回reset時刻へ変換する。Yo
 
 SQS/Pipesはat-least-onceでありexactly-onceではない。PipeがRunTaskを受理した後のapplication failureはSQS redeliveryだけに依存せず、SyncRunのFAILED状態、30分stale recovery、手動retry、次回scheduled workerのQUEUED/stale回収で復旧する。DB作成後のSendMessage失敗は`SYNC_DISPATCH_FAILED`としてrun/target/subscriptionをFAILEDにし、永久QUEUEDを残さない。transactional outboxは現状の低頻度用途には導入しない。
 
-自動同期は原則 60 分、手動は subscription 単位 5 分の DB 保存時刻を使う。API と worker をまたぐ二重実行は `SyncLease` のownerと単調増加version（fencing token）で防ぐ。取得・期限比較・更新はDB時刻を使い、外部呼出しの前後でowner/versionを確認する。stale ownerの更新・解放・snapshot確定は条件付きtransactionで拒否し、crash後は期限切れを新versionで再取得する。channel lease所有者は取得開始状態を保存し、Broadcast更新と成功時刻・snapshotVersion増分を1 transactionで確定する。後続workerは新しい完了versionをbounded pollし、そのsnapshotを自分のsubscriptionへCalendar展開する。待機中に完了しなければDEFERREDでありSUCCESSにしない。各ユーザーのCalendar失敗は他ユーザーから隔離する。
+自動同期は EventBridge Scheduler の `rate(1 hour)`、手動は subscription 単位 5 分の DB 保存時刻を使う。API と worker をまたぐ二重実行は `SyncLease` のownerと単調増加version（fencing token）で防ぐ。取得・期限比較・更新はDB時刻を使い、外部呼出しの前後でowner/versionを確認する。stale ownerの更新・解放・snapshot確定は条件付きtransactionで拒否し、crash後は期限切れを新versionで再取得する。channel lease所有者は取得開始状態を保存し、Broadcast更新と成功時刻・snapshotVersion増分を1 transactionで確定する。後続workerは新しい完了versionをbounded pollし、そのsnapshotを自分のsubscriptionへCalendar展開する。待機中に完了しなければDEFERREDでありSUCCESSにしない。各ユーザーのCalendar失敗は他ユーザーから隔離する。
 
 登録直後の初回同期も同じlease、quota予約、snapshot、差分同期、決定的event ID、同期履歴を使う。手動用quota保護ルールに従うが `lastManualSyncAt` は更新しない。quota不足または完了snapshot待ちは `DEFERRED`、その他の例外は `FAILED` とし、status APIで最終状態を返す。
 

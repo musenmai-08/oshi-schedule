@@ -6,7 +6,7 @@
 - 対象: 個人利用から招待制 beta、将来の小規模一般公開
 - 採用案: AWS 統一構成（Web のみ AWS Amplify Hosting、API/worker/DB は AWS のマネージドサービス）
 
-STEP 4でAWS CDK、production image、CI/CDまで実装した。2026-08-04時点では`synth`とローカル検証だけが完了し、AWS resource、契約、domain、外部service設定はまだ作成・変更していない。
+AWS CDK、production image、CI/CDを実装し、2026-08-26までにstaging stack、Amplify custom domain、実OAuth、要求時同期、定期同期を受入確認した。現在のAWS実状態は[staging handoff](../operations/staging-handoff.md)を正とし、productionは同じ論理構成を環境専用値で新規構築する。
 
 ## 現行アプリケーションの実行要件
 
@@ -32,7 +32,7 @@ flowchart TB
   API -->|syncRunId only| Q[SQS encrypted queue]
   Q --> P[EventBridge Pipes]
   P -->|RunTask + SYNC_RUN_ID| WT
-  SCH[EventBridge Scheduler<br/>1時間ごと] --> WT[ECS Fargate Task<br/>worker]
+  SCH[EventBridge Scheduler<br/>rate(1 hour)] --> WT[ECS Fargate Task<br/>worker]
   API --> RDS[(RDS for MySQL)]
   WT --> RDS
   API --> EXT[Supabase / Google / YouTube APIs]
@@ -77,12 +77,12 @@ Web はコンテナ化しない。API と worker は同じ source、Prisma Clien
 
 ## TLS、HSTS、ドメイン
 
-暫定ドメイン構成は次のとおり。`example.com` は未購入の registrable domain に置換する。
+stagingの確定domainとproductionの設計用placeholderは次のとおり。productionの`example.com`は取得したregistrable domainへ置換する。
 
-| 環境       | Web                           | API                               | アプリ callback                             |
-| ---------- | ----------------------------- | --------------------------------- | ------------------------------------------- |
-| staging    | `https://staging.example.com` | `https://api-staging.example.com` | `https://staging.example.com/auth/callback` |
-| production | `https://app.example.com`     | `https://api.example.com`         | `https://app.example.com/auth/callback`     |
+| 環境       | Web                                 | API                                     | アプリ callback                                   |
+| ---------- | ----------------------------------- | --------------------------------------- | ------------------------------------------------- |
+| staging    | `https://staging.oshi-schedule.com` | `https://api-staging.oshi-schedule.com` | `https://staging.oshi-schedule.com/auth/callback` |
+| production | `https://app.example.com`           | `https://api.example.com`               | `https://app.example.com/auth/callback`           |
 
 WebはAmplify/CloudFront、APIはAPI Gateway Regional Custom DomainとACM certificateでTLSを終端する。Route 53 AliasはRegional domainを指す。productionのHSTSはWebで付け、stagingとlocalhostには付けない。`includeSubDomains`と`preload`は全hostがHTTPSのみで安定した後に別判断する。
 
@@ -122,7 +122,7 @@ Supabase Site URL/Redirect URL、Google OAuth client、`WEB_ORIGIN` は環境ご
 
 - `Dockerfile`はNode.js 22.23.1/pnpm 9.15.9のmulti-stage build、非root、RDS CA bundle、API/worker/migration共用である。
 - `infra/`はTypeScript AWS CDKで、NATなしのpublic compute/isolated RDS、HTTP API/VPC Link/Cloud Map、SQS/Pipes、environment別removal policyを定義する。
-- Schedulerは既定disabled、1時間ごと、retry 2回、最大event age 1時間、SQS DLQを持つ。ECS STOPPEDかつexit code非0をEventBridge ruleでSNSへ通知する。
+- Schedulerは安全側の既定disabled、`rate(1 hour)`、retry 2回、最大event age 1時間、SQS DLQを持つ。ECS STOPPEDかつexit code非0をEventBridge ruleでSNSへ通知する。
 - Amplify App/branchはCDK管理するが、GitHub接続とdomain verificationは管理画面で人が完了する。
 - 実構築手順は[staging構築](../operations/staging-setup.md)を正とする。
 

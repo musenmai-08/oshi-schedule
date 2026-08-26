@@ -74,7 +74,7 @@ NEXT_PUBLIC_DEMO_MODE=false pnpm --filter @oshi-schedule/web dev
 APP_MODE=real pnpm sync:scheduled
 ```
 
-1時間ごとの実行はインフラのschedulerから `pnpm sync:scheduled` を呼びます。同期間隔はアプリ環境変数ではなく、デプロイ先schedulerの設定を正とします。worker はHTTPサーバーを必要としません。同じYouTubeチャンネルの取得はDB leaseとversion付きsnapshotで共有し、取得完了後は各subscriptionが自分のCalendarへ必ず展開します。完了snapshotがない後続workerやquota不足は`SUCCESS`にせず`DEFERRED`とし、保存済みデータのCalendar同期だけを続けます。
+`rate(1 hour)` の実行はインフラのschedulerから `pnpm sync:scheduled` を呼びます。同期間隔はアプリ環境変数ではなく、デプロイ先schedulerの設定を正とします。worker はHTTPサーバーを必要としません。同じYouTubeチャンネルの取得はDB leaseとversion付きsnapshotで共有し、取得完了後は各subscriptionが自分のCalendarへ必ず展開します。完了snapshotがない後続workerやquota不足は`SUCCESS`にせず`DEFERRED`とし、保存済みデータのCalendar同期だけを続けます。
 
 workerはSUCCESS/SKIPPED/DEFERREDと対象0件を終了コード0、1件以上のFAILEDまたはworker全体の例外を終了コード1にします。schedulerは非0終了を監視・通知し、終了ログの件数サマリーを収集してください。
 
@@ -170,7 +170,7 @@ scripts         YAML検証、ECS revision更新、staging smoke test
 
 ## 本番前の注意
 
-Fake認証と既知の開発用暗号鍵は `production` で起動できません。実Google/Supabase/YouTube接続、OAuth審査、scheduler/Secret Manager/監視、DB backup、鍵ローテーション手順、負荷・クォータ試験を本番環境で確認してください。`/terms` と `/privacy` の文面は開発・動作確認用のデモであり、一般公開前に専門家の確認を受けて正式版に差し替えてください。第三者向けYouTube Data APIだけでプレミア公開を確定できない項目は、誤推測せず「種別未確定」として扱います。
+Fake認証と既知の開発用暗号鍵は `production` で起動できません。実Google/Supabase/YouTube/Calendar接続と定期・要求時同期はstagingで受入済みですが、production用の別project/credential、OAuth公開審査、DB backup、鍵ローテーション、負荷・クォータを本番移行時に確認してください。`/terms` と `/privacy` の文面は開発・動作確認用のデモであり、一般公開前に専門家の確認を受けて正式版に差し替えてください。第三者向けYouTube Data APIだけでプレミア公開を確定できない項目は、誤推測せず「種別未確定」として扱います。
 
 Webのproduction buildでは、server-side callbackの正規originとなる`WEB_ORIGIN`にWebのHTTPS originを設定し、`NEXT_PUBLIC_API_URL`、`NEXT_PUBLIC_DEMO_MODE=false`、`NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`も明示してください。`NEXT_PUBLIC_*` はブラウザーへ公開されるため、service role key、OAuth client secret、暗号鍵などの秘密値を設定してはいけません。
 

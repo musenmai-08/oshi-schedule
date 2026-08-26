@@ -70,6 +70,7 @@ flowchart LR
 4. production migration taskを1つだけ実行し、exit 0を確認する。
 5. 同じmanifestをproduction ECRへ昇格し、API、worker task definition、Webの順にstagingで検証済みdigestへ更新する。
 6. smoke testとalarm状態を確認し、deploy recordにcommit、image digest、migration、承認者を残す。
+7. production用Google/Supabase project、Web/API domain、公開値、Secret ARNがstagingと異なることを二者確認する。Worker Schedulerは`rate(1 hour)`を確認し、smoke成功後の別承認で初めて`ENABLED`にする。workflowは既存stateを維持するため、初回有効化を暗黙に期待しない。
 
 schema変更がないdeployでもmigration taskを実行して未適用migrationがないことを確認してよいが、複数runはしない。
 

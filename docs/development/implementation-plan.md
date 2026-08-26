@@ -23,7 +23,7 @@
 - `pnpm typecheck`、`pnpm lint`、`pnpm test`（10 tests）、`pnpm build`、`pnpm test:e2e`（Chromium 1 scenario）が成功。
 - Docker MySQL 8.4 が healthy になり、`prisma migrate deploy` と seed が成功。初期 migration と schema の diff も一致。
 - `APP_MODE=fake pnpm sync:scheduled` が正常終了。
-- 実 Supabase/Google/YouTube は資格情報がないため未接続。公開前に実環境で OAuth callback、refresh、失効、quota/error を検証する。
+- 当時は実 Supabase/Google/YouTube が未接続だった。2026-08-26までにstagingでOAuth callback、refresh token暗号化保存、Calendar作成・同期、YouTube取得、要求時・定期同期を受入済みである。productionの別projectと公開審査は別工程とする。
 
 ## Critical・High remediation（2026-07-20）
 

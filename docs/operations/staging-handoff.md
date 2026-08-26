@@ -4,7 +4,7 @@
 
 ## 現在状態
 
-2026-08-26 22:38 JSTに`oshi-schedule` profile、`ap-northeast-1`で確認した。
+2026-08-26 23:06 JSTに`oshi-schedule` profile、`ap-northeast-1`で確認した。
 
 | 項目                   | 状態                              |
 | ---------------------- | --------------------------------- |
@@ -72,6 +72,12 @@ sha256:724b4edd23c7b9b71790623414895aa53f0ddc82249b164b9798d09cf756b99e
 
 - バックエンド受入上の機能ブロッカーはない。private RDSとGoogle Calendarの実イベント一覧をAWS writeなしで直接照会する経路はないため、DB行と実イベント件数の独立確認は未実施である。
 
+## 2026-08-26 リリース前最終監査
+
+[リリース前最終監査](../reviews/pre-release-final-audit.md)を実施した。定期同期は要件・設計・IaC・AWS実設定・運用文書で`rate(1 hour)`へ統一し、CDK phase2 diff 0、Web 200、callbackのstaging origin redirect、RDS非公開、Queue/DLQ滞留0、Alarm 0をread-onlyで再確認した。招待制stagingの技術的受入は完了している。
+
+production一般公開は、production公開値のcross-environment guard、正式な利用規約/プライバシーポリシーとGoogle OAuth scope/審査判断のHigh 2件が残るため未準備である。Scheduler DLQのTLS必須policy、API production既定値のfail-fast、2026-09-11期限のContainer CVE例外再審査をMediumとして追跡する。機能コード、AWS resource、DB、OAuth/Syncは変更していない。
+
 ## 恒久的なAWS安全ルール
 
 - AWS CLI/CDKは`--profile oshi-schedule`、account `741448960817`、region `ap-northeast-1`だけを使用し、`default`を使わない。
@@ -111,4 +117,4 @@ DomainAssociationを削除してから`connected`で再作成し`AVAILABLE`に�
 
 ## 次工程
 
-今回のOAuth/login、チャンネル登録、再Sync、削除、再登録、定期Scheduler同期の受入、バックエンド監査、staging sleepは完了した。stagingは`SLEEPING`であり、次のruntime操作は別途明示承認を得て必要な時間だけ`pnpm staging:wake --hours <hours>`を実行するところから開始する。
+今回のOAuth/login、チャンネル登録、再Sync、削除、再登録、定期Scheduler同期の受入、バックエンド監査、staging sleep、リリース前最終監査は完了した。招待制stagingは技術的受入完了で`SLEEPING`を維持する。production一般公開へは[最終監査](../reviews/pre-release-final-audit.md)のHigh 2件を先に解消する。次のruntime操作は別途明示承認を得て必要な時間だけ`pnpm staging:wake --hours <hours>`を実行するところから開始する。
