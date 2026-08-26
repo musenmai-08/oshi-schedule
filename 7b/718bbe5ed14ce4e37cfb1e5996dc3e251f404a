@@ -1,0 +1,48 @@
+docs/operations/environment-strategy.md
+  s_3a50bad78ea1cd::t_4994aae91e9095 9-10,12-18
+  s_3a50bad78ea1cd::t_1215e5093c05ba 11,20,35-36,38
+  s_3a50bad78ea1cd::t_40532d7fbefc0c 19
+docs/requirements/product-requirements.md
+  s_3a50bad78ea1cd::t_1215e5093c05ba 12,33,41
+docs/development/implementation-plan.md
+  s_3a50bad78ea1cd::t_1215e5093c05ba 26
+README.md
+  s_3a50bad78ea1cd::t_1215e5093c05ba 77,173
+docs/architecture/deployment-architecture.md
+  s_3a50bad78ea1cd::t_4994aae91e9095 82-83,85
+  s_3a50bad78ea1cd::t_1215e5093c05ba 9,35,80,84,125
+docs/operations/staging-setup.md
+  s_3a50bad78ea1cd::t_1215e5093c05ba 5,14,37,51
+docs/requirements/use-cases.md
+  s_3a50bad78ea1cd::t_1215e5093c05ba 10
+docs/architecture/synchronization.md
+  s_3a50bad78ea1cd::t_1215e5093c05ba 75
+docs/operations/deployment.md
+  s_3a50bad78ea1cd::t_1215e5093c05ba 73
+docs/security/container-vulnerability-exceptions.md
+  s_3a50bad78ea1cd::t_1215e5093c05ba 49-50,86-87
+docs/security/security-policy.md
+  s_3a50bad78ea1cd::t_1215e5093c05ba 29
+docs/reviews/pre-release-final-audit.md
+  s_3a50bad78ea1cd::t_4994aae91e9095 17-23,29-39
+  s_3a50bad78ea1cd::t_1215e5093c05ba 1-16,24-28,40-60,62-78
+  s_3a50bad78ea1cd::t_a8d48493cd0073 61
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_1215e5093c05ba 7,75-80,120
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "7b718bbe5ed14ce4e37cfb1e5996dc3e251f404a",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
