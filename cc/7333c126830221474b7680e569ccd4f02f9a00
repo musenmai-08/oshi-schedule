@@ -1,0 +1,27 @@
+docs/reviews/pre-release-final-audit.md
+  s_3a50bad78ea1cd::t_df271ce9b04d20 70
+  s_3a50bad78ea1cd::t_84497cef19c711 61,81,85
+docs/security/security-policy.md
+  s_3a50bad78ea1cd::t_84497cef19c711 29,31
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_84497cef19c711 87-94,134
+docs/reviews/high-2-production-oauth-legal-audit.md
+  s_3a50bad78ea1cd::t_84497cef19c711 1-31,41-47,59-89,104-202
+  s_3a50bad78ea1cd::t_df271ce9b04d20 32-40,48-58,90-103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "cc7333c126830221474b7680e569ccd4f02f9a00",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
