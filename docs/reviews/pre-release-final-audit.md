@@ -58,7 +58,7 @@ auto-sleepも独立した`rate(1 hour)`だが、これは同期頻度ではな�
 
 ### High
 
-2. **一般公開用OAuth・法務表示が未完了。** `/terms`と`/privacy`は画面上も開発用デモと明示し、問い合わせ先、保存期間、Google API Services User Data Policy/Limited Use確認が未確定である。さらに実装は全Calendarへ広く作用できる`https://www.googleapis.com/auth/calendar`を使用し、[Googleが案内する限定scope](https://developers.google.com/workspace/calendar/api/auth)の`calendar.app.created`での再同意・全Gateway操作を未検証である。staging/testing用途は維持できるが、production一般公開前に正式文面、連絡先、scope決定、[OAuth production readiness](https://developers.google.com/identity/protocols/oauth2/production-readiness/policy-compliance)に沿ったGoogle Cloudのbrand/data-access review状態を確定する。
+2. **一般公開用OAuth・法務表示が未完了。** [High 2詳細監査](./high-2-production-oauth-legal-audit.md)で、公開中のstaging `/terms`と`/privacy`にもdemo、問い合わせ先、保存期間、Limited Useのplaceholderが残ることを確認した。実Gatewayはアプリ作成secondary calendarとそのeventだけを操作するため、`calendar.app.created`が最小scope候補であり、広い`calendar`をproductionで維持する実装上の理由は見つからない。ただし実付与scopeを確認せずDBへ固定値を保存し、`include_granted_scopes=true`で旧grantが結合され得るため、scope変更だけでは移行完了にならない。正式文面、限定scopeのstaging全操作受入、Google branding準拠、production専用projectのbrand/data-access reviewを詳細監査の完了条件どおり満たすまでHighを維持する。
 
 ### 解消済みHigh
 
@@ -67,7 +67,7 @@ auto-sleepも独立した`rate(1 hour)`だが、これは同期頻度ではな�
 ### Medium
 
 1. **Worker Scheduler DLQだけTLS必須resource policyがない。** Sync QueueとSync DLQは`enforceSSL: true`だが、`SchedulerDeadLetterQueue`にはなく、AWS実policyにも`aws:SecureTransport` denyがない。SDK/service連携はHTTPSを使うものの、同じqueue security baselineへ揃えるIaC修正とassertion testが望ましい。
-3. **Container CVE例外の再審査期限が近い。** 期限付きで承認済みのDebian CVE 19 ID（Trivy 15、ECR High/Critical 8）は2026-09-11に失効する。現在はCI validationを通るが、期限前にbase image rebuild、fresh scan、Debian status確認が必要である。
+2. **Container CVE例外の再審査期限が近い。** 期限付きで承認済みのDebian CVE 19 ID（Trivy 15、ECR High/Critical 8）は2026-09-11に失効する。現在はCI validationを通るが、期限前にbase image rebuild、fresh scan、Debian status確認が必要である。
 
 ### 解消済みMedium
 
@@ -78,8 +78,8 @@ auto-sleepも独立した`rate(1 hour)`だが、これは同期頻度ではな�
 - private RDS内の今回のSyncRun行と、Google Calendar実イベント一覧・件数の独立したread-only照合。API polling、worker exit 0、terminal summary、Calendar error 0、決定的ID実装から成功と重複兆候なしまでは確認済み。
 - production AWS/Supabase/Google Cloud resource、Secret実値、OAuth verification、domain、backup/PITR、restore rehearsal、quota増枠、負荷試験。production環境はまだ構築・受入していない。
 - `calendar.app.created`へscopeを縮小した場合の既存利用者再同意とCalendar全操作。
-- 一般公開向け正式な利用規約・プライバシーポリシー・非公開問い合わせ窓口。
+- 一般公開向け正式な利用規約・プライバシーポリシー・公開問い合わせ窓口。
 
 ## 次工程
 
-招待制stagingは現状のsleep運用で利用できる。production工程へ進む前にHigh 2のscope・OAuth審査・正式ポリシーを利用者判断で確定する。その後、production専用の公開contextを作成し、fingerprint guardを含むsynth、read-only review、CDK diff、初回2-phase rolloutの順に進む。
+招待制stagingは現状のsleep運用で利用できる。production工程へ進む前に[High 2詳細監査](./high-2-production-oauth-legal-audit.md)の完了条件を満たす。最初に`calendar.app.created`採用とstaging限定scope受入方針を承認し、その後に正式ポリシー、production専用Google Cloud/Supabase設定、OAuth審査を確定する。完了後、production専用の公開contextを作成し、fingerprint guardを含むsynth、read-only review、CDK diff、初回2-phase rolloutの順に進む。

@@ -84,6 +84,14 @@ production一般公開は、正式な利用規約/プライバシーポリシー
 
 API runtimeもproduction/realで`WEB_ORIGIN`と`ALLOWED_EMAILS`を明示必須とし、production originはHTTPS originだけ、開発用allowlist既定値は拒否する。ローカルreal-modeは明示したlocalhost設定を維持できる。Node.js 22.23.1でtypecheck、lint、全test、staging/production synthを通し、AWS read-onlyのstaging phase2 diff 0を確認した。AWS resourceへのwrite/deployは行っていない。公開値fingerprintの対象をrotationした場合は、production diff前に[`environment-boundary.ts`](../../infra/lib/environment-boundary.ts)を更新し、必ず二環境の値を再照合する。
 
+## 2026-08-27 production OAuth・法務表示High 2詳細監査
+
+[High 2詳細監査](../reviews/high-2-production-oauth-legal-audit.md)を実施した。公開中のstaging `/terms`と`/privacy`はHTTP 200だが、デモ警告、未定の問い合わせ先、未定の保存期間、Limited Use確認の予告が実ページにも残る。production URLは未確定で、文書の`app.example.com`はplaceholderである。
+
+現行Calendar scopeは`https://www.googleapis.com/auth/calendar`である。Gatewayはアプリ作成secondary calendarのget/create/deleteと、そのeventのget/insert/patch/deleteだけを使うため、production最小候補は`https://www.googleapis.com/auth/calendar.app.created`である。ただし`include_granted_scopes=true`による旧grant結合、実付与scope未検査、DBへの固定scope保存が残る。scope、正式Terms/Privacy、Google branding button、production専用Google Cloud/Supabase設定、brand/data-access verificationを詳細監査の完了条件どおり満たすまでproduction一般公開はblockする。
+
+この監査では文書だけを変更し、scope、機能コード、AWS、Google Cloud、Supabase、DB、OAuth grantは変更していない。AWS APIも呼び出していない。次は`calendar.app.created`採用と、過去grantのない利用者によるstaging全Gateway操作受入の方針承認から開始する。
+
 ## 恒久的なAWS安全ルール
 
 - AWS CLI/CDKは`--profile oshi-schedule`、account `741448960817`、region `ap-northeast-1`だけを使用し、`default`を使わない。
@@ -123,4 +131,4 @@ DomainAssociationを削除してから`connected`で再作成し`AVAILABLE`に�
 
 ## 次工程
 
-今回のOAuth/login、チャンネル登録、再Sync、削除、再登録、定期Scheduler同期の受入、バックエンド監査、staging sleep、リリース前最終監査は完了した。招待制stagingは技術的受入完了で`SLEEPING`を維持する。production公開設定guardは解消済みで、一般公開へ残るHighは[最終監査](../reviews/pre-release-final-audit.md)のHigh 2だけである。次のruntime操作は別途明示承認を得て必要な時間だけ`pnpm staging:wake --hours <hours>`を実行するところから開始する。
+今回のOAuth/login、チャンネル登録、再Sync、削除、再登録、定期Scheduler同期の受入、バックエンド監査、staging sleep、リリース前最終監査は完了した。招待制stagingは技術的受入完了で`SLEEPING`を維持する。production公開設定guardは解消済みで、一般公開へ残るHighは[High 2詳細監査](../reviews/high-2-production-oauth-legal-audit.md)のOAuth scope・法務表示・公開審査だけである。次はscope採用方針の承認とコード変更であり、staging runtime操作はその実装・review後に別途明示承認を得て開始する。
