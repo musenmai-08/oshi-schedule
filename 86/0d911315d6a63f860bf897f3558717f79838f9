@@ -1,0 +1,53 @@
+docs/operations/aws-bootstrap.md
+  s_3a50bad78ea1cd::t_7f7a5352949368 111,122
+docs/reviews/pre-release-final-audit.md
+  s_3a50bad78ea1cd::t_7f7a5352949368 9,51,63-66,72-75,85
+infra/lib/oshi-schedule-stack.ts
+  s_3a50bad78ea1cd::t_f994dbc0059c5f 270-287
+infra/lib/config.ts
+  s_3a50bad78ea1cd::t_6ce6e891f036e9 150-151,156-157,206,231
+  s_3a50bad78ea1cd::t_e2c27531b020b4 154-155,168,196,209-214,255-259,264-265,268-271
+  s_3a50bad78ea1cd::t_22321ae7f1a732 153,165-167,169-170,193-195,197-198
+  s_3a50bad78ea1cd::t_f994dbc0059c5f 2-6,56,146-149,152,158-164,171-192,199-205,207-208,215-230,232-254,260-263,266-267,272-281,339,419,421
+infra/lib/environment-boundary.ts
+  s_3a50bad78ea1cd::t_f994dbc0059c5f 1-11,13-17
+  s_3a50bad78ea1cd::t_6ce6e891f036e9 12,18
+apps/api/src/infrastructure/env.ts
+  s_3a50bad78ea1cd::t_f994dbc0059c5f 109-130
+infra/test/oshi-schedule-stack.test.ts
+  s_3a50bad78ea1cd::t_6ce6e891f036e9 94
+  s_3a50bad78ea1cd::t_e2c27531b020b4 99,102,521
+  s_3a50bad78ea1cd::t_6c6fc3aa4c4c74 90-93,95-98,100-101,103,515-520,522
+apps/api/src/infrastructure/env.test.ts
+  s_3a50bad78ea1cd::t_6c6fc3aa4c4c74 11-12,23-25,30-34,48-69
+  s_3a50bad78ea1cd::t_6ce6e891f036e9 26-29,35-47
+docs/operations/environment-strategy.md
+  s_3a50bad78ea1cd::t_91a12cb7237fa1 73-76,78-79
+  s_3a50bad78ea1cd::t_7f7a5352949368 77
+infra/test/config.test.ts
+  s_3a50bad78ea1cd::t_b34477958af5e6 234-237
+  s_3a50bad78ea1cd::t_6c6fc3aa4c4c74 2,10,107-120,123-132,219-233,238-243,245-255,257-258,262-287
+  s_3a50bad78ea1cd::t_08630c261ee203 209-213
+  s_3a50bad78ea1cd::t_e2c27531b020b4 121-122
+  s_3a50bad78ea1cd::t_6ce6e891f036e9 259-260
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_7f7a5352949368 79,82-84,126
+  s_3a50bad78ea1cd::t_f93dcb5d8e6bfb 81,85
+  s_3a50bad78ea1cd::t_62a18141eefc45 80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "860d911315d6a63f860bf897f3558717f79838f9",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
