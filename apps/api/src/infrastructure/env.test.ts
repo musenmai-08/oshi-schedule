@@ -8,6 +8,8 @@ import { loadEnv, ROOT_ENV_PATH } from './env.js';
 const realEnv = {
   NODE_ENV: 'production',
   APP_MODE: 'real',
+  WEB_ORIGIN: 'https://app.oshi-schedule.com',
+  ALLOWED_EMAILS: 'allowed@oshi-schedule.com',
   DATABASE_URL: 'mysql://user:password@localhost:3306/test',
   SUPABASE_URL: 'https://example.supabase.co',
   SUPABASE_SERVICE_ROLE_KEY: 'service-role',
@@ -18,6 +20,53 @@ const realEnv = {
 };
 
 describe('loadEnv production encryption keys', () => {
+  it.each(['WEB_ORIGIN', 'ALLOWED_EMAILS'] as const)(
+    'requires an explicit %s in production/real mode',
+    (key) => {
+      const source = {
+        ...realEnv,
+        TOKEN_ENCRYPTION_KEYS: `v2:${randomBytes(32).toString('base64')}`,
+      };
+      delete (source as Partial<typeof source>)[key];
+      expect(() => loadEnv(source)).toThrow(`Missing required environment variable: ${key}`);
+    },
+  );
+
+  it.each([
+    'http://localhost:3001',
+    'http://app.oshi-schedule.com',
+    'https://app.oshi-schedule.com/path',
+  ])('rejects non-production WEB_ORIGIN %s', (WEB_ORIGIN) => {
+    expect(() =>
+      loadEnv({
+        ...realEnv,
+        WEB_ORIGIN,
+        TOKEN_ENCRYPTION_KEYS: `v2:${randomBytes(32).toString('base64')}`,
+      }),
+    ).toThrow(/WEB_ORIGIN must be an HTTPS origin/);
+  });
+
+  it('rejects the development allowlist default in production/real mode', () => {
+    expect(() =>
+      loadEnv({
+        ...realEnv,
+        ALLOWED_EMAILS: 'member@oshi-schedule.com,developer@example.com',
+        TOKEN_ENCRYPTION_KEYS: `v2:${randomBytes(32).toString('base64')}`,
+      }),
+    ).toThrow(/development default/);
+  });
+
+  it('keeps explicit localhost settings available for real-mode local acceptance testing', () => {
+    expect(
+      loadEnv({
+        ...realEnv,
+        NODE_ENV: 'development',
+        WEB_ORIGIN: 'http://localhost:3001',
+        TOKEN_ENCRYPTION_KEYS: `v2:${randomBytes(32).toString('base64')}`,
+      }).WEB_ORIGIN,
+    ).toBe('http://localhost:3001');
+  });
+
   it('rejects the documented all-zero development key', () => {
     expect(() => loadEnv(realEnv)).toThrow(/TOKEN_ENCRYPTION_KEYS/);
   });

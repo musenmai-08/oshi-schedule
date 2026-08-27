@@ -76,7 +76,13 @@ sha256:724b4edd23c7b9b71790623414895aa53f0ddc82249b164b9798d09cf756b99e
 
 [リリース前最終監査](../reviews/pre-release-final-audit.md)を実施した。定期同期は要件・設計・IaC・AWS実設定・運用文書で`rate(1 hour)`へ統一し、CDK phase2 diff 0、Web 200、callbackのstaging origin redirect、RDS非公開、Queue/DLQ滞留0、Alarm 0をread-onlyで再確認した。招待制stagingの技術的受入は完了している。
 
-production一般公開は、production公開値のcross-environment guard、正式な利用規約/プライバシーポリシーとGoogle OAuth scope/審査判断のHigh 2件が残るため未準備である。Scheduler DLQのTLS必須policy、API production既定値のfail-fast、2026-09-11期限のContainer CVE例外再審査をMediumとして追跡する。機能コード、AWS resource、DB、OAuth/Syncは変更していない。
+production一般公開は、正式な利用規約/プライバシーポリシーとGoogle OAuth scope/審査判断のHigh 1件が残るため未準備である。Scheduler DLQのTLS必須policyと2026-09-11期限のContainer CVE例外再審査をMediumとして追跡する。機能コード、AWS resource、DB、OAuth/Syncは変更していない。
+
+## 2026-08-27 production公開設定guard修正
+
+最終監査High 1を解消した。production full deployは、domain/certificate/Supabase URL・publishable key/Google Client IDを単一のCDK configで検証し、現在のstaging公開値はSHA-256 fingerprintとの一致で拒否する。staging/dev/local/予約済みhost、localhost、placeholder、certificateのaccount/region不一致、可変image tagもfail-fastする。productionのSupabase URLとGoogle Client IDはこの検証済みconfigから環境固有SSM String Parameterを作るため、AmplifyとECSで別の値を手作業投入しない。stagingの既存SSM参照と`infra/config/staging-deploy.json`は変更していない。
+
+API runtimeもproduction/realで`WEB_ORIGIN`と`ALLOWED_EMAILS`を明示必須とし、production originはHTTPS originだけ、開発用allowlist既定値は拒否する。ローカルreal-modeは明示したlocalhost設定を維持できる。Node.js 22.23.1でtypecheck、lint、全test、staging/production synthを通し、AWS read-onlyのstaging phase2 diff 0を確認した。AWS resourceへのwrite/deployは行っていない。公開値fingerprintの対象をrotationした場合は、production diff前に[`environment-boundary.ts`](../../infra/lib/environment-boundary.ts)を更新し、必ず二環境の値を再照合する。
 
 ## 恒久的なAWS安全ルール
 
@@ -117,4 +123,4 @@ DomainAssociationを削除してから`connected`で再作成し`AVAILABLE`に�
 
 ## 次工程
 
-今回のOAuth/login、チャンネル登録、再Sync、削除、再登録、定期Scheduler同期の受入、バックエンド監査、staging sleep、リリース前最終監査は完了した。招待制stagingは技術的受入完了で`SLEEPING`を維持する。production一般公開へは[最終監査](../reviews/pre-release-final-audit.md)のHigh 2件を先に解消する。次のruntime操作は別途明示承認を得て必要な時間だけ`pnpm staging:wake --hours <hours>`を実行するところから開始する。
+今回のOAuth/login、チャンネル登録、再Sync、削除、再登録、定期Scheduler同期の受入、バックエンド監査、staging sleep、リリース前最終監査は完了した。招待制stagingは技術的受入完了で`SLEEPING`を維持する。production公開設定guardは解消済みで、一般公開へ残るHighは[最終監査](../reviews/pre-release-final-audit.md)のHigh 2だけである。次のruntime操作は別途明示承認を得て必要な時間だけ`pnpm staging:wake --hours <hours>`を実行するところから開始する。

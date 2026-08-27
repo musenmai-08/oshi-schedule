@@ -6,7 +6,7 @@
 
 ## 判定
 
-**招待制stagingの技術的受入は完了している。production一般公開はHigh 2件が残るため未準備である。**
+**招待制stagingの技術的受入は完了している。production一般公開はHigh 1件が残るため未準備である。**
 
 stagingはWeb 200、callbackの正規origin redirect、実OAuth、チャンネル登録・削除・再登録、要求時Sync、Scheduler起動の定期Sync、Calendar連携を受入済みである。監査時の実状態はCloudFormation `UPDATE_COMPLETE`、Amplify connected/Domain `AVAILABLE`、API 0/0/0、RDS `STOPPED`、Pipe `RUNNING`、定期Worker Scheduler `DISABLED`、全Queue/DLQ 0、Alarm 0で、意図した低コストsleep状態だった。CDK phase2 diffは0である。
 
@@ -48,6 +48,7 @@ auto-sleepも独立した`rate(1 hour)`だが、これは同期頻度ではな�
 - auto-sleepはstagingだけに存在し、期限切れ時にScheduler → API → RDSの順で安全側へ停止する。productionとbootstrap-onlyには作らない。
 - 現在digestのECR CRITICAL/HIGHは全8件が期限付き例外台帳と一致し、新規IDはない。例外期限は2026-09-11である。
 - `.env`と`apps/web/.env.local`はGit管理外で、追跡対象から秘密形式は検出されなかった。`localhost`、fake/demo、sample値はlocal/test/CI/exampleに限定され、production Webはplaceholder/demoを拒否する。
+- production full deployは、domain/certificate/Supabase公開値/Google Client IDを単一のCDK config境界で検証する。既知staging公開値のSHA-256 fingerprint、staging/dev/local/予約済みhost、localhost、placeholder、account/region不一致をsynth前に拒否する。productionのSupabase URLとGoogle Client IDは同じ検証済みconfigから環境固有SSM String Parameterを作り、AmplifyとECSのsourceを分岐させない。
 
 ## 指摘
 
@@ -57,14 +58,20 @@ auto-sleepも独立した`rate(1 hour)`だが、これは同期頻度ではな�
 
 ### High
 
-1. **production公開値のcross-environment guardが機械化されていない。** Secret ARNは`oshi-schedule-production/...`、account、region、complete ARNまで検証する一方、`webDomainName`、`apiDomainName`、certificate、Supabase URL/publishable key、Google Client IDは「存在する」ことしかproduction configで検証しない。staging値をproduction contextへ渡しても設定loaderだけでは拒否できず、文書上の二者確認に依存する。production presetのsource of truthと、staging hostname/project ref/client IDを拒否するsynth testを追加するまでproduction deployを開始しない。
 2. **一般公開用OAuth・法務表示が未完了。** `/terms`と`/privacy`は画面上も開発用デモと明示し、問い合わせ先、保存期間、Google API Services User Data Policy/Limited Use確認が未確定である。さらに実装は全Calendarへ広く作用できる`https://www.googleapis.com/auth/calendar`を使用し、[Googleが案内する限定scope](https://developers.google.com/workspace/calendar/api/auth)の`calendar.app.created`での再同意・全Gateway操作を未検証である。staging/testing用途は維持できるが、production一般公開前に正式文面、連絡先、scope決定、[OAuth production readiness](https://developers.google.com/identity/protocols/oauth2/production-readiness/policy-compliance)に沿ったGoogle Cloudのbrand/data-access review状態を確定する。
+
+### 解消済みHigh
+
+1. **production公開値のcross-environment guard。** `validateProductionIsolation`をfull deployのfail-fast gateへ追加し、domain所属、HTTPS origin、certificateのaccount/region、immutable image、公開key/client ID形式を検証する。現在のstaging domain、certificate、Supabase URL/publishable key、Google Client IDは値を保持しないfingerprint台帳でproductionへの完全一致流用を拒否する。Google Client IDもproduction必須contextへ昇格し、productionのSupabase URL/Google Client ID用SSMは検証済みCDK configから作成する。stagingは既存の外部SSM参照を維持し、staging CDK diff 0である。
 
 ### Medium
 
 1. **Worker Scheduler DLQだけTLS必須resource policyがない。** Sync QueueとSync DLQは`enforceSSL: true`だが、`SchedulerDeadLetterQueue`にはなく、AWS実policyにも`aws:SecureTransport` denyがない。SDK/service連携はHTTPSを使うものの、同じqueue security baselineへ揃えるIaC修正とassertion testが望ましい。
-2. **API production設定に開発用既定値が残る。** `WEB_ORIGIN=http://localhost:3001`と`ALLOWED_EMAILS=developer@example.com`はproductionでも明示必須ではない。現行CDKは環境別SSMを必ず注入するためstagingは安全だが、CDK外起動や将来のtask定義欠落を起動時に拒否できない。production/realでは明示値とHTTPS originを要求するfail-fast testが望ましい。
 3. **Container CVE例外の再審査期限が近い。** 期限付きで承認済みのDebian CVE 19 ID（Trivy 15、ECR High/Critical 8）は2026-09-11に失効する。現在はCI validationを通るが、期限前にbase image rebuild、fresh scan、Debian status確認が必要である。
+
+### 解消済みMedium
+
+2. **API production設定の開発用既定値。** production/realでは`WEB_ORIGIN`と`ALLOWED_EMAILS`を明示必須にし、productionのoriginはcredential/path/query/fragmentを持たないHTTPS originだけを許可する。`developer@example.com`もproduction/realで拒否する。real-modeのローカル受入は明示したlocalhost originを引き続き利用できる。
 
 ## 未確認項目
 
@@ -75,4 +82,4 @@ auto-sleepも独立した`rate(1 hour)`だが、これは同期頻度ではな�
 
 ## 次工程
 
-招待制stagingは現状のsleep運用で利用できる。production工程へ進む前にHigh 1のconfig/IaC guardを実装・回帰テストし、High 2のscope・OAuth審査・正式ポリシーを利用者判断で確定する。その後、production専用project/contextのread-only review、CDK synth/diff、初回2-phase rolloutの順に進む。
+招待制stagingは現状のsleep運用で利用できる。production工程へ進む前にHigh 2のscope・OAuth審査・正式ポリシーを利用者判断で確定する。その後、production専用の公開contextを作成し、fingerprint guardを含むsynth、read-only review、CDK diff、初回2-phase rolloutの順に進む。

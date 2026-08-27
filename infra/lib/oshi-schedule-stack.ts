@@ -267,16 +267,24 @@ export class OshiScheduleStack extends Stack {
       { parameterName: `/${prefix}/runtime/allowed-emails`, simpleName: false },
     );
     const referencedParameters = {
-      SUPABASE_URL: ssm.StringParameter.fromStringParameterAttributes(
-        this,
-        'SupabaseUrlParameter',
-        { parameterName: `/${prefix}/runtime/supabase-url`, simpleName: false },
-      ),
-      GOOGLE_CLIENT_ID: ssm.StringParameter.fromStringParameterAttributes(
-        this,
-        'GoogleClientIdParameter',
-        { parameterName: `/${prefix}/runtime/google-client-id`, simpleName: false },
-      ),
+      SUPABASE_URL: isProduction
+        ? new ssm.StringParameter(this, 'SupabaseUrlParameter', {
+            parameterName: `/${prefix}/runtime/supabase-url`,
+            stringValue: config.nextPublicSupabaseUrl ?? 'REQUIRED_AT_DEPLOY',
+          })
+        : ssm.StringParameter.fromStringParameterAttributes(this, 'SupabaseUrlParameter', {
+            parameterName: `/${prefix}/runtime/supabase-url`,
+            simpleName: false,
+          }),
+      GOOGLE_CLIENT_ID: isProduction
+        ? new ssm.StringParameter(this, 'GoogleClientIdParameter', {
+            parameterName: `/${prefix}/runtime/google-client-id`,
+            stringValue: config.googleClientId ?? 'REQUIRED_AT_DEPLOY',
+          })
+        : ssm.StringParameter.fromStringParameterAttributes(this, 'GoogleClientIdParameter', {
+            parameterName: `/${prefix}/runtime/google-client-id`,
+            simpleName: false,
+          }),
     };
     const referencedSecrets = Object.fromEntries(
       applicationSecretArnDefinitions.map((definition) => {

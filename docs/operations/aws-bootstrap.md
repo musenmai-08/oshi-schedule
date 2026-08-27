@@ -108,7 +108,7 @@ Route 53 hosted zoneを確認し、staging API FQDNを含むACM certificateを�
 
 deploy前に`cdk diff`を読み、RDS/HTTP API/VPC Link/Cloud Map/SQS/Pipes/ECS/Budgetとremoval policyを確認する。
 
-`deployReady=true`かつ`bootstrapOnly=false`では、domain/certificate、通知先、GitHub、公開Supabase設定、既存immutable image tag、環境固有の4つのapplication Secret complete ARNを必須にする。ARNは対象account/region、期待するSecret名、6文字suffixまで検証する。productionのARNを推測せず、staging ARNも流用しない。入力不足または不正contextのままfull stackをsynth/deployしない。
+`deployReady=true`かつ`bootstrapOnly=false`では、domain/certificate、通知先、GitHub、公開Supabase設定、既存immutable image tag、環境固有の4つのapplication Secret complete ARNを必須にする。productionではGoogle Client IDも必須contextとし、Supabase URLとGoogle Client IDのSSM String Parameterを同じ検証済みconfigから作る。ARNは対象account/region、期待するSecret名、6文字suffixまで検証する。productionのARNを推測せず、staging ARNも流用しない。入力不足または不正contextのままfull stackをsynth/deployしない。
 
 ```bash
 pnpm staging:context:show -- phase1
@@ -119,7 +119,7 @@ stagingのrepository-managed共通値は[`infra/config/staging-deploy.json`](../
 
 `staging:cdk:phase1`はAPI 0、Pipe STOPPED、activation falseを固定し、手動`-c`/`--context`を拒否する。`imageTag`というcontext名は互換性のため維持するが、source of truthの値は検証済みの`sha256:...` digestとし、Task Definitionをdigest固定する。同じpresetで`deploy`するのはdiff、費用、Secret/Parameter、backup方針をユーザーが承認した後だけである。
 
-Phase 1 deploy後は[初回staging rollout](staging-initial-rollout.md)に従ってone-off migrationのexit 0、pendingなし、driftなしを確認する。その後、同じ共通fingerprintの`pnpm staging:cdk:phase2 -- diff/deploy`を使い、API 1、Pipe RUNNING、activation trueへupdate-in-placeする。migration失敗時はPhase 2を禁止する。productionはstaging presetを使わず、従来どおり`-c environment=production -c confirmProduction=DEPLOY_PRODUCTION`を要求する。
+Phase 1 deploy後は[初回staging rollout](staging-initial-rollout.md)に従ってone-off migrationのexit 0、pendingなし、driftなしを確認する。その後、同じ共通fingerprintの`pnpm staging:cdk:phase2 -- diff/deploy`を使い、API 1、Pipe RUNNING、activation trueへupdate-in-placeする。migration失敗時はPhase 2を禁止する。productionはstaging presetを使わず、`DeploymentConfig`へproduction専用の公開contextを一式渡し、`-c environment=production -c confirmProduction=DEPLOY_PRODUCTION`を要求する。このconfigがdomain/certificate/Amplify/SSMの単一source of truthである。既知staging値のfingerprint一致、staging/dev/local/予約済みhost、localhost、placeholder、certificateのaccount/region不一致はsynth前に拒否する。
 
 ## 5. deploy後
 

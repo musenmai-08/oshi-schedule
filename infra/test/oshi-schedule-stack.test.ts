@@ -87,6 +87,20 @@ const configFor = (environmentName: EnvironmentName): DeploymentConfig => ({
   apiDesiredCount: environmentName === 'staging' ? 0 : 1,
   syncPipeDesiredState: environmentName === 'staging' ? 'STOPPED' : 'RUNNING',
   applicationActivated: environmentName === 'production',
+  hostedZoneName: 'oshi-schedule.com',
+  webDomainName:
+    environmentName === 'production' ? 'app.oshi-schedule.com' : 'staging.oshi-schedule.com',
+  apiDomainName:
+    environmentName === 'production' ? 'api.oshi-schedule.com' : 'api-staging.oshi-schedule.com',
+  nextPublicSupabaseUrl:
+    environmentName === 'production'
+      ? 'https://production-ref.supabase.co'
+      : 'https://staging-ref.supabase.co',
+  nextPublicSupabasePublishableKey: `sb_publishable_${environmentName}_abc123`,
+  googleClientId:
+    environmentName === 'production'
+      ? '1234567890-prodabc123.apps.googleusercontent.com'
+      : undefined,
   ...applicationSecretArns(environmentName),
   monthlyBudgetUsd: environmentName === 'staging' ? 25 : 75,
   githubOwner: 'example-owner',
@@ -497,6 +511,14 @@ describe('OshiScheduleStack', () => {
     template.hasResourceProperties('AWS::SSM::Parameter', {
       Name: '/oshi-schedule-production/runtime/application-activated',
       Value: 'true',
+    });
+    template.hasResourceProperties('AWS::SSM::Parameter', {
+      Name: '/oshi-schedule-production/runtime/supabase-url',
+      Value: 'https://production-ref.supabase.co',
+    });
+    template.hasResourceProperties('AWS::SSM::Parameter', {
+      Name: '/oshi-schedule-production/runtime/google-client-id',
+      Value: '1234567890-prodabc123.apps.googleusercontent.com',
     });
   });
 

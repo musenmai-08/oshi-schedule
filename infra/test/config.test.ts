@@ -1,4 +1,5 @@
 import { App } from 'aws-cdk-lib';
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
   loadConfig,
@@ -6,6 +7,7 @@ import {
   parseBooleanContext,
   parseNonNegativeIntegerContext,
   parseSyncPipeDesiredState,
+  validateProductionIsolation,
 } from '../lib/config.js';
 
 describe('parseBooleanContext', () => {
@@ -102,6 +104,32 @@ describe('loadConfig', () => {
     amplifyConnectionPhase: 'manual',
     imageTag: `sha256:${'a'.repeat(64)}`,
   };
+  const productionDeployContext = {
+    ...completeDeployContext,
+    environment: 'production',
+    confirmProduction: 'DEPLOY_PRODUCTION',
+    applicationActivated: 'true',
+    apiDesiredCount: '1',
+    syncPipeDesiredState: 'RUNNING',
+    hostedZoneName: 'oshi-schedule.com',
+    webDomainName: 'app.oshi-schedule.com',
+    apiDomainName: 'api.oshi-schedule.com',
+    certificateArn:
+      'arn:aws:acm:ap-northeast-1:111111111111:certificate/11111111-1111-4111-8111-111111111111',
+    alertEmail: 'alerts@oshi-schedule.com',
+    nextPublicSupabaseUrl: 'https://production-ref.supabase.co',
+    nextPublicSupabasePublishableKey: 'sb_publishable_prodabc123',
+    googleClientId: '1234567890-prodabc123.apps.googleusercontent.com',
+    amplifyConnectionPhase: 'connected',
+    supabaseServiceRoleSecretArn:
+      'arn:aws:secretsmanager:ap-northeast-1:111111111111:secret:oshi-schedule-production/app/supabase-service-role-key-Ab12Cd',
+    googleClientSecretArn:
+      'arn:aws:secretsmanager:ap-northeast-1:111111111111:secret:oshi-schedule-production/app/google-client-secret-Ef34Gh',
+    youtubeApiKeySecretArn:
+      'arn:aws:secretsmanager:ap-northeast-1:111111111111:secret:oshi-schedule-production/app/youtube-api-key-Ij56Kl',
+    tokenEncryptionKeysSecretArn:
+      'arn:aws:secretsmanager:ap-northeast-1:111111111111:secret:oshi-schedule-production/app/token-encryption-keys-Mn78Op',
+  };
 
   it('synthesizes staging without a purchased domain', () => {
     const app = new App({ context: { environment: 'staging' } });
@@ -178,35 +206,85 @@ describe('loadConfig', () => {
 
   it('requires production-specific Secret ARNs instead of accepting staging ARNs', () => {
     const productionContext = {
-      ...completeDeployContext,
-      environment: 'production',
-      confirmProduction: 'DEPLOY_PRODUCTION',
-      applicationActivated: 'true',
-      apiDesiredCount: '1',
-      syncPipeDesiredState: 'RUNNING',
-      amplifyConnectionPhase: 'connected',
+      ...productionDeployContext,
+      supabaseServiceRoleSecretArn: completeDeployContext.supabaseServiceRoleSecretArn,
+      googleClientSecretArn: completeDeployContext.googleClientSecretArn,
+      youtubeApiKeySecretArn: completeDeployContext.youtubeApiKeySecretArn,
+      tokenEncryptionKeysSecretArn: completeDeployContext.tokenEncryptionKeysSecretArn,
     };
     expect(() => loadConfig(new App({ context: productionContext }))).toThrow(
       /supabaseServiceRoleSecretArn must be the complete ARN for oshi-schedule-production/,
     );
 
-    const productionSecretArns = Object.fromEntries(
+    expect(loadConfig(new App({ context: productionDeployContext }))).toMatchObject({
+      environmentName: 'production',
+      googleClientId: productionDeployContext.googleClientId,
+    });
+  });
+
+  it('requires the production Google client ID as a managed public input', () => {
+    const context = { ...productionDeployContext };
+    delete (context as Partial<typeof context>).googleClientId;
+    expect(() => loadConfig(new App({ context }))).toThrow(/requires context: googleClientId/);
+  });
+
+  it.each([
+    ['webDomainName', 'staging.oshi-schedule.com'],
+    ['apiDomainName', 'api-staging.oshi-schedule.com'],
+    [
+      'certificateArn',
+      'arn:aws:acm:ap-northeast-1:741448960817:certificate/34f4c02d-769a-4bfa-b85d-829a6ed67774',
+    ],
+    ['nextPublicSupabaseUrl', 'https://staging-ref.supabase.co'],
+    ['nextPublicSupabasePublishableKey', 'sb_publishable_staging_fixture'],
+    ['googleClientId', '1234567890-stagingfixture.apps.googleusercontent.com'],
+  ] as const)('rejects a fingerprinted staging %s in production', (key, value) => {
+    const config = loadConfig(new App({ context: productionDeployContext }));
+    const fingerprints = Object.fromEntries(
       [
-        'supabaseServiceRoleSecretArn',
-        'googleClientSecretArn',
-        'youtubeApiKeySecretArn',
-        'tokenEncryptionKeysSecretArn',
-      ].map((key) => [
-        key,
-        String(productionContext[key as keyof typeof productionContext]).replace(
-          'oshi-schedule-staging',
-          'oshi-schedule-production',
-        ),
+        'webDomainName',
+        'apiDomainName',
+        'certificateArn',
+        'nextPublicSupabaseUrl',
+        'nextPublicSupabasePublishableKey',
+        'googleClientId',
+      ].map((name) => [
+        name,
+        name === key
+          ? `sha256:${createHash('sha256').update(value).digest('hex')}`
+          : 'sha256:not-the-staging-value',
       ]),
+    ) as Parameters<typeof validateProductionIsolation>[1];
+
+    expect(() => validateProductionIsolation({ ...config, [key]: value }, fingerprints)).toThrow(
+      new RegExp(`production ${key} must not reuse the staging value`),
     );
-    expect(
-      loadConfig(new App({ context: { ...productionContext, ...productionSecretArns } })),
-    ).toMatchObject({ environmentName: 'production' });
+  });
+
+  it.each([
+    ['webDomainName', 'localhost'],
+    ['webDomainName', 'app.example.com'],
+    ['webDomainName', 'dev.oshi-schedule.com'],
+    ['nextPublicSupabaseUrl', 'http://127.0.0.1:54321'],
+    ['nextPublicSupabaseUrl', 'https://test.supabase.co'],
+  ] as const)('rejects production development or placeholder %s=%s', (key, value) => {
+    expect(() =>
+      loadConfig(new App({ context: { ...productionDeployContext, [key]: value } })),
+    ).toThrow(/production/);
+  });
+
+  it('rejects a production certificate from another account or region', () => {
+    expect(() =>
+      loadConfig(
+        new App({
+          context: {
+            ...productionDeployContext,
+            certificateArn:
+              'arn:aws:acm:us-east-1:999999999999:certificate/11111111-1111-4111-8111-111111111111',
+          },
+        }),
+      ),
+    ).toThrow(/certificateArn must match the configured account and region/);
   });
 
   it('keeps synth-only behavior when deployReady is the CLI string false', () => {

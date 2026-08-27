@@ -106,6 +106,28 @@ export type Env = z.infer<typeof schema>;
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   const env = schema.parse(source);
   if (env.NODE_ENV === 'production' || env.APP_MODE === 'real') {
+    if (!source.WEB_ORIGIN?.trim())
+      throw new Error('Missing required environment variable: WEB_ORIGIN');
+    if (!source.ALLOWED_EMAILS?.trim())
+      throw new Error('Missing required environment variable: ALLOWED_EMAILS');
+    if (env.NODE_ENV === 'production') {
+      const webOrigin = new URL(env.WEB_ORIGIN);
+      if (
+        webOrigin.protocol !== 'https:' ||
+        webOrigin.username !== '' ||
+        webOrigin.password !== '' ||
+        webOrigin.pathname !== '/' ||
+        webOrigin.search !== '' ||
+        webOrigin.hash !== ''
+      )
+        throw new Error('WEB_ORIGIN must be an HTTPS origin in production');
+    }
+    if (
+      env.ALLOWED_EMAILS.split(',').some(
+        (email) => email.trim().toLowerCase() === 'developer@example.com',
+      )
+    )
+      throw new Error('ALLOWED_EMAILS must not use the development default in production/real');
     for (const key of [
       'DATABASE_URL',
       'SUPABASE_URL',

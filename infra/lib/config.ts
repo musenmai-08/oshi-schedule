@@ -1,4 +1,9 @@
 import type { App } from 'aws-cdk-lib';
+import { createHash } from 'node:crypto';
+import {
+  stagingPublicIdentifierFingerprints,
+  type StagingPublicIdentifierFingerprints,
+} from './environment-boundary.js';
 
 export type EnvironmentName = 'staging' | 'production';
 export type SyncPipeDesiredState = 'STOPPED' | 'RUNNING';
@@ -48,6 +53,7 @@ export interface DeploymentConfig {
   alertEmail?: string;
   nextPublicSupabaseUrl?: string;
   nextPublicSupabasePublishableKey?: string;
+  googleClientId?: string;
   supabaseServiceRoleSecretArn?: string;
   googleClientSecretArn?: string;
   youtubeApiKeySecretArn?: string;
@@ -137,6 +143,142 @@ const requiredForDeploy = (config: DeploymentConfig, name: keyof DeploymentConfi
 const escapeRegularExpression = (value: string): string =>
   value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+const sha256Fingerprint = (value: string): string =>
+  `sha256:${createHash('sha256').update(value).digest('hex')}`;
+
+const domainPattern = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
+const nonProductionDomainLabel =
+  /(^|[.-])(staging|stage|test|testing|dev|development|local)([.-]|$)/;
+const reservedHostname = /(^|\.)(localhost|example\.(?:com|net|org)|invalid|local)$/;
+const localAddress = /^(?:127(?:\.\d{1,3}){3}|0\.0\.0\.0|::1)$/;
+const placeholderHostnameLabel =
+  /(^|[.-])(example|placeholder|replace|replace-me|required|your-project|project-ref)([.-]|$)/;
+const placeholderValue =
+  /(?:required|replace[_-]?me|placeholder|example|fixture|your[-_]?project)/i;
+
+const validateProductionDomain = (
+  name: 'hostedZoneName' | 'webDomainName' | 'apiDomainName',
+  value: string,
+): void => {
+  const hostname = value.toLowerCase();
+  if (!domainPattern.test(hostname)) throw new Error(`production ${name} must be a valid DNS name`);
+  if (
+    reservedHostname.test(hostname) ||
+    localAddress.test(hostname) ||
+    placeholderHostnameLabel.test(hostname) ||
+    nonProductionDomainLabel.test(hostname)
+  ) {
+    throw new Error(`production ${name} must not use a staging, development, or reserved hostname`);
+  }
+};
+
+const validateProductionHttpsOrigin = (name: string, value: string): URL => {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error(`production ${name} must be a valid HTTPS origin`);
+  }
+  if (
+    parsed.protocol !== 'https:' ||
+    parsed.username !== '' ||
+    parsed.password !== '' ||
+    parsed.pathname !== '/' ||
+    parsed.search !== '' ||
+    parsed.hash !== ''
+  ) {
+    throw new Error(`production ${name} must be a valid HTTPS origin`);
+  }
+  const hostname = parsed.hostname.toLowerCase();
+  if (
+    reservedHostname.test(hostname) ||
+    localAddress.test(hostname) ||
+    placeholderHostnameLabel.test(hostname) ||
+    nonProductionDomainLabel.test(hostname)
+  ) {
+    throw new Error(`production ${name} must not use a staging, development, or reserved host`);
+  }
+  return parsed;
+};
+
+export const validateProductionIsolation = (
+  config: DeploymentConfig,
+  stagingFingerprints: StagingPublicIdentifierFingerprints = stagingPublicIdentifierFingerprints,
+): void => {
+  if (config.environmentName !== 'production') return;
+  if (!config.account || !/^\d{12}$/.test(config.account))
+    throw new Error('production account must be a 12-digit AWS account ID');
+  if (!/^[a-z]{2}(?:-gov)?-[a-z]+-\d$/.test(config.region))
+    throw new Error('production region is malformed');
+  if (config.hostedZoneId && !/^Z[A-Z0-9]+$/.test(config.hostedZoneId))
+    throw new Error('production hostedZoneId is malformed');
+  const required = {
+    webDomainName: config.webDomainName,
+    apiDomainName: config.apiDomainName,
+    certificateArn: config.certificateArn,
+    nextPublicSupabaseUrl: config.nextPublicSupabaseUrl,
+    nextPublicSupabasePublishableKey: config.nextPublicSupabasePublishableKey,
+    googleClientId: config.googleClientId,
+  } as const;
+
+  for (const [name, value] of Object.entries(required)) {
+    if (!value) continue;
+    if (sha256Fingerprint(value) === stagingFingerprints[name as keyof typeof required]) {
+      throw new Error(`production ${name} must not reuse the staging value`);
+    }
+  }
+
+  if (config.hostedZoneName) validateProductionDomain('hostedZoneName', config.hostedZoneName);
+  if (config.webDomainName) validateProductionDomain('webDomainName', config.webDomainName);
+  if (config.apiDomainName) validateProductionDomain('apiDomainName', config.apiDomainName);
+  if (config.hostedZoneName && config.webDomainName) {
+    if (
+      config.webDomainName !== config.hostedZoneName &&
+      !config.webDomainName.endsWith(`.${config.hostedZoneName}`)
+    )
+      throw new Error('production webDomainName must belong to hostedZoneName');
+  }
+  if (config.hostedZoneName && config.apiDomainName) {
+    if (
+      config.apiDomainName !== config.hostedZoneName &&
+      !config.apiDomainName.endsWith(`.${config.hostedZoneName}`)
+    )
+      throw new Error('production apiDomainName must belong to hostedZoneName');
+  }
+  if (config.webDomainName && config.apiDomainName && config.webDomainName === config.apiDomainName)
+    throw new Error('production webDomainName and apiDomainName must be different');
+
+  if (config.nextPublicSupabaseUrl)
+    validateProductionHttpsOrigin('nextPublicSupabaseUrl', config.nextPublicSupabaseUrl);
+  if (
+    config.nextPublicSupabasePublishableKey &&
+    (placeholderValue.test(config.nextPublicSupabasePublishableKey) ||
+      (!/^sb_publishable_[A-Za-z0-9_-]+$/.test(config.nextPublicSupabasePublishableKey) &&
+        !/^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(
+          config.nextPublicSupabasePublishableKey,
+        )))
+  )
+    throw new Error('production nextPublicSupabasePublishableKey is malformed');
+  if (
+    config.googleClientId &&
+    (placeholderValue.test(config.googleClientId) ||
+      !/^\d+-[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$/.test(config.googleClientId))
+  )
+    throw new Error('production googleClientId is malformed');
+  if (config.alertEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(config.alertEmail))
+    throw new Error('production alertEmail is malformed');
+  if (!/^sha256:[0-9a-f]{64}$/.test(config.imageTag))
+    throw new Error('production imageTag must be an immutable sha256 digest');
+  if (config.account && config.certificateArn) {
+    const certificatePattern = new RegExp(
+      `^arn:(?:aws|aws-us-gov|aws-cn):acm:${escapeRegularExpression(config.region)}:` +
+        `${escapeRegularExpression(config.account)}:certificate/[0-9a-f-]{36}$`,
+    );
+    if (!certificatePattern.test(config.certificateArn))
+      throw new Error('production certificateArn must match the configured account and region');
+  }
+};
+
 const validateApplicationSecretArns = (config: DeploymentConfig): void => {
   if (!config.account) throw new Error('CDK deploy requires context: account');
 
@@ -194,6 +336,7 @@ export const loadConfig = (app: App): DeploymentConfig => {
     alertEmail: optionalString(app, 'alertEmail'),
     nextPublicSupabaseUrl: optionalString(app, 'nextPublicSupabaseUrl'),
     nextPublicSupabasePublishableKey: optionalString(app, 'nextPublicSupabasePublishableKey'),
+    googleClientId: optionalString(app, 'googleClientId'),
     supabaseServiceRoleSecretArn: optionalString(app, 'supabaseServiceRoleSecretArn'),
     googleClientSecretArn: optionalString(app, 'googleClientSecretArn'),
     youtubeApiKeySecretArn: optionalString(app, 'youtubeApiKeySecretArn'),
@@ -273,7 +416,9 @@ export const loadConfig = (app: App): DeploymentConfig => {
     ] as const) {
       requiredForDeploy(config, key);
     }
+    if (environmentName === 'production') requiredForDeploy(config, 'googleClientId');
     validateApplicationSecretArns(config);
+    validateProductionIsolation(config);
     if (
       config.githubOwner.startsWith('REQUIRED_') ||
       config.githubRepository.startsWith('REQUIRED_')
