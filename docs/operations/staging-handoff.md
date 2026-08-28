@@ -4,7 +4,7 @@
 
 ## 現在状態
 
-2026-08-26 23:06 JSTに`oshi-schedule` profile、`ap-northeast-1`で確認した。
+2026-08-28 21:15 JSTに`oshi-schedule` profile、`ap-northeast-1`で再確認した。
 
 | 項目                   | 状態                              |
 | ---------------------- | --------------------------------- |
@@ -71,6 +71,7 @@ sha256:724b4edd23c7b9b71790623414895aa53f0ddc82249b164b9798d09cf756b99e
 ## 未解消障害
 
 - バックエンド受入上の機能ブロッカーはない。private RDSとGoogle Calendarの実イベント一覧をAWS writeなしで直接照会する経路はないため、DB行と実イベント件数の独立確認は未実施である。
+- `calendar.app.created`対応版のruntime candidateはECR scanで未登録OpenSSL HIGH 3件を検出したため未deployである。例外台帳に従い、新findingを自動受容せず、CloudFormationとAmplifyへの追加writeを停止している。
 
 ## 2026-08-26 リリース前最終監査
 
@@ -93,6 +94,20 @@ Calendar scope最小化コードは`https://www.googleapis.com/auth/calendar.app
 AWS、Google Cloud、Supabase、DB実データ、OAuth grantは変更しておらず、deployと実OAuth再試行も行っていない。既存staging利用者のDB scope行は再同意まで自動移行しない。限定scope受入では、当該Google projectを未許可の利用者を使うか、Google Account側で既存grantを明示revokeしてから同意し、実grantとDB保存scopeに広いCalendar scopeがないことを匿名化して確認する。詳細手順は[High 2詳細監査](../reviews/high-2-production-oauth-legal-audit.md)のC項をsource of truthとする。
 
 2026-08-28に利用制限で中断した未commit差分を保持したままレビューを再開し、関連test、lint、typecheck、Amplify相当のproduction buildを完了した。全testは既存infra synth testの並列時timeoutを避けるため直列でも再確認し、全suiteが成功した。AWS write、deploy、OAuth再実行は行っていない。
+
+## 2026-08-28 `calendar.app.created` staging deploy事前ゲート
+
+`main`のCI成功とcleanなGit、Amplify control-plane preflight全PASS、CloudFormation phase2 diff 0を確認した。stagingはAPI 0/0/0、RDS `STOPPED`、Worker Scheduler `DISABLED`、queue 0の`SLEEPING`を維持している。Prisma schema差分はないためmigrationは実行していない。
+
+commit `3d6e82e65c56817407cf685293e643171327a11f`から`linux/amd64` runtime imageをbuildし、Node.js 22.23.1、non-root、Prisma Client、RDS CAを含むruntime contractを検証した。Trivy 0.73.0の最新DBと有効期限内の`.trivyignore`によるHIGH/CRITICAL policy scanは0件で成功した。検証済みimageだけをimmutable commit tagでstaging ECRへpushし、candidate digestを次で確定した。
+
+```text
+sha256:42c35efdd0b3ae46b2d806acc31ce5e1996ffd06c5cf75541ccd1a41786162a6
+```
+
+ECR Basic ScanはCRITICAL 3 / HIGH 8を報告した。CRITICAL 3とHIGH 5は既存例外台帳と一致するが、`openssl` `3.0.20-1~deb12u2`に対する`CVE-2026-54874`、`CVE-2026-63072`、`CVE-2026-63076`のHIGH 3件は未登録で、scan上のfixed versionも空だった。新findingを自動で例外化しない恒久ルールに従い、`infra/config/staging-deploy.json`の稼働digestは変更せず、CDK deployとAmplify buildを実行していない。CloudFormation、Task Definition、Webは旧digest/versionのままである。
+
+次は3件についてDebian bookwormの修正版有無、実行経路、影響を再審査し、base imageで解消できる場合は再buildする。修正不能で一時例外が必要な場合は、明示承認と期限を得て例外台帳へ登録してから、candidateの再scan、digest config更新、限定CDK diff、sleep中deploy、Amplify buildの順に再開する。
 
 ## 恒久的なAWS安全ルール
 
@@ -133,4 +148,4 @@ DomainAssociationを削除してから`connected`で再作成し`AVAILABLE`に�
 
 ## 次工程
 
-今回のOAuth/login、チャンネル登録、再Sync、削除、再登録、定期Scheduler同期の受入、バックエンド監査、staging sleep、リリース前最終監査は完了した。招待制stagingは技術的受入完了で`SLEEPING`を維持する。production公開設定guardとOAuth scope最小化コードは解消済みで、一般公開へ残るHighは[High 2詳細監査](../reviews/high-2-production-oauth-legal-audit.md)の限定scope実受入、法務表示、branding、production外部設定・公開審査である。次は別途承認されたdeployとGoogle/Supabase Data Access変更後、旧grantを排除したstaging手動受入を行う。
+今回のOAuth/login、チャンネル登録、再Sync、削除、再登録、定期Scheduler同期の受入、バックエンド監査、staging sleep、リリース前最終監査は完了した。招待制stagingは技術的受入完了で`SLEEPING`を維持する。production公開設定guardとOAuth scope最小化コードは解消済みで、一般公開へ残るHighは[High 2詳細監査](../reviews/high-2-production-oauth-legal-audit.md)の限定scope実受入、法務表示、branding、production外部設定・公開審査である。次は新runtime candidateの未登録ECR finding 3件を再審査し、安全ゲートを通過後に限定deployを再開する。deploy完了後、Google/Supabase Data Access変更と旧grantを排除したstaging手動受入を別途承認の上で行う。
