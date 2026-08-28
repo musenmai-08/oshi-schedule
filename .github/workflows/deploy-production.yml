@@ -89,6 +89,18 @@ jobs:
             exit 1
           }
           echo 'staging digest verified'
+      - name: Reject staging-only vulnerability exceptions
+        run: |
+          staging_only_findings="$(aws ecr describe-image-scan-findings \
+            --region "$AWS_REGION" \
+            --repository-name "$STAGING_ECR_REPOSITORY" \
+            --image-id imageDigest="$IMAGE_DIGEST" \
+            --query "imageScanFindings.findings[?name=='CVE-2026-54874' || name=='CVE-2026-63072' || name=='CVE-2026-63076'].name" \
+            --output text)"
+          [[ -z "$staging_only_findings" || "$staging_only_findings" == None ]] || {
+            echo 'The image uses staging-only vulnerability exceptions and cannot be promoted to production' >&2
+            exit 1
+          }
       - uses: aws-actions/amazon-ecr-login@v2
       - name: Scan staging-verified image before promotion
         uses: aquasecurity/trivy-action@v0.36.0

@@ -1,0 +1,26 @@
+# Staging-only temporary Debian bookworm risk acceptances.
+# Production must use .trivyignore and must never consume this file.
+# The complete rationale and review procedure live in:
+# docs/security/container-vulnerability-exceptions.md
+# Every entry expires on the next mandatory review date.
+
+CVE-2023-45853 exp:2026-09-11
+CVE-2025-69720 exp:2026-09-11
+CVE-2026-8376 exp:2026-09-11
+CVE-2026-9538 exp:2026-09-11
+CVE-2026-13221 exp:2026-09-11
+CVE-2026-14456 exp:2026-09-11
+CVE-2026-41992 exp:2026-09-11
+CVE-2026-42496 exp:2026-09-11
+CVE-2026-42497 exp:2026-09-11
+CVE-2026-48962 exp:2026-09-11
+CVE-2026-53613 exp:2026-09-11
+CVE-2026-53615 exp:2026-09-11
+CVE-2026-54369 exp:2026-09-11
+CVE-2026-57432 exp:2026-09-11
+CVE-2026-57433 exp:2026-09-11
+
+# Approved only for the staging runtime through 2026-09-11.
+CVE-2026-54874 exp:2026-09-11
+CVE-2026-63072 exp:2026-09-11
+CVE-2026-63076 exp:2026-09-11

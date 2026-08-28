@@ -109,9 +109,13 @@ ECR Basic ScanはCRITICAL 3 / HIGH 8を報告した。CRITICAL 3とHIGH 5は既�
 
 3件を再審査した結果、bookworm/bookworm-securityの候補は引き続き`3.0.20-1~deb12u2`で、修正済みbookworm packageはない。OpenSSL upstreamの修正版は3.0.22である。`node:22.23.1-trixie-slim`へ変更したlocal candidateは修正済み`3.5.7-1~deb13u2`を取得しruntime contractにも合格したが、raw Trivy scanで別の未登録HIGHを導入したため、base OS移行を採用せずDockerfileは変更していない。
 
-対象経路はそれぞれDTLS endpoint、CMS decrypt、CMP client/serverである。アプリはHTTP/HTTPSとMySQL TLSだけを利用し、UDP/DTLS、CMS、CMPを実装・起動しない。Prisma query engineはsystem `libssl3`へlinkするが、利用経路はMySQL TLSに限定される。したがって2026-09-11までの期限付き例外は技術的に妥当と判断したが、project ownerの明示承認前であり未承認のままである。3件はECR固有でraw Trivy 0.73.0には現れないため`.trivyignore`へ追加しない。詳細は[例外台帳のpending review](../security/container-vulnerability-exceptions.md#pending-ecr-specific-openssl-review-2026-08-28)を参照する。
+対象経路はそれぞれDTLS endpoint、CMS decrypt、CMP client/serverである。アプリはHTTP/HTTPSとMySQL TLSだけを利用し、UDP/DTLS、CMS、CMPを実装・起動しない。Prisma query engineはsystem `libssl3`へlinkするが、利用経路はMySQL TLSに限定される。project ownerはこの3件をstaging runtime限定、期限2026-09-11で承認した。共通の`.trivyignore`は変更せず、3件を追加した`.trivyignore.staging`をstaging scanだけが使用する。production workflowは共通policyを使い続け、ECR scanに3件のいずれかがあればpromotion前にfailする。詳細は[例外台帳のstaging限定例外](../security/container-vulnerability-exceptions.md#staging-only-ecr-openssl-exceptions-approved-2026-08-28)を参照する。
 
-次は3件の期限付き例外をproject ownerが明示承認した場合だけaccepted tableへ移し、candidateのpolicy確認、digest config更新、限定CDK diff、sleep中deploy、Amplify buildの順に再開する。承認されない場合はbookwormの修正版を待って再buildする。
+AWSへ送らないlocal candidate `oshi-schedule:openssl-exceptions-staging`を`linux/amd64`で再buildした。local image IDは`sha256:e334d73a37b241cde63f2ec31b8d25751b234e8f5e58e70cdcf60848b1aaee39`で、OpenSSL/libssl3は審査対象の`3.0.20-1~deb12u2`と一致する。Node.js 22.23.1、non-root、Prisma Client、RDS CAを含むruntime contractは合格した。
+
+Trivy 0.73.0の2026-08-28最新DBによるraw scanは既知14 CVE ID、30 findings（CRITICAL 4 / HIGH 26）で、新規IDはない。`.trivyignore.staging`によるpolicy scanはexit 0、未承認CRITICAL/HIGH 0件だった。承認したOpenSSL 3件はECR固有のためraw Trivyには現れないが、専用policy、例外台帳、対象package versionの一致を確認した。ECR push、CDK deploy、Amplify buildを含むAWS writeは行っていない。
+
+candidate検証blockerは解消した。次は別途承認された工程でのみ、current commitからimmutable imageをstaging ECRへpushし、ECR scan再確認、digest config更新、限定CDK diff、sleep中deploy、Amplify buildの順に再開する。productionへ同じ例外を持ち込むことはできない。
 
 ## 恒久的なAWS安全ルール
 
