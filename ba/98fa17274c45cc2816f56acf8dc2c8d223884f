@@ -1,0 +1,22 @@
+docs/security/container-vulnerability-exceptions.md
+  s_3a50bad78ea1cd::t_91ee65b6cb27b1 60-73,79-84
+  s_3a50bad78ea1cd::t_3c083ad45ac755 74-78
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_91ee65b6cb27b1 110-114,155
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "ba98fa17274c45cc2816f56acf8dc2c8d223884f",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
