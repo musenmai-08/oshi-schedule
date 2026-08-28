@@ -129,6 +129,8 @@ ECR Basic Scanは`COMPLETE`となり、CRITICAL 3 / HIGH 8（合計11件）のCV
 
 現在はAPI 0/0/0、RDS `STOPPED`、Worker Scheduler `DISABLED`、Cloud Map登録0、status `SLEEPING`で、API/Worker/MigrationのTask Definitionはすべてこのdigestを参照する。Amplify build、OAuth、migration、同期は実行していない。productionへはstaging限定例外を含むため昇格できない。
 
+2026-08-28 23:16〜23:20 JSTにAmplify `main`のjob `7`を1回だけ実行し、BUILD/DEPLOY/VERIFYすべて`SUCCEED`した。接続済みmainのHEAD（OAuth `calendar.app.created`最小scope実装を含む）をbuildし、`https://staging.oshi-schedule.com/`はHTTP 200で実アプリの識別表示を返し、Welcomeプレースホルダーではなかった。build中もAPI/RDSをwakeせず、完了後のstatusはAPI 0/0/0、RDS `STOPPED`、Scheduler `DISABLED`、`SLEEPING`である。OAuth実ログイン、Sync、wakeは行っていない。
+
 ## 恒久的なAWS安全ルール
 
 - AWS CLI/CDKは`--profile oshi-schedule`、account `741448960817`、region `ap-northeast-1`だけを使用し、`default`を使わない。
