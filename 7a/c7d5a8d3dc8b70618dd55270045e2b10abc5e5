@@ -1,0 +1,81 @@
+apps/api/src/infrastructure/google-calendar/google-calendar-gateway.ts
+  s_3a50bad78ea1cd::t_614fc5e37c6408 1,31,73-77,80-89,92-93,97-111
+apps/web/src/lib/auth-callback.ts
+  s_3a50bad78ea1cd::t_eb8cea142af7c7 38-49
+apps/api/src/infrastructure/google-calendar/fake-calendar-gateway.ts
+  s_3a50bad78ea1cd::t_9e27da1164d744 2,9-11
+apps/api/src/application/oshi-service.ts
+  s_3a50bad78ea1cd::t_9e27da1164d744 49-59,61,68
+apps/api/src/infrastructure/database/memory-store.ts
+  s_3a50bad78ea1cd::t_9e27da1164d744 25,81,166,168,175,180,195-196
+  s_3a50bad78ea1cd::t_44f740c03b6020 197
+apps/api/src/application/channel-removal.test.ts
+  s_3a50bad78ea1cd::t_bfd064da3b16a5 53-59
+apps/api/src/application/sync-service.test.ts
+  s_3a50bad78ea1cd::t_bfd064da3b16a5 70-76,285-291,354-360,541-547,564-570
+apps/api/src/infrastructure/database/prisma-store.ts
+  s_3a50bad78ea1cd::t_9e27da1164d744 181,187,194,203,211,218
+apps/api/src/prisma-api.integration.test.ts
+  s_3a50bad78ea1cd::t_202a36705b2df3 14,90-94
+docs/security/security-policy.md
+  s_3a50bad78ea1cd::t_32183bf280a477 27,29-31
+  s_3a50bad78ea1cd::t_a55732f8b2e3c2 37
+packages/shared/src/index.test.ts
+  s_3a50bad78ea1cd::t_eb8cea142af7c7 2-7,22-57,59
+  s_3a50bad78ea1cd::t_8db5694eab68de 58
+  s_3a50bad78ea1cd::t_c01aeb3c4b8bd5 60
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_78816c23595cbc 91,93,136
+  s_3a50bad78ea1cd::t_79137af42960ae 95
+  s_3a50bad78ea1cd::t_c1c95ee803c864 94
+packages/shared/src/index.ts
+  s_3a50bad78ea1cd::t_8db5694eab68de 10-12,32-34
+  s_3a50bad78ea1cd::t_eb8cea142af7c7 9,13-31,35-53
+apps/web/src/lib/google-oauth.test.ts
+  s_3a50bad78ea1cd::t_eb8cea142af7c7 2-3,9,13,16-19
+docs/reviews/pre-release-final-audit.md
+  s_3a50bad78ea1cd::t_32183bf280a477 61,80,85
+apps/api/src/application/models.ts
+  s_3a50bad78ea1cd::t_9e27da1164d744 143-148,154,303
+apps/api/src/infrastructure/google-calendar/google-calendar-gateway.test.ts
+  s_3a50bad78ea1cd::t_bfd064da3b16a5 24-30,198-204
+  s_3a50bad78ea1cd::t_4b5579a16317fc 11-17,133,186,226,242,264,279
+  s_3a50bad78ea1cd::t_8db5694eab68de 90-97,167,314
+  s_3a50bad78ea1cd::t_3f357e6e5941e3 86-89,98-127,301-313,315-344
+apps/api/src/app.test.ts
+  s_3a50bad78ea1cd::t_8db5694eab68de 217
+  s_3a50bad78ea1cd::t_7838d6f61f1fbd 189
+  s_3a50bad78ea1cd::t_b31f3f8117313f 199
+  s_3a50bad78ea1cd::t_33880290f55381 175-179,181-188,190-193,213-216,218-232
+  s_3a50bad78ea1cd::t_2b2e9ee38b8144 180,194-198,200-212
+apps/web/src/lib/google-oauth.ts
+  s_3a50bad78ea1cd::t_eb8cea142af7c7 2,8,12
+docs/architecture/authentication.md
+  s_3a50bad78ea1cd::t_32183bf280a477 5,7-8,10,27
+docs/reviews/high-2-production-oauth-legal-audit.md
+  s_3a50bad78ea1cd::t_8db5694eab68de 32-40
+  s_3a50bad78ea1cd::t_a55732f8b2e3c2 60,79
+  s_3a50bad78ea1cd::t_45768a519882ba 113-114,157-158,172-180,199
+  s_3a50bad78ea1cd::t_79137af42960ae 5,126
+  s_3a50bad78ea1cd::t_00645d1bc350db 11,42,68,70-75,77
+  s_3a50bad78ea1cd::t_5cf363cd9af445 78
+apps/web/src/lib/auth-callback.test.ts
+  s_3a50bad78ea1cd::t_eb8cea142af7c7 35-38,72-87
+  s_3a50bad78ea1cd::t_93cbfc929e98e8 88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "7ac7d5a8d3dc8b70618dd55270045e2b10abc5e5",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
