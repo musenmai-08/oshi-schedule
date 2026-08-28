@@ -1,0 +1,34 @@
+scripts/validate-trivy-policy.mjs
+  s_3a50bad78ea1cd::t_3b635ba68761c9 1-55,61-93
+  s_3a50bad78ea1cd::t_b9f82d8c589382 56-60
+.github/workflows/deploy-staging.yml
+  s_3a50bad78ea1cd::t_3b635ba68761c9 78
+docs/security/container-vulnerability-exceptions.md
+  s_3a50bad78ea1cd::t_684b7835b2ac78 46,49-52,95-99
+  s_3a50bad78ea1cd::t_c946d854e4369f 16-22,53-54,67,73-74,82,88-91,145-148,154-157
+.github/workflows/deploy-production.yml
+  s_3a50bad78ea1cd::t_3b635ba68761c9 92-103
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_684b7835b2ac78 114-118
+  s_3a50bad78ea1cd::t_c946d854e4369f 112
+package.json
+  s_3a50bad78ea1cd::t_3b635ba68761c9 25
+.trivyignore.staging
+  s_3a50bad78ea1cd::t_3b635ba68761c9 1-26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "270c05cca2bd258eca7e21849a74b6a7c3a4dd51",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
