@@ -24,15 +24,17 @@ Next.js開発サーバーは内部アクセスログへrequest targetを出力�
 
 ## Google Calendar scope最小化
 
-現行は`https://www.googleapis.com/auth/calendar`を要求する。Google公式のscope一覧と各API methodのauthorization欄では、`https://www.googleapis.com/auth/calendar.app.created`が、アプリが作成したsecondary calendarの作成・取得・更新・削除と、そのcalendar内のevent取得・作成・更新・削除に利用できる。このアプリのGateway操作と、利用者が削除したeventを`events.get`の404後に再作成する処理を満たすため、推奨候補は`calendar.app.created`である。
+Calendar権限は`https://www.googleapis.com/auth/calendar.app.created`だけを要求する。Google公式のscope一覧と各API methodのauthorization欄では、このscopeがアプリ作成secondary calendarの作成・取得・削除と、そのcalendar内のevent取得・作成・更新・削除に利用できる。Gatewayはこの操作だけを使用し、primary calendar、calendar list、ACL、共有設定、他calendarのevent一覧へアクセスしない。対象HTTP method/pathはcontract testで固定し、新しいCalendar API操作を追加する場合はscope適合を再審査する。
 
-今回はscopeを変更しない。Supabase Google provider側の許可scope、OAuth同意画面、既存refresh tokenが持つgrantを同時に移行できず、`calendar.app.created`での再同意と全Gateway操作をstagingで検証していないためである。現行`calendar`はユーザーがアクセスできる全calendarを対象にできる一方、候補scopeはアプリ作成calendarだけに限定される。現在のOAuth requestは`include_granted_scopes=true`なので、同じGoogle projectへ過去に許可した広いscopeが再同意後のtokenへ結合され得る。また、APIはprovider access tokenの実付与scopeを検査せず、DBへrequest側の固定scopeを保存する。productionの一般公開前に、Google Cloud/Supabase設定、過去grantのない利用者または明示revoke後の再同意、実付与scope、保存scope、作成・取得・event CRUD・calendar削除・削除event復旧をstagingで確認し、OAuth審査資料を限定scopeに合わせる。現行scopeを維持する場合は、最小scopeで代替できない根拠とGoogle側の審査状態をrelease gateへ記録する。
+認証用の`openid`、`userinfo.email`、`userinfo.profile`は維持し、Calendar scopeとは分けて扱う。OAuth requestは`access_type=offline`、`prompt=consent`、`include_granted_scopes=false`とする。APIは保存対象refresh tokenをGoogle token endpointで交換し、Googleがaccess token応答へ返す実付与scopeを正規化して検証・保存する。identity 3種または`calendar.app.created`が不足する場合、あるいは旧`calendar`を含む別のCalendar scopeが混入する場合はonboardingを成功させず、credentialを更新せず、再同意を要求する。短期`providerAccessToken`はcallbackからAPIへ渡さず、refresh交換で得たaccess tokenだけをメモリ内cacheで使用する。
+
+コード上の最小化だけでは既存staging grantを縮小した証拠にならない。Google Cloud/SupabaseのData Accessを限定scopeへ合わせた後、過去に当該Google projectを許可していない利用者を使うか、Google Account側で既存grantを明示的にrevokeしてから再同意する。DB文字列の書換えや、旧grantを保持した利用者による成功だけで合格にしない。実付与scopeとDB記録に広いCalendar scopeがないこと、新規・再利用calendar、event CRUD、404/410/取消復旧、subscription/account削除、refresh、reauthをstagingで受入してからproductionへ反映する。
 
 公式根拠: [Calendar API scopes](https://developers.google.com/workspace/calendar/api/auth)、[calendars.insert](https://developers.google.com/workspace/calendar/api/v3/reference/calendars/insert)、[calendars.get](https://developers.google.com/workspace/calendar/api/v3/reference/calendars/get)、[calendars.delete](https://developers.google.com/workspace/calendar/api/v3/reference/calendars/delete)、[events.insert](https://developers.google.com/workspace/calendar/api/v3/reference/events/insert)、[events.get](https://developers.google.com/workspace/calendar/api/v3/reference/events/get)、[events.patch](https://developers.google.com/workspace/calendar/api/v3/reference/events/patch)、[events.delete](https://developers.google.com/workspace/calendar/api/v3/reference/events/delete)。
 
 ## Google 公開審査前チェック
 
-OAuth 同意画面、ブランド検証、最小scope候補（`calendar.app.created`）、利用規約、プライバシーポリシー、データ削除 URL、API 利用目的の説明・デモ動画を準備する。開発/本番 Google Cloud project、redirect URI、Supabase project を分離し、テストユーザー制限を解除する前に Google API Services User Data Policy を確認する。
+OAuth 同意画面、ブランド検証、採用scope（`calendar.app.created`）、利用規約、プライバシーポリシー、データ削除 URL、API 利用目的の説明・デモ動画を準備する。開発/本番 Google Cloud project、redirect URI、Supabase project を分離し、テストユーザー制限を解除する前に Google API Services User Data Policy を確認する。
 
 ## 脆弱性報告
 

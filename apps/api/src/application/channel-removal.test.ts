@@ -50,7 +50,13 @@ describe('channel removal', () => {
     );
     const identity = { subject: 'owner', email: 'developer@example.com' };
     const user = await store.ensureUser(identity);
-    await store.completeOnboarding(user.id, 'encrypted', 'v1', 'owner-calendar');
+    await store.completeOnboarding(
+      user.id,
+      'encrypted',
+      'v1',
+      'owner-calendar',
+      'openid email profile https://www.googleapis.com/auth/calendar.app.created',
+    );
     const other = await store.ensureUser({ subject: 'other', email: 'second@example.com' });
     const channel = await store.upsertChannel({
       id: 'external-channel',

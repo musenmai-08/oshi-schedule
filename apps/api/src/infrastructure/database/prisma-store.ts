@@ -178,20 +178,20 @@ export class PrismaStore implements Store {
       return true;
     });
   }
-  async saveCredential(userId: string, encryptedToken: string, keyId: string) {
+  async saveCredential(userId: string, encryptedToken: string, keyId: string, scopes: string) {
     await this.prisma.googleCredential.upsert({
       where: { userId },
       update: {
         encryptedRefreshToken: encryptedToken,
         keyId,
-        scopes: 'https://www.googleapis.com/auth/calendar',
+        scopes,
         tokenUpdatedAt: new Date(),
       },
       create: {
         userId,
         encryptedRefreshToken: encryptedToken,
         keyId,
-        scopes: 'https://www.googleapis.com/auth/calendar',
+        scopes,
       },
     });
   }
@@ -200,6 +200,7 @@ export class PrismaStore implements Store {
     encryptedToken: string,
     keyId: string,
     calendarId: string,
+    scopes: string,
   ) {
     await this.prisma.$transaction([
       this.prisma.googleCredential.upsert({
@@ -207,14 +208,14 @@ export class PrismaStore implements Store {
         update: {
           encryptedRefreshToken: encryptedToken,
           keyId,
-          scopes: 'https://www.googleapis.com/auth/calendar',
+          scopes,
           tokenUpdatedAt: new Date(),
         },
         create: {
           userId,
           encryptedRefreshToken: encryptedToken,
           keyId,
-          scopes: 'https://www.googleapis.com/auth/calendar',
+          scopes,
         },
       }),
       this.prisma.calendarConnection.upsert({

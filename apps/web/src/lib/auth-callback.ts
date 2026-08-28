@@ -4,7 +4,6 @@ import { APP_ROUTES } from './routes';
 interface CallbackSession {
   access_token: string;
   provider_refresh_token?: string | null;
-  provider_token?: string | null;
 }
 
 interface AuthCallbackDependencies {
@@ -34,10 +33,20 @@ export async function handleAuthCallback(request: Request, dependencies: AuthCal
       },
       body: JSON.stringify({
         providerRefreshToken: data.session.provider_refresh_token,
-        providerAccessToken: data.session.provider_token,
       }),
     });
-    if (!response.ok) destination.searchParams.set('setup', 'failed');
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as {
+        error?: { code?: string };
+      } | null;
+      destination.searchParams.set(
+        'setup',
+        body?.error?.code === 'GOOGLE_RECONSENT_REQUIRED' ||
+          body?.error?.code === 'GOOGLE_REAUTH_REQUIRED'
+          ? 'reauth'
+          : 'failed',
+      );
+    }
   } else destination.searchParams.set('setup', 'reauth');
   return NextResponse.redirect(destination);
 }

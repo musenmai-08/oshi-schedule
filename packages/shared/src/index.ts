@@ -6,6 +6,51 @@ export const SYNC_LOOKAHEAD_DAYS = 30;
 export const MANUAL_SYNC_COOLDOWN_SECONDS = 300;
 export const entityIdSchema = z.string().cuid();
 
+export const GOOGLE_OPENID_SCOPE = 'openid';
+export const GOOGLE_USERINFO_EMAIL_SCOPE = 'https://www.googleapis.com/auth/userinfo.email';
+export const GOOGLE_USERINFO_PROFILE_SCOPE = 'https://www.googleapis.com/auth/userinfo.profile';
+export const GOOGLE_CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.app.created';
+export const GOOGLE_OAUTH_REQUEST_SCOPES = [
+  GOOGLE_OPENID_SCOPE,
+  GOOGLE_USERINFO_EMAIL_SCOPE,
+  GOOGLE_USERINFO_PROFILE_SCOPE,
+  GOOGLE_CALENDAR_SCOPE,
+] as const;
+
+const GOOGLE_CALENDAR_SCOPE_PREFIX = 'https://www.googleapis.com/auth/calendar';
+const EMAIL_SCOPE_ALIASES = new Set(['email', GOOGLE_USERINFO_EMAIL_SCOPE]);
+const PROFILE_SCOPE_ALIASES = new Set(['profile', GOOGLE_USERINFO_PROFILE_SCOPE]);
+
+export interface GoogleScopeValidation {
+  valid: boolean;
+  scopes: string[];
+  serialized: string;
+  missing: Array<'openid' | 'userinfo.email' | 'userinfo.profile' | 'calendar.app.created'>;
+  unexpectedCalendarScopes: string[];
+}
+
+export function validateGoogleGrantedScopes(
+  value: string | null | undefined,
+): GoogleScopeValidation {
+  const scopes = [...new Set((value ?? '').split(/\s+/).filter(Boolean))].sort();
+  const granted = new Set(scopes);
+  const missing: GoogleScopeValidation['missing'] = [];
+  if (!granted.has(GOOGLE_OPENID_SCOPE)) missing.push('openid');
+  if (!scopes.some((scope) => EMAIL_SCOPE_ALIASES.has(scope))) missing.push('userinfo.email');
+  if (!scopes.some((scope) => PROFILE_SCOPE_ALIASES.has(scope))) missing.push('userinfo.profile');
+  if (!granted.has(GOOGLE_CALENDAR_SCOPE)) missing.push('calendar.app.created');
+  const unexpectedCalendarScopes = scopes.filter(
+    (scope) => scope.startsWith(GOOGLE_CALENDAR_SCOPE_PREFIX) && scope !== GOOGLE_CALENDAR_SCOPE,
+  );
+  return {
+    valid: missing.length === 0 && unexpectedCalendarScopes.length === 0,
+    scopes,
+    serialized: scopes.join(' '),
+    missing,
+    unexpectedCalendarScopes,
+  };
+}
+
 export const channelHandleSchema = z
   .string()
   .trim()
@@ -15,7 +60,6 @@ export const createChannelSchema = z.object({ youtubeChannelId: z.string().min(1
 export const updateSubscriptionSchema = z.object({ status: z.enum(['ACTIVE', 'PAUSED']) });
 export const onboardingSchema = z.object({
   providerRefreshToken: z.string().min(1),
-  providerAccessToken: z.string().min(1).optional(),
 });
 export const reconnectSchema = onboardingSchema;
 export const deleteAccountSchema = z.object({ confirmation: z.literal('DELETE') });

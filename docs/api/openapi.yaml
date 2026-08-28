@@ -48,7 +48,6 @@ components:
       required: [providerRefreshToken]
       properties:
         providerRefreshToken: { type: string, minLength: 1, writeOnly: true }
-        providerAccessToken: { type: string, minLength: 1, writeOnly: true }
     CreateChannel:
       type: object
       required: [youtubeChannelId]

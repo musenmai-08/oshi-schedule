@@ -58,7 +58,7 @@ auto-sleepも独立した`rate(1 hour)`だが、これは同期頻度ではな�
 
 ### High
 
-2. **一般公開用OAuth・法務表示が未完了。** [High 2詳細監査](./high-2-production-oauth-legal-audit.md)で、公開中のstaging `/terms`と`/privacy`にもdemo、問い合わせ先、保存期間、Limited Useのplaceholderが残ることを確認した。実Gatewayはアプリ作成secondary calendarとそのeventだけを操作するため、`calendar.app.created`が最小scope候補であり、広い`calendar`をproductionで維持する実装上の理由は見つからない。ただし実付与scopeを確認せずDBへ固定値を保存し、`include_granted_scopes=true`で旧grantが結合され得るため、scope変更だけでは移行完了にならない。正式文面、限定scopeのstaging全操作受入、Google branding準拠、production専用projectのbrand/data-access reviewを詳細監査の完了条件どおり満たすまでHighを維持する。
+2. **一般公開用OAuth・法務表示が未完了。** Calendar requestは`calendar.app.created`へ限定し、incremental grant無効化、実grant検証・保存、過剰Calendar scope拒否、再同意誘導までコード実装した。ただしdeploy、Google/Supabase Data Access変更、新grantによるstaging全操作受入は未実施である。公開中のstaging `/terms`と`/privacy`にもdemo、問い合わせ先、保存期間、Limited Useのplaceholderが残る。正式文面、限定scopeの実受入、Google branding準拠、production専用projectのbrand/data-access reviewを[High 2詳細監査](./high-2-production-oauth-legal-audit.md)の完了条件どおり満たすまでHighを維持する。
 
 ### 解消済みHigh
 
@@ -77,9 +77,9 @@ auto-sleepも独立した`rate(1 hour)`だが、これは同期頻度ではな�
 
 - private RDS内の今回のSyncRun行と、Google Calendar実イベント一覧・件数の独立したread-only照合。API polling、worker exit 0、terminal summary、Calendar error 0、決定的ID実装から成功と重複兆候なしまでは確認済み。
 - production AWS/Supabase/Google Cloud resource、Secret実値、OAuth verification、domain、backup/PITR、restore rehearsal、quota増枠、負荷試験。production環境はまだ構築・受入していない。
-- `calendar.app.created`へscopeを縮小した場合の既存利用者再同意とCalendar全操作。
+- `calendar.app.created`実装をdeployした後の、旧grantを持たない利用者による再同意とCalendar全操作。
 - 一般公開向け正式な利用規約・プライバシーポリシー・公開問い合わせ窓口。
 
 ## 次工程
 
-招待制stagingは現状のsleep運用で利用できる。production工程へ進む前に[High 2詳細監査](./high-2-production-oauth-legal-audit.md)の完了条件を満たす。最初に`calendar.app.created`採用とstaging限定scope受入方針を承認し、その後に正式ポリシー、production専用Google Cloud/Supabase設定、OAuth審査を確定する。完了後、production専用の公開contextを作成し、fingerprint guardを含むsynth、read-only review、CDK diff、初回2-phase rolloutの順に進む。
+招待制stagingは現状のsleep運用で利用できる。次は別途承認したdeployとGoogle/Supabase Data Access変更後、旧grantを排除した限定scopeのstaging受入を行う。その後に正式ポリシー、production専用Google Cloud/Supabase設定、OAuth審査を確定する。High 2完了後、production専用の公開contextを作成し、fingerprint guardを含むsynth、read-only review、CDK diff、初回2-phase rolloutの順に進む。

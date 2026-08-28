@@ -67,7 +67,13 @@ class CountingCalendar extends FakeCalendarGateway {
 
 async function setup(store: MemoryStore) {
   const user = await store.ensureUser({ subject: 'sync-user', email: 'developer@example.com' });
-  await store.completeOnboarding(user.id, 'encrypted', 'v1', 'calendar-sync');
+  await store.completeOnboarding(
+    user.id,
+    'encrypted',
+    'v1',
+    'calendar-sync',
+    'openid email profile https://www.googleapis.com/auth/calendar.app.created',
+  );
   const channel = await store.upsertChannel({
     id: 'external',
     youtubeChannelId: 'UC-sync',
@@ -276,7 +282,13 @@ describe('SyncService', () => {
       subject: 'sync-user-2',
       email: 'second@example.com',
     });
-    await store.completeOnboarding(secondUser.id, 'encrypted', 'v1', 'calendar-2');
+    await store.completeOnboarding(
+      secondUser.id,
+      'encrypted',
+      'v1',
+      'calendar-2',
+      'openid email profile https://www.googleapis.com/auth/calendar.app.created',
+    );
     await store.createSubscriptionWithinLimit(secondUser.id, first.channel.id, 3);
     const calendar = new OneUserFailingCalendar();
     calendar.failUserId = first.user.id;
@@ -339,7 +351,13 @@ describe('SyncService', () => {
     );
     await store.markReauthRequired(user.id);
     await expect(service.runScheduled()).resolves.toEqual([]);
-    await store.completeOnboarding(user.id, 'new-encrypted', 'v1', 'calendar-sync');
+    await store.completeOnboarding(
+      user.id,
+      'new-encrypted',
+      'v1',
+      'calendar-sync',
+      'openid email profile https://www.googleapis.com/auth/calendar.app.created',
+    );
     await expect(service.runScheduled()).resolves.toEqual([
       { subscriptionId: subscription.id, status: 'SUCCESS' },
     ]);
@@ -520,7 +538,13 @@ describe('SyncService', () => {
     const store = new MemoryStore();
     const first = await setup(store);
     const secondUser = await store.ensureUser({ subject: 'shared-2', email: 'second@example.com' });
-    await store.completeOnboarding(secondUser.id, 'encrypted', 'v1', 'calendar-2');
+    await store.completeOnboarding(
+      secondUser.id,
+      'encrypted',
+      'v1',
+      'calendar-2',
+      'openid email profile https://www.googleapis.com/auth/calendar.app.created',
+    );
     await store.createSubscriptionWithinLimit(secondUser.id, first.channel.id, 3);
     const youtube = new MutableYouTube();
     await new SyncService(
@@ -537,7 +561,13 @@ describe('SyncService', () => {
     const store = new MemoryStore();
     const first = await setup(store);
     const secondUser = await store.ensureUser({ subject: 'parallel-2', email: 'two@example.com' });
-    await store.completeOnboarding(secondUser.id, 'encrypted', 'v1', 'calendar-2');
+    await store.completeOnboarding(
+      secondUser.id,
+      'encrypted',
+      'v1',
+      'calendar-2',
+      'openid email profile https://www.googleapis.com/auth/calendar.app.created',
+    );
     const secondSubscription = await store.createSubscriptionWithinLimit(
       secondUser.id,
       first.channel.id,

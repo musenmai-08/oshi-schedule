@@ -11,6 +11,7 @@ import type { AppLogger, YouTubeGateway } from './application/models.js';
 import type { NormalizedBroadcast } from './domain/scheduling.js';
 import { SyncService } from './application/sync-service.js';
 import { FakeCalendarGateway } from './infrastructure/google-calendar/fake-calendar-gateway.js';
+import { GOOGLE_OAUTH_REQUEST_SCOPES } from '@oshi-schedule/shared';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const prisma = new PrismaClient(databaseUrl ? { datasourceUrl: databaseUrl } : undefined);
@@ -86,6 +87,11 @@ describe.runIf(Boolean(databaseUrl))('API with Prisma/MySQL IDs and constraints'
   }
 
   it('accepts an actual Prisma CUID for pause, resume, sync and delete', async () => {
+    const credential = await prisma.googleCredential.findFirst({
+      where: { user: { supabaseUserId: 'prisma-owner' } },
+      select: { scopes: true },
+    });
+    expect(credential?.scopes).toBe([...GOOGLE_OAUTH_REQUEST_SCOPES].sort().join(' '));
     const created = await register('@prismaflow');
     const id = created.body.data.subscription.id as string;
     expect(id).toMatch(/^c/);

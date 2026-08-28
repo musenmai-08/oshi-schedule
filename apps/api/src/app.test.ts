@@ -172,6 +172,64 @@ describe('API', () => {
       .set('authorization', 'Bearer test:outsider:outsider@example.com');
     expect(response.status).toBe(403);
   });
+  it('persists verified granted scopes and does not complete onboarding when re-consent is required', async () => {
+    const grantedScopes =
+      'email https://www.googleapis.com/auth/calendar.app.created openid profile';
+    const grantedStore = new MemoryStore();
+    const grantedCalendar = new FakeCalendarGateway();
+    const verifyGrant = vi.spyOn(grantedCalendar, 'verifyGrant').mockResolvedValue(grantedScopes);
+    const grantedApp = createApp(
+      env,
+      createContainer(env, { store: grantedStore, calendar: grantedCalendar }),
+    );
+
+    const granted = await request(grantedApp)
+      .post('/api/v1/onboarding')
+      .set(auth)
+      .send({ providerRefreshToken: 'new-refresh-token' });
+    expect(granted.status).toBe(200);
+    const grantedUser = await grantedStore.findUserBySubject('demo-user');
+    expect(grantedUser?.onboardingCompleted).toBe(true);
+    expect(grantedStore.getCredentialScopes(grantedUser!.id)).toBe(grantedScopes);
+    const encryptedBeforeRejectedReconnect = await grantedStore.getEncryptedCredential(
+      grantedUser!.id,
+    );
+
+    verifyGrant.mockRejectedValueOnce(
+      new AppError('GOOGLE_RECONSENT_REQUIRED', 'Googleカレンダー権限を再同意してください', 401),
+    );
+    const rejectedReconnect = await request(grantedApp)
+      .post('/api/v1/google/reconnect')
+      .set(auth)
+      .send({ providerRefreshToken: 'overprivileged-refresh-token' });
+    expect(rejectedReconnect.status).toBe(401);
+    expect(await grantedStore.getEncryptedCredential(grantedUser!.id)).toBe(
+      encryptedBeforeRejectedReconnect,
+    );
+    expect(grantedStore.getCredentialScopes(grantedUser!.id)).toBe(grantedScopes);
+    expect(await grantedStore.findUserById(grantedUser!.id)).toMatchObject({
+      reauthRequired: true,
+    });
+
+    const rejectedStore = new MemoryStore();
+    const rejectedCalendar = new FakeCalendarGateway();
+    vi.spyOn(rejectedCalendar, 'verifyGrant').mockRejectedValue(
+      new AppError('GOOGLE_RECONSENT_REQUIRED', 'Googleカレンダー権限を再同意してください', 401),
+    );
+    const rejectedApp = createApp(
+      env,
+      createContainer(env, { store: rejectedStore, calendar: rejectedCalendar }),
+    );
+    const rejected = await request(rejectedApp)
+      .post('/api/v1/onboarding')
+      .set(auth)
+      .send({ providerRefreshToken: 'insufficient-refresh-token' });
+    expect(rejected.status).toBe(401);
+    expect(rejected.body.error.code).toBe('GOOGLE_RECONSENT_REQUIRED');
+    const rejectedUser = await rejectedStore.findUserBySubject('demo-user');
+    expect(rejectedUser).toMatchObject({ onboardingCompleted: false, reauthRequired: true });
+    expect(rejectedStore.getCredentialScopes(rejectedUser!.id)).toBeNull();
+  });
   it('registers, rejects duplicate and enforces the three-channel limit', async () => {
     expect((await resolveAndRegister('@first')).status).toBe(201);
     expect((await resolveAndRegister('@first')).status).toBe(409);

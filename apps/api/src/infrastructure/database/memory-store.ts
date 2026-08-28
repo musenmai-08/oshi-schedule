@@ -22,6 +22,7 @@ import { StoreConstraintError } from '../../domain/errors.js';
 export class MemoryStore implements Store {
   private users: UserRecord[] = [];
   private credentials = new Map<string, string>();
+  private credentialScopes = new Map<string, string>();
   private channels: ChannelRecord[] = [];
   private subscriptions: SubscriptionRecord[] = [];
   private broadcasts: BroadcastRecord[] = [];
@@ -77,6 +78,7 @@ export class MemoryStore implements Store {
   reset() {
     this.users = [];
     this.credentials.clear();
+    this.credentialScopes.clear();
     this.channels = [];
     this.subscriptions = [];
     this.broadcasts = [];
@@ -161,18 +163,21 @@ export class MemoryStore implements Store {
     }
     return Boolean(request);
   }
-  async saveCredential(userId: string, encryptedToken: string) {
+  async saveCredential(userId: string, encryptedToken: string, _keyId: string, scopes: string) {
     this.credentials.set(userId, encryptedToken);
+    this.credentialScopes.set(userId, scopes);
   }
   async completeOnboarding(
     userId: string,
     encryptedToken: string,
     _keyId: string,
     calendarId: string,
+    scopes: string,
   ) {
     const user = await this.findUserById(userId);
     if (!user) throw new Error('user not found');
     this.credentials.set(userId, encryptedToken);
+    this.credentialScopes.set(userId, scopes);
     Object.assign(user, { onboardingCompleted: true, reauthRequired: false, calendarId });
     return user;
   }
@@ -186,6 +191,9 @@ export class MemoryStore implements Store {
   }
   async getEncryptedCredential(userId: string) {
     return this.credentials.get(userId) ?? null;
+  }
+  getCredentialScopes(userId: string) {
+    return this.credentialScopes.get(userId) ?? null;
   }
   async listSubscriptions(userId: string) {
     return this.subscriptions

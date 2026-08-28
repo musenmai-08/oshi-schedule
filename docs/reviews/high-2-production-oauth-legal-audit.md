@@ -2,13 +2,13 @@
 
 - 実施日: 2026-08-27
 - 対象: Google OAuth / Calendar scope、Google Calendar Gateway、公開ホーム、利用規約、プライバシーポリシー、production公開審査準備
-- 制約: コード、AWS、Google Cloud、Supabase、DB、OAuth grantは変更していない。AWS APIも呼び出していない。
+- 更新: 2026-08-27にscope最小化コードを実装し、2026-08-28に中断差分のレビューと検証を完了した。AWS、Google Cloud、Supabase、DB実データ、OAuth grantは変更しておらず、AWS APIも呼び出していない。
 
 ## 判定
 
 **High 2は未解消であり、production一般公開のblockerである。**
 
-Calendar APIの実装は、アプリ自身が作成するsecondary calendarとそのeventだけを操作する。このため、現行の全Calendarへ作用できる`https://www.googleapis.com/auth/calendar`ではなく、`https://www.googleapis.com/auth/calendar.app.created`をCalendar用の最小scope候補とする根拠は十分である。ただし、scope変更、既存grantの縮小、実付与scopeの確認、stagingでの全操作受入はまだ行っていない。
+Calendar scopeのコードは`https://www.googleapis.com/auth/calendar.app.created`へ統一した。incremental grantを無効化し、実refresh tokenのgrantを検証・保存して、旧Calendar scope混入や必須scope不足を再同意へ分類する。外部設定変更とdeployは未実施であり、既存grantの縮小とstagingでの全操作受入もまだ完了していない。
 
 規約・Privacyはrouteと公開URLを持つが、公開中のstagingページにもデモ警告と未確定文言が残る。production domain、運営者・問い合わせ先、保存期間、Limited Useを含む正式文面、Google Cloudのproduction project・branding・data access・verification状態も未確定である。
 
@@ -29,17 +29,17 @@ productionの実URLは未確定である。文書内の`https://app.example.com`
 
 ## 現在のOAuth scopeとgrant管理
 
-| 層                           | 現在の状態                                                                       | 監査結果                                                                      |
-| ---------------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Web OAuth request            | `https://www.googleapis.com/auth/calendar`                                       | `google-oauth.ts`が明示する唯一のCalendar scope                               |
-| Google identity              | Supabase Google Authが`openid`、`userinfo.email`、`userinfo.profile`を必要とする | repositoryはGoogle Cloud Data Access設定を管理しないため、実Console値は未確認 |
-| offline consent              | `access_type=offline`、`prompt=consent`                                          | background同期用refresh token取得に必要                                       |
-| incremental grant            | `include_granted_scopes=true`                                                    | 過去に同じGoogle projectへ許可した広いscopeも新tokenへ結合され得る            |
-| callback                     | `provider_refresh_token`と`provider_token`をonboarding APIへ送信                 | refresh tokenは暗号化保存。provider access tokenはAPI入力後に利用されない     |
-| DB `GoogleCredential.scopes` | `calendar`を固定文字列で保存                                                     | 実際にGoogleが付与したscopeの検査結果ではない                                 |
-| 設計文書                     | `authentication.md`と`security-policy.md`も現行`calendar`を記載                  | コードとは一致しているがproduction最小権限ではない                            |
+| 層                           | 実装後の状態                                                                      | 残確認                                                              |
+| ---------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Web OAuth request            | identity 3種 + `calendar.app.created`                                             | Google/Supabase実設定と同意画面は未変更・未確認                     |
+| offline consent              | `access_type=offline`、`prompt=consent`                                           | background同期用refresh token取得に必要                             |
+| incremental grant            | `include_granted_scopes=false`                                                    | 旧grantを持たない利用者または明示revoke後の実同意で確認する         |
+| callback                     | `provider_refresh_token`だけをonboarding APIへ送信                                | 未使用だったprovider access tokenの転送・API schemaを削除           |
+| API grant validation         | refresh token交換応答の実`scope`を検証                                            | 実token応答と匿名化DB照合はstaging受入待ち                          |
+| DB `GoogleCredential.scopes` | 検証済み実scopeを重複除去・sortしたspace-separated文字列で保存                    | 既存行は再同意成功まで旧記録のまま                                  |
+| 拒否                         | identity不足、app-created不足、app-created以外のCalendar scope混入を401再同意扱い | callbackは`setup=reauth`へ誘導し、失敗grantでcredentialを更新しない |
 
-Googleは、requestしたscopeとaccess tokenへ実際に付与されたscopeが一致しない場合を考慮し、付与scopeを確認して不足機能を無効化するよう案内している。現実装はCalendar権限の一部拒否や過去grantの混入を検査せず、DBへrequest側の固定値を記録するため、scope縮小時にこのまま「最小scopeが実際に付与された」とは証明できない。
+Google公式はaccess token応答の`scope` fieldを調べるよう案内している。APIはSupabaseの短期provider access tokenを信頼材料にせず、実際に永続利用するrefresh tokenをGoogle token endpointで交換した応答を検証する。これにより保存credentialと検証対象を一致させる。token、実scopeの利用者情報、Google response全体はログへ出さない。
 
 ## Calendar API操作との照合
 
@@ -57,7 +57,7 @@ Googleは、requestしたscopeとaccess tokenへ実際に付与されたscopeが
 | access token更新                  | Google OAuth token endpoint               | Calendar API scopeのmethodではない。refresh tokenが持つgrantを継承 |
 | account削除時のgrant revoke       | Google OAuth revoke endpoint              | Calendar API scopeのmethodではない                                 |
 
-公式scope一覧では、現行`calendar`は利用者がアクセス可能な全Calendarの参照・編集・共有・完全削除を許可する。一方、`calendar.app.created`はsecondary calendarの作成と、そのアプリ作成calendar内のevent参照・作成・変更・削除に限定される。Gatewayとの照合結果から、Calendar用の最小候補は次である。
+公式scope一覧では、旧実装の広い`calendar`は利用者がアクセス可能な全Calendarの参照・編集・共有・完全削除を許可する。一方、`calendar.app.created`はsecondary calendarの作成と、そのアプリ作成calendar内のevent参照・作成・変更・削除に限定される。Gatewayとの照合結果から、採用したCalendar用scopeは次である。
 
 ```text
 https://www.googleapis.com/auth/calendar.app.created
@@ -65,16 +65,18 @@ https://www.googleapis.com/auth/calendar.app.created
 
 Google sign-inに必要なidentity scopeはCalendar scopeとは別で、production Google Cloud projectではSupabaseの要件に従い`openid`、`userinfo.email`、`userinfo.profile`も正確に登録する。アプリはemail allowlistと主体識別を利用している。Google Cloud Consoleが表示するscope分類と必要な審査種別は、その時点のproduction projectで確認し、文書から推測しない。
 
-## scope変更の実装案（今回は未実施）
+## scope変更の実装結果
 
-1. WebとAPIが同じ値を使う共有定数を作り、`calendar.app.created`へ変更する。OAuth request、DBの`scopes`、テスト、認証設計を同時に更新する。
-2. `provider_token`から実付与scopeを安全に確認する経路を設計する。少なくとも必要scopeの不足をonboarding失敗または再認証へ分類し、DBの`scopes`を未検証の固定値として保存しない。tokenやtoken付きURLはログへ出さない。
-3. productionは新しいGoogle Cloud project/clientを使用し、過去のstaging grantを持ち込まない。production初回consentは最初から限定scopeだけにする。
-4. staging既存利用者では`include_granted_scopes=true`により旧`calendar` grantが結合され得る。限定scopeの検証には、当該projectを一度も許可していないテスト利用者を使うか、既存grantを明示的にrevokeしてから再同意する。DB文字列だけを書き換えて移行済み扱いにしない。
-5. Calendar権限はサービスの中核機能だが、現在はsign-inと同時に要求する。production UXとして、ログイン前に権限の目的を明示して一括同意を求めるか、identity login後に「Googleカレンダーを接続」の利用者操作でincremental authorizationするかを決定する。後者がGoogleのin-context authorization推奨へより明確に適合する。
-6. stagingで新規calendar作成、既存calendar再利用、event get/insert/patch/delete、404/410/取消event復旧、subscription削除、account削除でのcalendar削除、refresh、reauthを受入し、Google同意画面と実付与scopeも記録する。
+1. Web/API共有定数を作り、OAuth requestをidentity 3種と`calendar.app.created`へ統一した。
+2. `include_granted_scopes=false`を回帰テストで固定した。実grantにapp-created以外のCalendar scopeが含まれれば、必要scopeが揃っていても拒否する。
+3. APIは受領refresh tokenをGoogle token endpointで交換し、応答`scope`を検証する。検証成功後だけ暗号化tokenと正規化した実scopeを保存する。
+4. 必須scope不足・旧grant混入は`GOOGLE_RECONSENT_REQUIRED`と`reauthRequired=true`へ分類し、callbackは`/dashboard?setup=reauth`へ誘導する。
+5. 未使用だった`providerAccessToken`はcallback送信、API schema、OpenAPIから除いた。worker/APIが使うaccess tokenはrefresh交換で取得し、process memoryの短期cacheだけに保持する。
+6. app-created calendarのget/create/deleteとevent get/insert/patch/deleteをGateway contract testで固定した。404/410、cancelled event、決定的ID競合の既存回帰テストも維持する。
 
-`calendar.app.created`で必要な全methodが公式上許可されるため、現行の広い`calendar`をproductionで維持する理由は現在の実装から見つからない。限定scopeがstaging実試験で成立しなかった場合だけ、失敗method、Google API応答分類、代替scopeの比較を新しい監査記録に残して再判断する。
+外部設定、deploy、既存DB行、Google grantは変更していない。productionは新しいGoogle Cloud project/clientを使用し、production初回consentを限定scopeだけで開始する。Calendar権限をsign-inと同時に要求する現UXを維持するか、in-contextな接続操作へ分離するかは引き続き利用者判断とする。
+
+`calendar.app.created`で必要な全methodが公式上許可されるため、旧実装の広い`calendar`をproductionで維持する理由は現在の実装から見つからない。限定scopeがstaging実試験で成立しなかった場合だけ、失敗method、Google API応答分類、代替scopeの比較を新しい監査記録に残して再判断する。
 
 ## 利用規約・Privacyの不足
 
@@ -108,8 +110,8 @@ Google sign-inに必要なidentity scopeはCalendar scopeとは別で、producti
 
 ### コード修正可能
 
-- Calendar scopeを共有定数化し、`calendar.app.created`へ縮小する。
-- 実付与scopeを確認し、部分拒否と旧grant混入を検出する。現在の未使用`providerAccessToken`と固定`GoogleCredential.scopes`の意味も整理する。
+- ~~Calendar scopeを共有定数化し、`calendar.app.created`へ縮小する。~~ 実装済み。
+- ~~実付与scopeを確認し、部分拒否と旧grant混入を検出し、未使用`providerAccessToken`と固定scope保存を整理する。~~ 実装済み。
 - Calendar権限を要求する直前に、専用Calendarの作成、event同期、暗号化refresh tokenによるbackground同期を簡潔に説明し、Privacyへリンクする。現在の「ログインすると同意したものとみなす」だけに依存しない。
 - 現在のGoogleログインボタンはMUIの単色Google iconをアプリのprimary色背景に置く独自実装である。Googleの承認済みassetまたは現行branding guidelineどおりの標準色G、背景、font、padding、文言へ変更し、visual regressionで固定する。
 - productionホームから「招待制プレビュー」などstaging限定表示を除き、アプリ機能とGoogle user dataを必要とする理由を正確に説明する。
@@ -121,7 +123,7 @@ Google sign-inに必要なidentity scopeはCalendar scopeとは別で、producti
 - productionの運営主体、公開domain、対象地域、対象年齢/利用資格、招待制か一般公開か、料金、準拠法・管轄を決める。
 - support emailとPrivacy問い合わせ窓口、監視責任者を決める。
 - データ種別ごとの保存期間、backup/log/tombstoneの保持、削除SLA、人によるsupport access、委託先、越境移転、広告・販売・AI trainingの有無を決める。
-- `calendar.app.created`採用と、sign-in同時同意かCalendar接続時のincremental authorizationかを決める。
+- Calendar権限をsign-inと同時に要求するか、Calendar接続時のin-context authorizationへ分離するかを決める。
 - production専用Google Cloud/Supabase project、app name、logo、公開homepage/Terms/Privacy URLを決める。
 - 正式なTerms/Privacyを専門家確認し、公開版を承認する。
 - Supabase production projectでGoogle provider client、Site URL、redirect allowlistをproduction専用値へ設定する工程を別途承認する。
@@ -152,8 +154,8 @@ Google Cloud / Supabase Dashboardの現在値はrepositoryから確認できな�
 
 ### B. scope・アプリ修正
 
-- [ ] Calendar用scopeが`calendar.app.created`へ統一され、Web request、API保存、test、文書に別値がない。
-- [ ] 実付与scopeの不足・旧grant混入を検出でき、DBのscope記録が検証済みの意味を持つ。
+- [x] Calendar用scopeが`calendar.app.created`へ統一され、Web request、API保存、test、文書に別値がない。
+- [x] 実付与scopeの不足・旧grant混入を検出でき、DBのscope記録が検証済みの意味を持つ。
 - [ ] Calendar permissionをin-contextで説明し、拒否時はCalendar機能を呼ばず安全に再案内する。
 - [ ] Googleログインボタンが現行branding guidelineに準拠する。
 - [ ] productionホーム、Terms、Privacyからdemo、placeholder、staging限定表示が消え、認証なしで2xxになる。
@@ -166,6 +168,15 @@ Google Cloud / Supabase Dashboardの現在値はrepositoryから確認できな�
 - [ ] event get/insert/patch/delete、決定的ID、404/410/取消復旧が成功し、重複を作らない。
 - [ ] subscription削除、account削除、reauthが限定scopeで成功する。
 - [ ] access tokenの実付与scopeとDB記録を匿名化して照合し、広い`calendar` grantが残っていない。
+
+手動受入は次の順序に固定し、旧grantを持つ既存利用者での単なる成功を証跡にしない。
+
+1. 別途承認された工程でGoogle Cloud/Supabase Data Accessをidentity 3種と`calendar.app.created`だけへ合わせ、対象commitをdeployする。
+2. 当該Google projectを一度も許可していない専用テスト利用者を優先する。既存利用者を使う場合は、Google Accountの第三者アクセス設定から当該appのgrantを明示的にrevokeする。DBの`scopes`だけを書き換えない。
+3. `prompt=consent`の同意画面で、全Calendarへの権限ではなくアプリ作成Calendarへの限定権限だけが表示されることを確認する。画面に旧Calendar権限が残れば中止する。
+4. callback後、APIがonboardingを成功させたこと、`reauthRequired=false`、暗号化credentialあり、保存scopeがidentity 3種 + app-createdだけであることを、token・email・Calendar IDを表示せず確認する。
+5. 新規calendar create、保存済みcalendar get/reuse、event get/insert/patch/delete、404/410/cancelled復旧、subscription削除、account削除、refreshを実行し、重複eventとCalendar APIエラーがないことを確認する。
+6. 負の試験では、旧grantを含むtokenまたは必須scope不足を管理されたテスト条件で与え、onboarding未完了、credential未更新、`reauthRequired=true`、`setup=reauth`を確認する。実grantを偽装するDB更新は使わない。
 
 ### D. production外部設定・審査
 
@@ -185,9 +196,7 @@ Google Cloud / Supabase Dashboardの現在値はrepositoryから確認できな�
 
 ## 推奨する着手順
 
-最初に、**`calendar.app.created`をproductionのCalendar scopeとして採用し、stagingで新規grantによる全Gateway操作を検証する方針を承認する。** scopeはPrivacyの説明、Google Console Data Access、scope justification、demo videoの全てを決めるため、先に固定しないと法務文面と審査資料を確定できない。
-
-その承認後は、scope/付与確認/branding buttonのコード修正、staging限定scope受入、利用者判断に基づく正式Terms/Privacy、production Console設定・審査の順に進む。
+scope最小化コードは完了した。次は、**別途承認の上でGoogle Cloud/Supabase Data Accessとstaging deployを限定scopeへ合わせ、旧grantを排除した手動受入を実施する。** 受入成功後、in-context説明とGoogle branding button、利用者判断に基づく正式Terms/Privacy、production Console設定・審査の順に進む。
 
 ## 公式根拠
 

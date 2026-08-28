@@ -46,14 +46,26 @@ export class OshiService {
     if (await this.store.findAccountDeletion(identity.subject))
       throw new AppError('ACCOUNT_DELETED', '削除済みのアカウントです', 410);
     const user = await this.store.ensureUser(identity);
+    let scopes: string;
+    try {
+      scopes = await this.calendar.verifyGrant(user.id, refreshToken);
+    } catch (error) {
+      if (
+        error instanceof AppError &&
+        (error.code === 'GOOGLE_RECONSENT_REQUIRED' || error.code === 'GOOGLE_REAUTH_REQUIRED')
+      )
+        await this.store.markReauthRequired(user.id);
+      throw error;
+    }
     const encrypted = this.cipher.encrypt(refreshToken);
-    await this.store.saveCredential(user.id, encrypted.ciphertext, encrypted.keyId);
+    await this.store.saveCredential(user.id, encrypted.ciphertext, encrypted.keyId, scopes);
     const calendarId = await this.calendar.ensureCalendar(user);
     return this.store.completeOnboarding(
       user.id,
       encrypted.ciphertext,
       encrypted.keyId,
       calendarId,
+      scopes,
     );
   }
 

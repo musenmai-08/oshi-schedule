@@ -1,4 +1,4 @@
-import { APP_NAME } from '@oshi-schedule/shared';
+import { APP_NAME, validateGoogleGrantedScopes } from '@oshi-schedule/shared';
 import { AppError } from '../../domain/errors.js';
 import type { CalendarEventInput } from '../../domain/scheduling.js';
 import type { CalendarGateway, Store, TokenCipher, UserRecord } from '../../application/models.js';
@@ -28,12 +28,7 @@ export class GoogleCalendarGateway implements CalendarGateway {
       : Math.max(0, new Date(retryAfter).getTime() - Date.now());
     return Math.min(this.retryMaxDelayMs, Math.max(exponential + jitter, retryAt));
   }
-  private async accessToken(userId: string) {
-    const cached = this.accessTokens.get(userId);
-    if (cached && cached.expiresAt > Date.now() + 30_000) return cached.token;
-    const encrypted = await this.store.getEncryptedCredential(userId);
-    if (!encrypted) throw new AppError('GOOGLE_REAUTH_REQUIRED', 'Googleの再連携が必要です', 401);
-    const refreshToken = this.cipher.decrypt(encrypted);
+  private async exchangeRefreshToken(userId: string, refreshToken: string) {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       let response: Response;
       try {
@@ -75,16 +70,44 @@ export class GoogleCalendarGateway implements CalendarGateway {
         }
         throw new AppError('GOOGLE_TOKEN_ERROR', 'Googleへ接続できません', 502, retryable);
       }
-      const body = (await response.json()) as { access_token?: string; expires_in?: number };
+      const body = (await response.json().catch(() => ({}))) as {
+        access_token?: string;
+        expires_in?: number;
+        scope?: string;
+      };
       if (!body.access_token)
         throw new AppError('GOOGLE_TOKEN_ERROR', 'Googleへ接続できません', 502, true);
-      this.accessTokens.set(userId, {
+      const grant = validateGoogleGrantedScopes(body.scope);
+      if (!grant.valid) {
+        await this.store.markReauthRequired(userId);
+        throw new AppError(
+          'GOOGLE_RECONSENT_REQUIRED',
+          'Googleカレンダー権限を再同意してください',
+          401,
+        );
+      }
+      return {
         token: body.access_token,
         expiresAt: Date.now() + (body.expires_in ?? 3600) * 1000,
-      });
-      return body.access_token;
+        scopes: grant.serialized,
+      };
     }
     throw new AppError('GOOGLE_TOKEN_ERROR', 'Googleへ接続できません', 502, true);
+  }
+  async verifyGrant(userId: string, refreshToken: string) {
+    this.accessTokens.delete(userId);
+    const grant = await this.exchangeRefreshToken(userId, refreshToken);
+    this.accessTokens.set(userId, grant);
+    return grant.scopes;
+  }
+  private async accessToken(userId: string) {
+    const cached = this.accessTokens.get(userId);
+    if (cached && cached.expiresAt > Date.now() + 30_000) return cached.token;
+    const encrypted = await this.store.getEncryptedCredential(userId);
+    if (!encrypted) throw new AppError('GOOGLE_REAUTH_REQUIRED', 'Googleの再連携が必要です', 401);
+    const grant = await this.exchangeRefreshToken(userId, this.cipher.decrypt(encrypted));
+    this.accessTokens.set(userId, grant);
+    return grant.token;
   }
   private async request(userId: string, path: string, init: RequestInit = {}) {
     const token = await this.accessToken(userId);

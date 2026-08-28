@@ -1,10 +1,14 @@
 import { randomUUID } from 'node:crypto';
+import { GOOGLE_OAUTH_REQUEST_SCOPES } from '@oshi-schedule/shared';
 import type { CalendarEventInput } from '../../domain/scheduling.js';
 import type { CalendarGateway, UserRecord } from '../../application/models.js';
 
 export class FakeCalendarGateway implements CalendarGateway {
   readonly events = new Map<string, CalendarEventInput>();
   readonly calendars = new Set<string>();
+  async verifyGrant() {
+    return [...GOOGLE_OAUTH_REQUEST_SCOPES].sort().join(' ');
+  }
   async ensureCalendar(user: UserRecord) {
     const id = user.calendarId ?? `fake-calendar-${user.id}`;
     this.calendars.add(id);

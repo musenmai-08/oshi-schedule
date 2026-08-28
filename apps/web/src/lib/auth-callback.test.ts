@@ -6,7 +6,6 @@ const internalRequest = (query = '') => new Request(`https://localhost:3000/auth
 const session = {
   access_token: 'supabase-access-token',
   provider_refresh_token: 'google-refresh-token',
-  provider_token: 'google-access-token',
 };
 
 type CallbackDependencies = Parameters<typeof handleAuthCallback>[1];
@@ -33,7 +32,10 @@ describe('Google OAuth callback redirects', () => {
     expect(response.headers.get('location')).toBe('https://staging.oshi-schedule.com/dashboard');
     expect(deps.fetch).toHaveBeenCalledWith(
       'https://api-staging.oshi-schedule.com/api/v1/onboarding',
-      expect.objectContaining({ method: 'POST' }),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ providerRefreshToken: 'google-refresh-token' }),
+      }),
     );
   });
 
@@ -65,6 +67,23 @@ describe('Google OAuth callback redirects', () => {
     );
     expect(failedResponse.headers.get('location')).toBe(
       'https://staging.oshi-schedule.com/dashboard?setup=failed',
+    );
+
+    const scopeRejected = dependencies(
+      undefined,
+      vi.fn(async () =>
+        Response.json(
+          { error: { code: 'GOOGLE_RECONSENT_REQUIRED', message: 'reconsent' } },
+          { status: 401 },
+        ),
+      ),
+    );
+    const scopeRejectedResponse = await handleAuthCallback(
+      internalRequest('?code=oauth-code'),
+      scopeRejected,
+    );
+    expect(scopeRejectedResponse.headers.get('location')).toBe(
+      'https://staging.oshi-schedule.com/dashboard?setup=reauth',
     );
 
     const reauth = dependencies(

@@ -140,12 +140,18 @@ export interface Store {
     at: Date,
     lease: LeaseOwnership,
   ): Promise<boolean>;
-  saveCredential(userId: string, encryptedToken: string, keyId: string): Promise<void>;
+  saveCredential(
+    userId: string,
+    encryptedToken: string,
+    keyId: string,
+    scopes: string,
+  ): Promise<void>;
   completeOnboarding(
     userId: string,
     encryptedToken: string,
     keyId: string,
     calendarId: string,
+    scopes: string,
   ): Promise<UserRecord>;
   setCalendarId(userId: string, calendarId: string): Promise<void>;
   markReauthRequired(userId: string): Promise<void>;
@@ -294,6 +300,7 @@ export interface YouTubeGateway {
 }
 
 export interface CalendarGateway {
+  verifyGrant(userId: string, refreshToken: string): Promise<string>;
   ensureCalendar(user: UserRecord): Promise<string>;
   eventExists(user: UserRecord, calendarId: string, eventId: string): Promise<boolean>;
   upsertEvent(

@@ -88,9 +88,11 @@ API runtimeもproduction/realで`WEB_ORIGIN`と`ALLOWED_EMAILS`を明示必須�
 
 [High 2詳細監査](../reviews/high-2-production-oauth-legal-audit.md)を実施した。公開中のstaging `/terms`と`/privacy`はHTTP 200だが、デモ警告、未定の問い合わせ先、未定の保存期間、Limited Use確認の予告が実ページにも残る。production URLは未確定で、文書の`app.example.com`はplaceholderである。
 
-現行Calendar scopeは`https://www.googleapis.com/auth/calendar`である。Gatewayはアプリ作成secondary calendarのget/create/deleteと、そのeventのget/insert/patch/deleteだけを使うため、production最小候補は`https://www.googleapis.com/auth/calendar.app.created`である。ただし`include_granted_scopes=true`による旧grant結合、実付与scope未検査、DBへの固定scope保存が残る。scope、正式Terms/Privacy、Google branding button、production専用Google Cloud/Supabase設定、brand/data-access verificationを詳細監査の完了条件どおり満たすまでproduction一般公開はblockする。
+Calendar scope最小化コードは`https://www.googleapis.com/auth/calendar.app.created`へ統一した。identity 3種を維持し、`include_granted_scopes=false`、refresh token交換応答による実scope検証・保存、旧Calendar grant拒否、scope不足時の再同意誘導を実装した。未使用のprovider access tokenはcallback/API契約から除外した。app-created calendarのget/create/deleteとevent CRUDはscope contract testで固定した。
 
-この監査では文書だけを変更し、scope、機能コード、AWS、Google Cloud、Supabase、DB、OAuth grantは変更していない。AWS APIも呼び出していない。次は`calendar.app.created`採用と、過去grantのない利用者によるstaging全Gateway操作受入の方針承認から開始する。
+AWS、Google Cloud、Supabase、DB実データ、OAuth grantは変更しておらず、deployと実OAuth再試行も行っていない。既存staging利用者のDB scope行は再同意まで自動移行しない。限定scope受入では、当該Google projectを未許可の利用者を使うか、Google Account側で既存grantを明示revokeしてから同意し、実grantとDB保存scopeに広いCalendar scopeがないことを匿名化して確認する。詳細手順は[High 2詳細監査](../reviews/high-2-production-oauth-legal-audit.md)のC項をsource of truthとする。
+
+2026-08-28に利用制限で中断した未commit差分を保持したままレビューを再開し、関連test、lint、typecheck、Amplify相当のproduction buildを完了した。全testは既存infra synth testの並列時timeoutを避けるため直列でも再確認し、全suiteが成功した。AWS write、deploy、OAuth再実行は行っていない。
 
 ## 恒久的なAWS安全ルール
 
@@ -131,4 +133,4 @@ DomainAssociationを削除してから`connected`で再作成し`AVAILABLE`に�
 
 ## 次工程
 
-今回のOAuth/login、チャンネル登録、再Sync、削除、再登録、定期Scheduler同期の受入、バックエンド監査、staging sleep、リリース前最終監査は完了した。招待制stagingは技術的受入完了で`SLEEPING`を維持する。production公開設定guardは解消済みで、一般公開へ残るHighは[High 2詳細監査](../reviews/high-2-production-oauth-legal-audit.md)のOAuth scope・法務表示・公開審査だけである。次はscope採用方針の承認とコード変更であり、staging runtime操作はその実装・review後に別途明示承認を得て開始する。
+今回のOAuth/login、チャンネル登録、再Sync、削除、再登録、定期Scheduler同期の受入、バックエンド監査、staging sleep、リリース前最終監査は完了した。招待制stagingは技術的受入完了で`SLEEPING`を維持する。production公開設定guardとOAuth scope最小化コードは解消済みで、一般公開へ残るHighは[High 2詳細監査](../reviews/high-2-production-oauth-legal-audit.md)の限定scope実受入、法務表示、branding、production外部設定・公開審査である。次は別途承認されたdeployとGoogle/Supabase Data Access変更後、旧grantを排除したstaging手動受入を行う。
