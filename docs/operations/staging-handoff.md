@@ -117,6 +117,16 @@ Trivy 0.73.0の2026-08-28最新DBによるraw scanは既知14 CVE ID、30 findin
 
 candidate検証blockerは解消した。次は別途承認された工程でのみ、current commitからimmutable imageをstaging ECRへpushし、ECR scan再確認、digest config更新、限定CDK diff、sleep中deploy、Amplify buildの順に再開する。productionへ同じ例外を持ち込むことはできない。
 
+2026-08-28 22:43 JSTにcurrent commit `270c05cca2bd258eca7e21849a74b6a7c3a4dd51`のcandidateを、staging ECRへimmutable tagでpushした。確定digestは次である。
+
+```text
+sha256:781ed5a511661695bcfa43ae0930055da195a8d396ca2cb5d3a01a96594ccb6e
+```
+
+ECR Basic Scanは`COMPLETE`となり、CRITICAL 3 / HIGH 8（合計11件）のCVE IDとpackage versionを確認した。11件は既存台帳の例外または今回承認したstaging runtime限定OpenSSL 3件と全て一致し、未承認CRITICAL/HIGHは0件だった。ECR pushとscan確認以外のAWS write（CDK/CloudFormation、ECS、RDS、Amplify、wake）は行っていない。production promotion workflowはstaging限定3件を検出したdigestを拒否する。
+
+このdigestはまだTask DefinitionやCloudFormationへ反映していない。次工程は別途承認されたdigest config更新・限定CDK diff・sleep中deployであり、productionへは昇格できない。
+
 ## 恒久的なAWS安全ルール
 
 - AWS CLI/CDKは`--profile oshi-schedule`、account `741448960817`、region `ap-northeast-1`だけを使用し、`default`を使わない。
