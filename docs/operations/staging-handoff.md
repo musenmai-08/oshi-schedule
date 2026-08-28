@@ -107,7 +107,11 @@ sha256:42c35efdd0b3ae46b2d806acc31ce5e1996ffd06c5cf75541ccd1a41786162a6
 
 ECR Basic ScanはCRITICAL 3 / HIGH 8を報告した。CRITICAL 3とHIGH 5は既存例外台帳と一致するが、`openssl` `3.0.20-1~deb12u2`に対する`CVE-2026-54874`、`CVE-2026-63072`、`CVE-2026-63076`のHIGH 3件は未登録で、scan上のfixed versionも空だった。新findingを自動で例外化しない恒久ルールに従い、`infra/config/staging-deploy.json`の稼働digestは変更せず、CDK deployとAmplify buildを実行していない。CloudFormation、Task Definition、Webは旧digest/versionのままである。
 
-次は3件についてDebian bookwormの修正版有無、実行経路、影響を再審査し、base imageで解消できる場合は再buildする。修正不能で一時例外が必要な場合は、明示承認と期限を得て例外台帳へ登録してから、candidateの再scan、digest config更新、限定CDK diff、sleep中deploy、Amplify buildの順に再開する。
+3件を再審査した結果、bookworm/bookworm-securityの候補は引き続き`3.0.20-1~deb12u2`で、修正済みbookworm packageはない。OpenSSL upstreamの修正版は3.0.22である。`node:22.23.1-trixie-slim`へ変更したlocal candidateは修正済み`3.5.7-1~deb13u2`を取得しruntime contractにも合格したが、raw Trivy scanで別の未登録HIGHを導入したため、base OS移行を採用せずDockerfileは変更していない。
+
+対象経路はそれぞれDTLS endpoint、CMS decrypt、CMP client/serverである。アプリはHTTP/HTTPSとMySQL TLSだけを利用し、UDP/DTLS、CMS、CMPを実装・起動しない。Prisma query engineはsystem `libssl3`へlinkするが、利用経路はMySQL TLSに限定される。したがって2026-09-11までの期限付き例外は技術的に妥当と判断したが、project ownerの明示承認前であり未承認のままである。3件はECR固有でraw Trivy 0.73.0には現れないため`.trivyignore`へ追加しない。詳細は[例外台帳のpending review](../security/container-vulnerability-exceptions.md#pending-ecr-specific-openssl-review-2026-08-28)を参照する。
+
+次は3件の期限付き例外をproject ownerが明示承認した場合だけaccepted tableへ移し、candidateのpolicy確認、digest config更新、限定CDK diff、sleep中deploy、Amplify buildの順に再開する。承認されない場合はbookwormの修正版を待って再buildする。
 
 ## 恒久的なAWS安全ルール
 
@@ -148,4 +152,4 @@ DomainAssociationを削除してから`connected`で再作成し`AVAILABLE`に�
 
 ## 次工程
 
-今回のOAuth/login、チャンネル登録、再Sync、削除、再登録、定期Scheduler同期の受入、バックエンド監査、staging sleep、リリース前最終監査は完了した。招待制stagingは技術的受入完了で`SLEEPING`を維持する。production公開設定guardとOAuth scope最小化コードは解消済みで、一般公開へ残るHighは[High 2詳細監査](../reviews/high-2-production-oauth-legal-audit.md)の限定scope実受入、法務表示、branding、production外部設定・公開審査である。次は新runtime candidateの未登録ECR finding 3件を再審査し、安全ゲートを通過後に限定deployを再開する。deploy完了後、Google/Supabase Data Access変更と旧grantを排除したstaging手動受入を別途承認の上で行う。
+今回のOAuth/login、チャンネル登録、再Sync、削除、再登録、定期Scheduler同期の受入、バックエンド監査、staging sleep、リリース前最終監査は完了した。招待制stagingは技術的受入完了で`SLEEPING`を維持する。production公開設定guardとOAuth scope最小化コードは解消済みで、一般公開へ残るHighは[High 2詳細監査](../reviews/high-2-production-oauth-legal-audit.md)の限定scope実受入、法務表示、branding、production外部設定・公開審査である。次は新runtime candidateのECR固有OpenSSL 3件について、2026-09-11までの期限付き例外を明示承認するか判断する。承認後に限定deployを再開し、その完了後、Google/Supabase Data Access変更と旧grantを排除したstaging手動受入を別途承認の上で行う。
