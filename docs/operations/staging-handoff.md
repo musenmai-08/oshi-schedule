@@ -125,7 +125,9 @@ sha256:781ed5a511661695bcfa43ae0930055da195a8d396ca2cb5d3a01a96594ccb6e
 
 ECR Basic Scanは`COMPLETE`となり、CRITICAL 3 / HIGH 8（合計11件）のCVE IDとpackage versionを確認した。11件は既存台帳の例外または今回承認したstaging runtime限定OpenSSL 3件と全て一致し、未承認CRITICAL/HIGHは0件だった。ECR pushとscan確認以外のAWS write（CDK/CloudFormation、ECS、RDS、Amplify、wake）は行っていない。production promotion workflowはstaging限定3件を検出したdigestを拒否する。
 
-このdigestはまだTask DefinitionやCloudFormationへ反映していない。次工程は別途承認されたdigest config更新・限定CDK diff・sleep中deployであり、productionへは昇格できない。
+2026-08-28 22:59〜23:03 JSTに、`infra/config/staging-deploy.json`へこのdigestを反映したPhase 2 CDK deployを実施した。許容した主差分はAPI/Worker/Migration Task Definitionのdigest更新3件で、依存するECS Service、Pipe、Scheduler、IAM policyも新Task Definition ARN追随のupdateとなった。CloudFormationは`UPDATE_COMPLETE`、deploy後CDK diffは0である。deploy中はCloudFormationがtemplate上のService desired countを再適用したためAPIが一時的に1/1/0へ起動したが、`pnpm staging:sleep`で復旧した。
+
+現在はAPI 0/0/0、RDS `STOPPED`、Worker Scheduler `DISABLED`、Cloud Map登録0、status `SLEEPING`で、API/Worker/MigrationのTask Definitionはすべてこのdigestを参照する。Amplify build、OAuth、migration、同期は実行していない。productionへはstaging限定例外を含むため昇格できない。
 
 ## 恒久的なAWS安全ルール
 
