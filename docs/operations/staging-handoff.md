@@ -135,6 +135,8 @@ ECR Basic Scanは`COMPLETE`となり、CRITICAL 3 / HIGH 8（合計11件）のCV
 
 今回Pipeが起動したWorkerはruntime初期化前に停止したため、対象SyncRunはclaimされず`QUEUED`のまま残る。次の正常なWorker起動では`runPendingManual`がqueued targeted runを回収する。Worker Schedulerは通常`DISABLED`のため、deploy後は明示承認されたWorker実行またはScheduler一時有効化でこの既存runを1回だけ回復確認する。AWS/DB/Calendar write、image push、deploy、再Syncはこの調査・修正では行っていない。
 
+2026-08-29にWorker env validation修正版（commit `e5eb939`）のcandidateをECRへpushし、digest `sha256:a8d9a7fa64246f6b035a1c551561de5678ee9c39830858dd058fcd46e239f1c1`でBasic Scanを再確認した。CRITICAL 3 / HIGH 9のうち、`CVE-2026-12087`、`CVE-2026-48959`、`CVE-2026-48961`、`CVE-2026-7017`は、既存の[ECR scanner-specific accepted CVEs](../security/container-vulnerability-exceptions.md#amazon-ecr-basic-scanning-specific-accepted-cves)に記録済みの`perl` source-package由来4件だった。`perl-base`は公式`node:22.23.1-bookworm-slim`に含まれるEssential packageであり、アプリが追加した依存ではない。runtimeには`Socket`だけが存在し、`IO::Compress`/`IO::Uncompress`、`HTTP::Tiny`、`zipdetails`は存在せず、API/Worker/entrypointもPerlを起動しない。特にCVE-2026-48961について、Debianの`libio-compress-perl`はbookwormでnot-affectedだが、ECRはsource package `perl`へ広く紐付けて報告しているため、画像内の実module不在と矛盾しない。bookwormには4件の適用可能な修正版がないため、Essential packageの強制削除やbase OS変更は最小・安全な修正ではない。既存例外の期限（2026-09-11）までの受容条件・production promotion前の再審査を維持する。今回新しい例外、Dockerfile変更、AWS writeは行っていない。
+
 ## 恒久的なAWS安全ルール
 
 - AWS CLI/CDKは`--profile oshi-schedule`、account `741448960817`、region `ap-northeast-1`だけを使用し、`default`を使わない。
