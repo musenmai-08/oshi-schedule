@@ -1,0 +1,28 @@
+.github/workflows/deploy-production.yml
+  s_3a50bad78ea1cd::t_522ec44025c446 98
+docs/security/container-vulnerability-exceptions.md
+  s_3a50bad78ea1cd::t_c0d18bb82526c9 52,54
+  s_3a50bad78ea1cd::t_eb986934f99cfc 53
+  s_3a50bad78ea1cd::t_96209501e85784 119,121-125
+scripts/validate-trivy-policy.mjs
+  s_3a50bad78ea1cd::t_c7d953ddd8930c 102
+  s_3a50bad78ea1cd::t_a854bc11f655e9 6,11-20,54,61
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_72d28a3b486481 138
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "1fa3200eae237ecf15deca711db833867a7f7a8c",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
