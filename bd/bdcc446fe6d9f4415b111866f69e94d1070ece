@@ -1,0 +1,35 @@
+infra/test/oshi-schedule-stack.test.ts
+  s_3a50bad78ea1cd::t_6e385eac7aba3e 882
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_24995ebad918fc 134-137
+apps/api/src/runtime.ts
+  s_3a50bad78ea1cd::t_6e385eac7aba3e 2,4-5
+  s_3a50bad78ea1cd::t_49129aecc3d682 18-21
+apps/api/src/infrastructure/env.test.ts
+  s_3a50bad78ea1cd::t_6e385eac7aba3e 6,35-44
+  s_3a50bad78ea1cd::t_dc51ce1db6e3ef 45
+apps/api/src/runtime.test.ts
+  s_3a50bad78ea1cd::t_9b643dbe08dfc1 1-24
+apps/api/src/infrastructure/env.ts
+  s_3a50bad78ea1cd::t_6e385eac7aba3e 106-108,113,128,159-161
+  s_3a50bad78ea1cd::t_d425b520511731 162
+apps/api/src/application/sync-service.test.ts
+  s_3a50bad78ea1cd::t_65df21a5869e76 407-409
+  s_3a50bad78ea1cd::t_d067bf7f2f597a 395-406,410-414
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "bdbdcc446fe6d9f4415b111866f69e94d1070ece",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
