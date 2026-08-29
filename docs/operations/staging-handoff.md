@@ -197,6 +197,8 @@ private RDSの既存`QUEUED`候補を安全に確認するため、Worker image�
 
 2026-08-30に、stagingを1時間wakeしてAPI 1/1/0、RDS `AVAILABLE`を確認後、`pnpm staging:inspect-queued-sync-runs --execute`を1回だけ実行した。既存`QUEUED`かつ`INITIAL`/`MANUAL`の候補は0件で、結果は`READ_ONLY`・`NONE`（`candidateCount=0`）だった。inspectorは`count`/`findMany`のみを実行し、claim・更新・削除・Worker処理・Sync・OAuth・Calendar writeは行っていない。確認後に`pnpm staging:sleep`を実行し、API 0/0/0、RDS `STOPPED`、Worker Scheduler `DISABLED`、queue 0、status `SLEEPING`へ復旧した。
 
+INITIAL/MANUAL SyncRunの最終状態を確認するときは`pnpm staging:inspect-sync-run-states`を使用する。このモードは既存queued inspectorと同じprivate RDSへの経路を使い、Prismaの`count`/`findMany`のみで`INITIAL`/`MANUAL`を取得する。出力は`id`/`status`/`trigger`/`queuedAt`/`startedAt`/`completedAt`/`errorCode`と件数の安全なサマリのみで、email、token、credential、raw error messageは選択・出力しない。claim、INSERT、UPDATE、DELETEは行わない。フラグを付けたAWS task実行は別途承認が必要であり、本番受入では実行しない。
+
 ## 次工程
 
 今回のOAuth/login、チャンネル登録、再Sync、削除、再登録、定期Scheduler同期の受入、バックエンド監査、staging sleep、リリース前最終監査は完了した。招待制stagingは技術的受入完了で`SLEEPING`を維持する。production公開設定guardとOAuth scope最小化コードは解消済みで、一般公開へ残るHighは[High 2詳細監査](../reviews/high-2-production-oauth-legal-audit.md)の限定scope実受入、法務表示、branding、production外部設定・公開審査である。次は新runtime candidateのECR固有OpenSSL 3件について、2026-09-11までの期限付き例外を明示承認するか判断する。承認後に限定deployを再開し、その完了後、Google/Supabase Data Access変更と旧grantを排除したstaging手動受入を別途承認の上で行う。

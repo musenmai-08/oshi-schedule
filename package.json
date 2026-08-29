@@ -29,6 +29,7 @@
     "smoke:staging": "bash scripts/smoke-staging.sh",
     "staging:status": "bash scripts/aws/with-project-node.sh node scripts/aws/staging-operations.mjs status",
     "staging:inspect-queued-sync-runs": "bash scripts/aws/with-project-node.sh node scripts/aws/staging-inspect-queued-sync-runs.mjs",
+    "staging:inspect-sync-run-states": "bash scripts/aws/with-project-node.sh node scripts/aws/staging-inspect-queued-sync-runs.mjs --states",
     "staging:preflight": "bash scripts/aws/with-project-node.sh node scripts/aws/staging-preflight.mjs",
     "staging:wake": "bash scripts/aws/with-project-node.sh node scripts/aws/staging-operations.mjs wake",
     "staging:sleep": "bash scripts/aws/with-project-node.sh node scripts/aws/staging-operations.mjs sleep",
