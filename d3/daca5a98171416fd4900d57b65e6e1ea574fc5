@@ -1,0 +1,24 @@
+scripts/aws/staging-preflight.mjs
+  s_3a50bad78ea1cd::t_cbc77c6d38052c 51-57,70,91-92,99,156
+scripts/aws/staging-preflight.test.mjs
+  s_3a50bad78ea1cd::t_cbc77c6d38052c 73-79,208-247
+  s_3a50bad78ea1cd::t_96f8cac952e373 248
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_cbc77c6d38052c 147
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "d3daca5a98171416fd4900d57b65e6e1ea574fc5",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
