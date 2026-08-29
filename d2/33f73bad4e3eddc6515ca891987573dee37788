@@ -1,0 +1,38 @@
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_eebed6bac5407a 200-201
+apps/api/package.json
+  s_3a50bad78ea1cd::t_2b6ac0a84765c0 18-21
+package.json
+  s_3a50bad78ea1cd::t_d808ff9b477475 32
+apps/api/src/operations/sync-run-state-inspection.ts
+  s_3a50bad78ea1cd::t_2b6ac0a84765c0 1-18,20-39,45-89
+  s_3a50bad78ea1cd::t_d5696b522f8749 19
+  s_3a50bad78ea1cd::t_c2b495add0bd1f 40-44
+apps/worker/src/inspect-sync-run-states.ts
+  s_3a50bad78ea1cd::t_2b6ac0a84765c0 1-14
+scripts/aws/staging-inspect-queued-sync-runs.mjs
+  s_3a50bad78ea1cd::t_293393fad743a2 26-29,32,35-43,91-93,104-106,113-144,156-159,288
+  s_3a50bad78ea1cd::t_c2b495add0bd1f 94-103,107-112,145-155,293-296
+  s_3a50bad78ea1cd::t_d808ff9b477475 266,282-285,304
+apps/api/src/operations/sync-run-state-inspection.test.ts
+  s_3a50bad78ea1cd::t_6be9652124f49b 1-84
+scripts/aws/staging-inspect-queued-sync-runs.test.mjs
+  s_3a50bad78ea1cd::t_6be9652124f49b 7,13-17,29-80
+  s_3a50bad78ea1cd::t_1a332a24dd2e5e 81
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "d233f73bad4e3eddc6515ca891987573dee37788",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
