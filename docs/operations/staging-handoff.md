@@ -129,6 +129,8 @@ ECR Basic Scanは`COMPLETE`となり、CRITICAL 3 / HIGH 8（合計11件）のCV
 
 現在はAPI 0/0/0、RDS `STOPPED`、Worker Scheduler `DISABLED`、Cloud Map登録0、status `SLEEPING`で、API/Worker/MigrationのTask Definitionはすべてこのdigestを参照する。Amplify build、OAuth、migration、同期は実行していない。productionへはstaging限定例外を含むため昇格できない。
 
+2026-08-29に承認済みWorker env validation修正版digestを`infra/config/staging-deploy.json`へ反映し、commit `465216b`としてpushした。Phase 2 CDK diffはAPI/Worker/Migration Task Definitionのruntime digest更新3件だけだったが、sleep中の現状（RDS停止遷移中、wake deadline expired、activation READY、Pipe RUNNING）に対してruntime用`--phase2` preflightの期待値（RDS available、deadline ACTIVE、activation NOT_READY、Pipe STOPPED）が一致せずFAILしたため、AWS deployは実行していない。Task Definition、ECS Service、RDS、Pipe、Scheduler、Queueは未変更で、次回はsleep状態に対応した用途別preflightまたは承認済みwake後の再確認が必要である。
+
 2026-08-28 23:16〜23:20 JSTにAmplify `main`のjob `7`を1回だけ実行し、BUILD/DEPLOY/VERIFYすべて`SUCCEED`した。接続済みmainのHEAD（OAuth `calendar.app.created`最小scope実装を含む）をbuildし、`https://staging.oshi-schedule.com/`はHTTP 200で実アプリの識別表示を返し、Welcomeプレースホルダーではなかった。build中もAPI/RDSをwakeせず、完了後のstatusはAPI 0/0/0、RDS `STOPPED`、Scheduler `DISABLED`、`SLEEPING`である。OAuth実ログイン、Sync、wakeは行っていない。
 
 2026-08-29の限定scope受入で、targeted Worker taskが起動直後に`ALLOWED_EMAILS`欠落でexit code 1となった。allowlistはHTTP APIの招待制認可だけで使用し、Workerの同期経路では使用しない。原因はAPI/Worker共通runtimeがAPI専用のallowlist必須validationを実行したことだった。未deployの修正ではruntime validationをAPI/Workerで分離し、APIのproduction/real allowlist必須契約を維持したまま、Workerはallowlistを注入せず起動可能にする。Task DefinitionのWorker/Migrationにallowlistを渡さない契約と、real-mode Worker起動、queued targeted SyncRunの次Worker起動時回復を回帰テストで固定した。
