@@ -95,7 +95,7 @@ jobs:
             --region "$AWS_REGION" \
             --repository-name "$STAGING_ECR_REPOSITORY" \
             --image-id imageDigest="$IMAGE_DIGEST" \
-            --query "imageScanFindings.findings[?name=='CVE-2026-54874' || name=='CVE-2026-63072' || name=='CVE-2026-63076'].name" \
+            --query "imageScanFindings.findings[?name=='CVE-2026-12087' || name=='CVE-2026-48959' || name=='CVE-2026-48961' || name=='CVE-2026-54874' || name=='CVE-2026-63072' || name=='CVE-2026-63076' || name=='CVE-2026-7017'].name" \
             --output text)"
           [[ -z "$staging_only_findings" || "$staging_only_findings" == None ]] || {
             echo 'The image uses staging-only vulnerability exceptions and cannot be promoted to production' >&2

@@ -3,10 +3,20 @@ import process from 'node:process';
 
 const productionIgnoreFile = '.trivyignore';
 const stagingIgnoreFile = '.trivyignore.staging';
-const approvedStagingOnlyEntries = new Map([
+const approvedStagingOnlyTrivyEntries = new Map([
   ['CVE-2026-54874', '2026-09-11'],
   ['CVE-2026-63072', '2026-09-11'],
   ['CVE-2026-63076', '2026-09-11'],
+]);
+const approvedStagingOnlyEcrEntries = new Map([
+  ['CVE-2026-12087', '2026-09-11'],
+  ['CVE-2026-48959', '2026-09-11'],
+  ['CVE-2026-48961', '2026-09-11'],
+  ['CVE-2026-7017', '2026-09-11'],
+]);
+const approvedStagingOnlyEntries = new Map([
+  ...approvedStagingOnlyTrivyEntries,
+  ...approvedStagingOnlyEcrEntries,
 ]);
 
 const parseEntries = (source) =>
@@ -41,14 +51,14 @@ const stagingOnlyEntries = new Map(
   [...stagingEntries].filter(([id]) => !productionEntries.has(id)),
 );
 
-for (const [id, expiration] of approvedStagingOnlyEntries) {
+for (const [id, expiration] of approvedStagingOnlyTrivyEntries) {
   if (stagingOnlyEntries.get(id) !== expiration) {
     errors.push(`${stagingIgnoreFile} must contain staging-only ${id} with exp:${expiration}`);
   }
 }
 
 for (const id of stagingOnlyEntries.keys()) {
-  if (!approvedStagingOnlyEntries.has(id)) {
+  if (!approvedStagingOnlyTrivyEntries.has(id)) {
     errors.push(`${stagingIgnoreFile} contains unapproved staging-only exception ${id}`);
   }
 }
@@ -89,5 +99,5 @@ if (errors.length > 0) {
 }
 
 console.log(
-  `Trivy policy isolation valid: ${productionEntries.size} production exceptions, ${stagingOnlyEntries.size} additional staging-only exceptions`,
+  `Trivy policy isolation valid: ${productionEntries.size} production exceptions, ${stagingOnlyEntries.size} additional staging-only Trivy exceptions, ${approvedStagingOnlyEcrEntries.size} staging-only ECR exceptions`,
 );
