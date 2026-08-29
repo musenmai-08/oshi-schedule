@@ -193,6 +193,8 @@ DomainAssociationを削除してから`connected`で再作成し`AVAILABLE`に�
 
 private RDSの既存`QUEUED`候補を安全に確認するため、Worker imageに`worker/dist/inspect-queued-sync-runs.js`を追加した。このentry pointは`SyncRun`の`count`と`findMany`だけを使い、`INITIAL`/`MANUAL`かつ`QUEUED`の候補について`id`、`status`、`trigger`、`queuedAt`、候補数と`NONE`/`EXACTLY_ONE`/`MULTIPLE`だけをJSON出力する。email、requestedBy ID、token、credential、Calendar IDは選択・出力しない。`pnpm staging:inspect-queued-sync-runs`はdry-runで、既存Worker task definitionとPipeのVPC設定、およびprivate RDSへの既存経路をread-only確認するだけである。実DB照会は別途AWS task実行を承認した場合の`pnpm staging:inspect-queued-sync-runs --execute`だけが行い、固定されたinspection command以外をoverrideできない。対象imageのbuild/push/deploy後にこの結果が`EXACTLY_ONE`であることを確認してから、別途承認したtargeted Workerを1回だけ起動する。
 
+2026-08-30に、承認済みqueued SyncRun inspector candidateのdigest `sha256:d01f26c49a7c5fb02cfa84878d54346e31a7398c84650a81f2405f70e6eaf7b2`を`infra/config/staging-deploy.json`へ反映し、`--runtime-deploy-sleeping` preflight全PASS後にPhase 2 CDK deployを実施した。差分はAPI/Worker/Migration Task Definitionのruntime digest更新3件のみで、CloudFormationは`UPDATE_COMPLETE`となった。3つすべてのTask Definitionが指定digestを参照している。deploy中にAPIが一時1/1/0へ起動したため`pnpm staging:sleep`で復旧し、現在はAPI 0/0/0、RDS `STOPPED`、Worker Scheduler `DISABLED`、queue 0、status `SLEEPING`、deploy後CDK diff 0である。inspector、Worker、Sync、OAuth、Amplify buildは実行していない。
+
 ## 次工程
 
 今回のOAuth/login、チャンネル登録、再Sync、削除、再登録、定期Scheduler同期の受入、バックエンド監査、staging sleep、リリース前最終監査は完了した。招待制stagingは技術的受入完了で`SLEEPING`を維持する。production公開設定guardとOAuth scope最小化コードは解消済みで、一般公開へ残るHighは[High 2詳細監査](../reviews/high-2-production-oauth-legal-audit.md)の限定scope実受入、法務表示、branding、production外部設定・公開審査である。次は新runtime candidateのECR固有OpenSSL 3件について、2026-09-11までの期限付き例外を明示承認するか判断する。承認後に限定deployを再開し、その完了後、Google/Supabase Data Access変更と旧grantを排除したstaging手動受入を別途承認の上で行う。
