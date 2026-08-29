@@ -17,6 +17,18 @@
 3. dispatch自体が失敗した場合はstatusの`SYNC_DISPATCH_FAILED`を確認し、画面の再試行を使う。永久QUEUEDにはしない。
 4. DLQ messageは原因修正前にblind redriveしない。重複deliveryはatomic claimでno-opになるが不要なFargate費用は発生し得る。
 
+### private RDSのread-only候補確認
+
+ECS task実行を明示承認した場合だけ、既存Worker task definitionとPipeのVPC network configurationを再利用して次を実行する。
+
+```bash
+pnpm staging:inspect-queued-sync-runs --execute
+```
+
+既定の`pnpm staging:inspect-queued-sync-runs`はdry-runであり、taskを起動しない。実行時のcontainer commandは固定の`worker/dist/inspect-queued-sync-runs.js`だけで、`SyncRun`の`count`と`findMany`（`SELECT`）以外を呼ばない。出力は`id`、`status`、`trigger`、`queuedAt`、候補数と`NONE`/`EXACTLY_ONE`/`MULTIPLE`の判定だけである。email、requestedBy ID、token、credential、Calendar IDは出力しない。
+
+`EXACTLY_ONE`以外ではtargeted Workerを起動しない。既存targeted Workerの「候補がちょうど1件」というguardも変更しない。
+
 ## RUNNINGが完了しない
 
 1. targeted ECS taskのSTOPPED reason/exit codeとworker logの安全なerror codeをrun IDで照合する。
