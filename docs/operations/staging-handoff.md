@@ -141,6 +141,8 @@ ECR Basic Scanは`COMPLETE`となり、CRITICAL 3 / HIGH 8（合計11件）のCV
 
 2026-08-29に既存の限定scope受入由来のtargeted `QUEUED` SyncRunだけを、`SYNC_RUN_ID` override付きWorker taskで1回だけ回収した。wake後はRDS `AVAILABLE`、API `1/1/0`、通常preflight、`/health`、`/ready`がすべて正常だったが、Workerはexit code `1`で停止し、安全なterminal logは`WORKER_UNHANDLED_ERROR`（`total=0`）のみだった。旧`ALLOWED_EMAILS`欠落ではなくruntime初期化後のアプリケーション処理失敗であることは確認できた一方、ログは意図的に詳細を出さないため、Calendar API／scope／permission由来かはこの受入操作だけでは確定していない。再実行、再Sync、Scheduler有効化は行っていない。sync queue、sync DLQ、Worker Scheduler DLQはいずれも`0/0/0`のままである。最後に`pnpm staging:sleep`を実行し、API `0/0/0`、RDS `STOPPED`、Scheduler `DISABLED`、Cloud Map `0`、status `SLEEPING`へ復旧した。次回はWorkerの安全な分類済みエラー観測を追加してから、失敗原因を修正・検証する。
 
+2026-08-29に直前Workerのlogと実行経路を再調査した。terminal summaryが出ているためruntime初期化は通過しており、`syncSubscription`内で必ず出る`subscription sync failed`構造化ログもないことから、最有力箇所は`claimSyncRun`のPrisma transaction（またはその直後のDB read）である。既存ログだけでは確定できないため、推測でDB、Google、Calendarのいずれかを断定しない。次runtimeでは、初期化、SyncRun claim、Prisma DB、credential復号、Google認証、YouTube、Calendar、同期処理、shutdownを固定の安全なphaseへ分類し、terminal worker logへ`failurePhase`、`failureCode`、`failureClass`だけを出力する。raw error message、token、secret、credential、メール、ID、Calendar IDは出力しない。次回はこのruntimeをdeployした後、別途承認されたtargeted Workerを1回だけ実行して、`SYNC_RUN_CLAIM`／`DATABASE`または外部API分類を確認する。
+
 ## 恒久的なAWS安全ルール
 
 - AWS CLI/CDKは`--profile oshi-schedule`、account `741448960817`、region `ap-northeast-1`だけを使用し、`default`を使わない。

@@ -1,6 +1,6 @@
 import { MANUAL_SYNC_COOLDOWN_SECONDS, SYNC_LOOKAHEAD_DAYS } from '@oshi-schedule/shared';
 import { createHash, randomUUID } from 'node:crypto';
-import { AppError, StoreConstraintError } from '../domain/errors.js';
+import { AppError, StoreConstraintError, WorkerExecutionError } from '../domain/errors.js';
 import {
   buildCalendarEvent,
   managedFieldsHash,
@@ -75,11 +75,16 @@ export class SyncService {
 
   async runTargeted(runId: string) {
     const now = this.clock.now();
-    const run = await this.store.claimSyncRun(
-      runId,
-      now,
-      new Date(now.getTime() - TARGETED_RUN_STALE_MILLISECONDS),
-    );
+    let run;
+    try {
+      run = await this.store.claimSyncRun(
+        runId,
+        now,
+        new Date(now.getTime() - TARGETED_RUN_STALE_MILLISECONDS),
+      );
+    } catch (error) {
+      throw new WorkerExecutionError('SYNC_RUN_CLAIM', error);
+    }
     if (!run) return { status: 'SKIPPED' as const };
     try {
       return await this.syncSubscription(
@@ -91,18 +96,27 @@ export class SyncService {
         true,
       );
     } catch (error) {
-      const latest = await this.store.getSyncRunForUser(run.id, run.requestedById);
+      let latest;
+      try {
+        latest = await this.store.getSyncRunForUser(run.id, run.requestedById);
+      } catch (finalizationError) {
+        throw new WorkerExecutionError('DATABASE', finalizationError);
+      }
       if (latest?.status === 'RUNNING') {
         const errorCode = error instanceof AppError ? error.code : 'SYNC_FAILED';
-        await this.store.finishSyncTarget(
-          run.id,
-          run.subscriptionId,
-          { status: 'FAILED', message: '同期に失敗しました', errorCode },
-          this.clock.now(),
-        );
-        await this.store.finishSyncRun(run.id, 'FAILED', this.clock.now(), errorCode);
+        try {
+          await this.store.finishSyncTarget(
+            run.id,
+            run.subscriptionId,
+            { status: 'FAILED', message: '同期に失敗しました', errorCode },
+            this.clock.now(),
+          );
+          await this.store.finishSyncRun(run.id, 'FAILED', this.clock.now(), errorCode);
+        } catch (finalizationError) {
+          throw new WorkerExecutionError('DATABASE', finalizationError);
+        }
       }
-      throw error;
+      throw new WorkerExecutionError('SYNC_EXECUTION', error);
     }
   }
 

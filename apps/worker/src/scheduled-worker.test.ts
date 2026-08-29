@@ -5,6 +5,7 @@ import {
   formatScheduledWorkerLog,
   selectWorkerExecution,
   summarizeScheduledResults,
+  workerInitializationFailure,
 } from './scheduled-worker.js';
 
 describe('scheduled worker outcome', () => {
@@ -43,10 +44,15 @@ describe('scheduled worker outcome', () => {
     const outcome = await executeScheduledWorker(async () => {
       throw new Error('database-url-and-user-details');
     });
-    expect(outcome).toEqual({
+    expect(outcome).toMatchObject({
       exitCode: 1,
       summary: { total: 0, success: 0, skipped: 0, deferred: 0, failed: 0 },
       errorCode: 'WORKER_UNHANDLED_ERROR',
+      failure: {
+        phase: 'SYNC_EXECUTION',
+        errorCode: 'UNEXPECTED_ERROR',
+        errorClass: 'UNKNOWN_ERROR',
+      },
     });
     expect(formatScheduledWorkerLog(outcome)).not.toContain('database-url-and-user-details');
   });
@@ -70,6 +76,45 @@ describe('scheduled worker outcome', () => {
       failed: 1,
     });
     expect(line).not.toMatch(/subscription|user|email|calendar|token/i);
+  });
+
+  it('logs a validated classified failure without exposing its cause', async () => {
+    const cause = Object.assign(new Error('refresh-token-and-calendar-id-must-not-be-logged'), {
+      failure: {
+        phase: 'GOOGLE_AUTH' as const,
+        errorCode: 'GOOGLE_RECONSENT_REQUIRED',
+        errorClass: 'APP_ERROR' as const,
+      },
+    });
+    const outcome = await executeScheduledWorker(async () => {
+      throw cause;
+    });
+    const line = formatScheduledWorkerLog(outcome);
+    expect(JSON.parse(line)).toMatchObject({
+      failurePhase: 'GOOGLE_AUTH',
+      failureCode: 'GOOGLE_RECONSENT_REQUIRED',
+      failureClass: 'APP_ERROR',
+    });
+    expect(line).not.toContain('refresh-token-and-calendar-id-must-not-be-logged');
+  });
+
+  it('classifies runtime initialization failures without emitting the cause', () => {
+    const outcome = workerInitializationFailure(
+      Object.assign(new Error('database-url-must-not-be-logged'), {
+        failure: {
+          phase: 'INITIALIZATION' as const,
+          errorCode: 'DATABASE_ERROR',
+          errorClass: 'PRISMA_CLIENT_ERROR' as const,
+        },
+      }),
+    );
+    const line = formatScheduledWorkerLog(outcome);
+    expect(JSON.parse(line)).toMatchObject({
+      failurePhase: 'INITIALIZATION',
+      failureCode: 'DATABASE_ERROR',
+      failureClass: 'PRISMA_CLIENT_ERROR',
+    });
+    expect(line).not.toContain('database-url-must-not-be-logged');
   });
 
   it('treats an unknown target status as failed', async () => {

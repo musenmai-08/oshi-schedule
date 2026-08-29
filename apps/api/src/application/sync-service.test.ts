@@ -46,6 +46,14 @@ class FailOnceMappingStore extends MemoryStore {
   }
 }
 
+class ClaimFailingStore extends MemoryStore {
+  override async claimSyncRun() {
+    const error = new Error('database-url-must-not-be-logged');
+    error.name = 'PrismaClientInitializationError';
+    throw error;
+  }
+}
+
 class OneUserFailingCalendar extends FakeCalendarGateway {
   failUserId = '';
   override async ensureCalendar(user: Parameters<FakeCalendarGateway['ensureCalendar']>[0]) {
@@ -409,6 +417,25 @@ describe('SyncService', () => {
     ]);
     expect(store.syncRuns.find((run) => run.id === queued.run.id)).toMatchObject({
       status: 'SUCCESS',
+    });
+  });
+
+  it('classifies a targeted SyncRun claim database failure without retaining the cause', async () => {
+    const service = new SyncService(
+      new ClaimFailingStore(),
+      new MutableYouTube(),
+      new FakeCalendarGateway(),
+      { now: () => new Date('2026-07-20T10:00:00Z') },
+      logger,
+    );
+
+    await expect(service.runTargeted('run-id-must-not-be-logged')).rejects.toMatchObject({
+      name: 'WorkerExecutionError',
+      failure: {
+        phase: 'DATABASE',
+        errorCode: 'DATABASE_ERROR',
+        errorClass: 'PRISMA_CLIENT_ERROR',
+      },
     });
   });
 

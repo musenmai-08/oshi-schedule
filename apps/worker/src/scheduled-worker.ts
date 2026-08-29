@@ -10,7 +10,41 @@ export interface ScheduledWorkerOutcome {
   exitCode: 0 | 1;
   summary: ScheduledSyncSummary;
   errorCode?: 'WORKER_UNHANDLED_ERROR' | 'WORKER_DISCONNECT_FAILED';
+  failure?: WorkerFailure;
 }
+
+export interface WorkerFailure {
+  phase:
+    | 'INITIALIZATION'
+    | 'SYNC_RUN_CLAIM'
+    | 'DATABASE'
+    | 'CREDENTIAL_DECRYPT'
+    | 'GOOGLE_AUTH'
+    | 'YOUTUBE'
+    | 'CALENDAR'
+    | 'SYNC_EXECUTION'
+    | 'SHUTDOWN';
+  errorCode: string;
+  errorClass: 'APP_ERROR' | 'PRISMA_CLIENT_ERROR' | 'UNKNOWN_ERROR';
+}
+
+const workerFailurePhases = new Set<WorkerFailure['phase']>([
+  'INITIALIZATION',
+  'SYNC_RUN_CLAIM',
+  'DATABASE',
+  'CREDENTIAL_DECRYPT',
+  'GOOGLE_AUTH',
+  'YOUTUBE',
+  'CALENDAR',
+  'SYNC_EXECUTION',
+  'SHUTDOWN',
+]);
+
+const workerErrorClasses = new Set<WorkerFailure['errorClass']>([
+  'APP_ERROR',
+  'PRISMA_CLIENT_ERROR',
+  'UNKNOWN_ERROR',
+]);
 
 export function selectWorkerExecution(
   syncRunId: string | undefined,
@@ -29,8 +63,13 @@ export async function executeScheduledWorkerLifecycle(
   try {
     await disconnect();
     return outcome;
-  } catch {
-    return { ...outcome, exitCode: 1, errorCode: 'WORKER_DISCONNECT_FAILED' };
+  } catch (error) {
+    return {
+      ...outcome,
+      exitCode: 1,
+      errorCode: 'WORKER_DISCONNECT_FAILED',
+      failure: workerFailureFrom(error, 'SHUTDOWN'),
+    };
   }
 }
 
@@ -40,6 +79,39 @@ const emptySummary = (): ScheduledSyncSummary => ({
   skipped: 0,
   deferred: 0,
   failed: 0,
+});
+
+const hasSafeWorkerFailure = (error: unknown): error is { failure: WorkerFailure } => {
+  if (typeof error !== 'object' || error === null || !('failure' in error)) return false;
+  const failure = error.failure;
+  return (
+    typeof failure === 'object' &&
+    failure !== null &&
+    'phase' in failure &&
+    typeof failure.phase === 'string' &&
+    workerFailurePhases.has(failure.phase as WorkerFailure['phase']) &&
+    'errorCode' in failure &&
+    typeof failure.errorCode === 'string' &&
+    /^[A-Z][A-Z0-9_]{1,79}$/.test(failure.errorCode) &&
+    'errorClass' in failure &&
+    typeof failure.errorClass === 'string' &&
+    workerErrorClasses.has(failure.errorClass as WorkerFailure['errorClass'])
+  );
+};
+
+export const workerFailureFrom = (
+  error: unknown,
+  fallbackPhase: WorkerFailure['phase'],
+): WorkerFailure =>
+  hasSafeWorkerFailure(error)
+    ? error.failure
+    : { phase: fallbackPhase, errorCode: 'UNEXPECTED_ERROR', errorClass: 'UNKNOWN_ERROR' };
+
+export const workerInitializationFailure = (error: unknown): ScheduledWorkerOutcome => ({
+  exitCode: 1,
+  summary: emptySummary(),
+  errorCode: 'WORKER_UNHANDLED_ERROR',
+  failure: workerFailureFrom(error, 'INITIALIZATION'),
 });
 
 export function summarizeScheduledResults(results: ReadonlyArray<{ status: string }>) {
@@ -73,11 +145,12 @@ export async function executeScheduledWorker(
   try {
     const summary = summarizeScheduledResults(await runScheduled());
     return { exitCode: summary.failed > 0 ? 1 : 0, summary };
-  } catch {
+  } catch (error) {
     return {
       exitCode: 1,
       summary: emptySummary(),
       errorCode: 'WORKER_UNHANDLED_ERROR',
+      failure: workerFailureFrom(error, 'SYNC_EXECUTION'),
     };
   }
 }
@@ -88,5 +161,12 @@ export function formatScheduledWorkerLog(outcome: ScheduledWorkerOutcome) {
     event: 'scheduled_sync_completed',
     ...outcome.summary,
     ...(outcome.errorCode ? { errorCode: outcome.errorCode } : {}),
+    ...(outcome.failure
+      ? {
+          failurePhase: outcome.failure.phase,
+          failureCode: outcome.failure.errorCode,
+          failureClass: outcome.failure.errorClass,
+        }
+      : {}),
   });
 }

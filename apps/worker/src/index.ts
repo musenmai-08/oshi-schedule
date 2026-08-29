@@ -3,9 +3,9 @@ import {
   executeScheduledWorkerLifecycle,
   formatScheduledWorkerLog,
   selectWorkerExecution,
+  workerInitializationFailure,
 } from './scheduled-worker.js';
 
-const runtime = createRuntime();
 let signalReceived = false;
 const handleSignal = (signal: 'SIGTERM' | 'SIGINT') => {
   if (signalReceived) return;
@@ -17,14 +17,20 @@ const handleSignal = (signal: 'SIGTERM' | 'SIGINT') => {
 process.once('SIGTERM', () => handleSignal('SIGTERM'));
 process.once('SIGINT', () => handleSignal('SIGINT'));
 
-const execute = selectWorkerExecution(
-  process.env.SYNC_RUN_ID,
-  runtime.runScheduled,
-  runtime.runTargeted,
-);
-const outcome = await executeScheduledWorkerLifecycle(async () => {
-  const result = await execute();
-  return Array.isArray(result) ? result : [result];
-}, runtime.disconnect);
+let outcome;
+try {
+  const runtime = createRuntime();
+  const execute = selectWorkerExecution(
+    process.env.SYNC_RUN_ID,
+    runtime.runScheduled,
+    runtime.runTargeted,
+  );
+  outcome = await executeScheduledWorkerLifecycle(async () => {
+    const result = await execute();
+    return Array.isArray(result) ? result : [result];
+  }, runtime.disconnect);
+} catch (error) {
+  outcome = workerInitializationFailure(error);
+}
 process.stdout.write(`${formatScheduledWorkerLog(outcome)}\n`);
 process.exitCode = signalReceived ? 1 : outcome.exitCode;
