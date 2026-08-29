@@ -879,7 +879,7 @@ describe('OshiScheduleStack', () => {
     );
   });
 
-  it('injects allowed emails only into the API from the secure SSM parameter', () => {
+  it('keeps the API-only allowlist out of Worker and migration task definitions', () => {
     const template = render();
     const rendered = template.toJSON();
     const taskDefinitions = Object.values(template.findResources('AWS::ECS::TaskDefinition'));

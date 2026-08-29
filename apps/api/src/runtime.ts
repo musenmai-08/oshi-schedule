@@ -1,8 +1,8 @@
 import { createContainer } from './container.js';
-import { loadEnv } from './infrastructure/env.js';
+import { loadWorkerEnv } from './infrastructure/env.js';
 
-export function createRuntime() {
-  const env = loadEnv();
+export function createWorkerRuntime(source: NodeJS.ProcessEnv = process.env) {
+  const env = loadWorkerEnv(source);
   const container = createContainer(env);
   return {
     env,
@@ -15,3 +15,7 @@ export function createRuntime() {
     disconnect: () => container.resources.disconnect(),
   };
 }
+
+// This is the existing Worker package export. Keep it while consumers migrate to
+// the explicit name, so the workspace can typecheck against a previously built API.
+export const createRuntime = createWorkerRuntime;

@@ -131,6 +131,10 @@ ECR Basic Scanは`COMPLETE`となり、CRITICAL 3 / HIGH 8（合計11件）のCV
 
 2026-08-28 23:16〜23:20 JSTにAmplify `main`のjob `7`を1回だけ実行し、BUILD/DEPLOY/VERIFYすべて`SUCCEED`した。接続済みmainのHEAD（OAuth `calendar.app.created`最小scope実装を含む）をbuildし、`https://staging.oshi-schedule.com/`はHTTP 200で実アプリの識別表示を返し、Welcomeプレースホルダーではなかった。build中もAPI/RDSをwakeせず、完了後のstatusはAPI 0/0/0、RDS `STOPPED`、Scheduler `DISABLED`、`SLEEPING`である。OAuth実ログイン、Sync、wakeは行っていない。
 
+2026-08-29の限定scope受入で、targeted Worker taskが起動直後に`ALLOWED_EMAILS`欠落でexit code 1となった。allowlistはHTTP APIの招待制認可だけで使用し、Workerの同期経路では使用しない。原因はAPI/Worker共通runtimeがAPI専用のallowlist必須validationを実行したことだった。未deployの修正ではruntime validationをAPI/Workerで分離し、APIのproduction/real allowlist必須契約を維持したまま、Workerはallowlistを注入せず起動可能にする。Task DefinitionのWorker/Migrationにallowlistを渡さない契約と、real-mode Worker起動、queued targeted SyncRunの次Worker起動時回復を回帰テストで固定した。
+
+今回Pipeが起動したWorkerはruntime初期化前に停止したため、対象SyncRunはclaimされず`QUEUED`のまま残る。次の正常なWorker起動では`runPendingManual`がqueued targeted runを回収する。Worker Schedulerは通常`DISABLED`のため、deploy後は明示承認されたWorker実行またはScheduler一時有効化でこの既存runを1回だけ回復確認する。AWS/DB/Calendar write、image push、deploy、再Syncはこの調査・修正では行っていない。
+
 ## 恒久的なAWS安全ルール
 
 - AWS CLI/CDKは`--profile oshi-schedule`、account `741448960817`、region `ap-northeast-1`だけを使用し、`default`を使わない。

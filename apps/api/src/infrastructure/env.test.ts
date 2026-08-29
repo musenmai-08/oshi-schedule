@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadEnv, ROOT_ENV_PATH } from './env.js';
+import { loadEnv, loadWorkerEnv, ROOT_ENV_PATH } from './env.js';
 
 const realEnv = {
   NODE_ENV: 'production',
@@ -31,6 +31,17 @@ describe('loadEnv production encryption keys', () => {
       expect(() => loadEnv(source)).toThrow(`Missing required environment variable: ${key}`);
     },
   );
+
+  it('allows a worker runtime to omit the API-only allowlist', () => {
+    const source = {
+      ...realEnv,
+      TOKEN_ENCRYPTION_KEYS: `v2:${randomBytes(32).toString('base64')}`,
+    };
+    delete (source as Partial<typeof source>).ALLOWED_EMAILS;
+
+    expect(() => loadWorkerEnv(source)).not.toThrow();
+    expect(() => loadEnv(source)).toThrow('Missing required environment variable: ALLOWED_EMAILS');
+  });
 
   it.each([
     'http://localhost:3001',

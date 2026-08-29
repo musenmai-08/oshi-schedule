@@ -392,6 +392,26 @@ describe('SyncService', () => {
     expect(store.syncRuns.some((run) => run.id === expiredRun)).toBe(false);
   });
 
+  it('recovers a queued targeted run when the next worker starts', async () => {
+    const store = new MemoryStore();
+    const { user, subscription } = await setup(store);
+    const service = new SyncService(
+      store,
+      new MutableYouTube(),
+      new FakeCalendarGateway(),
+      { now: () => new Date('2026-07-20T10:00:00Z') },
+      logger,
+    );
+    const queued = await service.queueSubscription(user.id, subscription.id);
+
+    await expect(service.runPendingManual()).resolves.toEqual([
+      expect.objectContaining({ status: 'SUCCESS' }),
+    ]);
+    expect(store.syncRuns.find((run) => run.id === queued.run.id)).toMatchObject({
+      status: 'SUCCESS',
+    });
+  });
+
   it('creates only future or live events when no mapping exists, regardless of provisional end', async () => {
     const store = new MemoryStore();
     const { user, channel, subscription } = await setup(store);

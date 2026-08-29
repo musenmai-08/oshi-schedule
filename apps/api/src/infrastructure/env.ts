@@ -103,12 +103,14 @@ const schema = z
       });
   });
 export type Env = z.infer<typeof schema>;
-export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
+export type RuntimeKind = 'api' | 'worker';
+
+export function loadEnv(source: NodeJS.ProcessEnv = process.env, runtime: RuntimeKind = 'api'): Env {
   const env = schema.parse(source);
   if (env.NODE_ENV === 'production' || env.APP_MODE === 'real') {
     if (!source.WEB_ORIGIN?.trim())
       throw new Error('Missing required environment variable: WEB_ORIGIN');
-    if (!source.ALLOWED_EMAILS?.trim())
+    if (runtime === 'api' && !source.ALLOWED_EMAILS?.trim())
       throw new Error('Missing required environment variable: ALLOWED_EMAILS');
     if (env.NODE_ENV === 'production') {
       const webOrigin = new URL(env.WEB_ORIGIN);
@@ -123,6 +125,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
         throw new Error('WEB_ORIGIN must be an HTTPS origin in production');
     }
     if (
+      runtime === 'api' &&
       env.ALLOWED_EMAILS.split(',').some(
         (email) => email.trim().toLowerCase() === 'developer@example.com',
       )
@@ -152,4 +155,8 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     }
   }
   return env;
+}
+
+export function loadWorkerEnv(source: NodeJS.ProcessEnv = process.env): Env {
+  return loadEnv(source, 'worker');
 }
