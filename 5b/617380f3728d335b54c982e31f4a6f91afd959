@@ -1,0 +1,40 @@
+scripts/aws/staging-inspect-queued-sync-runs.test.mjs
+  s_3a50bad78ea1cd::t_2c412c58733703 1-77
+apps/api/src/operations/queued-sync-run-inspection.ts
+  s_3a50bad78ea1cd::t_1e3c0848c1ae44 1,3-5,8,13,33,35-44
+  s_3a50bad78ea1cd::t_04398097ac2e33 63
+  s_3a50bad78ea1cd::t_a72c7f094fe818 2,6-7,9-12,14-32,34,45-62,64-77
+apps/worker/src/inspect-queued-sync-runs.ts
+  s_3a50bad78ea1cd::t_a72c7f094fe818 1-14
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_095c3409d8e613 195
+  s_3a50bad78ea1cd::t_e3b72ddce73714 194
+scripts/aws/staging-inspect-queued-sync-runs.mjs
+  s_3a50bad78ea1cd::t_2c412c58733703 1-99,102-106,109-136,144-159,161-223,228-233
+  s_3a50bad78ea1cd::t_71f912a95aad82 137-143,160
+  s_3a50bad78ea1cd::t_04398097ac2e33 100-101,107-108,224-227
+docs/operations/troubleshooting.md
+  s_3a50bad78ea1cd::t_095c3409d8e613 20-31
+apps/api/package.json
+  s_3a50bad78ea1cd::t_a72c7f094fe818 14-17
+apps/api/src/operations/queued-sync-run-inspection.test.ts
+  s_3a50bad78ea1cd::t_a72c7f094fe818 1-75
+package.json
+  s_3a50bad78ea1cd::t_2c412c58733703 31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "5b617380f3728d335b54c982e31f4a6f91afd959",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
