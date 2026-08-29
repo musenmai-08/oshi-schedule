@@ -144,6 +144,7 @@ ECR Basic Scanは`COMPLETE`となり、CRITICAL 3 / HIGH 8（合計11件）のCV
 - AWS CLI/CDKは`--profile oshi-schedule`、account `741448960817`、region `ap-northeast-1`だけを使用し、`default`を使わない。
 - AWS write、migration、ECR変更、ECS scale、Pipe/Scheduler変更、Amplify build、同期実行は、その工程の明示承認後だけ行う。
 - 作業前に用途別preflightを実行し、1件でもFAILならwriteへ進まない。既定の`pnpm staging:preflight`はAmplify前を検証する。Phase 2前は`pnpm staging:preflight -- --phase2`を使う。
+- sleep中のruntime digest更新前は`pnpm staging:preflight --runtime-deploy-sleeping`を使う。このprofileはPhase 2起動用`--phase2`の期待値を変更せず、activation `READY`、API `0/0/0`、RDS `STOPPED`、Pipe `RUNNING`、Scheduler `DISABLED`、queue `0/0/0`、wake deadline `EXPIRED`を検証する。
 - sleep中のAmplify control-planeだけを変更する場合は`pnpm staging:preflight --amplify-control-plane`を使い、CDK diffがAmplify Appだけであることを別途確認する。このprofileは意図的にAPI、RDS、Pipe、Queue、wake deadlineを評価しないため、runtime変更には使用しない。
 - Worker Schedulerは明示承認なしに有効化しない。migrationは承認済みone-off Task以外で実行しない。
 - runtime imageはimmutable digestで固定し、Secret値・credential・DATABASE_URL・個人情報をログや文書へ出さない。

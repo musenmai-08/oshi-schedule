@@ -70,6 +70,13 @@ describe('staging preflight arguments', () => {
     assert.equal(parsePreflightArguments(['--phase2']), 'phase2');
   });
 
+  it('supports the sleeping runtime deploy profile', () => {
+    assert.equal(
+      parsePreflightArguments(['--runtime-deploy-sleeping']),
+      'runtime-deploy-sleeping',
+    );
+  });
+
   it('rejects ambiguous or unknown arguments', () => {
     assert.throws(() => parsePreflightArguments(['--unknown']), /Usage/);
     assert.throws(() => parsePreflightArguments(['--amplify', '--phase2']), /Usage/);
@@ -197,6 +204,47 @@ describe('staging preflight checks', () => {
       true,
     );
   });
+
+  it('passes the normal Phase 2 sleeping runtime deploy contract', () => {
+    const status = runningStatus();
+    status.api = { desiredCount: 0, runningCount: 0, pendingCount: 0 };
+    status.applicationActivation.state = 'READY';
+    status.rds.state = 'stopped';
+    status.syncJobs.desiredState = 'RUNNING';
+    status.syncJobs.state = 'RUNNING';
+    status.autoSleep.state = 'EXPIRED';
+    const checks = evaluatePreflight({
+      ...inputs(status),
+      purpose: 'runtime-deploy-sleeping',
+      configuredAmplifyPhase: 'connected',
+    });
+    assert.equal(checks.every(({ ok }) => ok), true);
+  });
+
+  for (const [name, mutate] of [
+    ['sleeping profile with running API', (value) => (value.status.api.runningCount = 1)],
+    ['sleeping profile with RDS available', (value) => (value.status.rds.state = 'available')],
+    ['sleeping profile with stopped Pipe', (value) => (value.status.syncJobs.state = 'STOPPED')],
+    ['sleeping profile with active deadline', (value) => (value.status.autoSleep.state = 'ACTIVE')],
+  ]) {
+    it(`rejects ${name}`, () => {
+      const value = inputs();
+      value.status.api = { desiredCount: 0, runningCount: 0, pendingCount: 0 };
+      value.status.rds.state = 'stopped';
+      value.status.syncJobs.desiredState = 'RUNNING';
+      value.status.syncJobs.state = 'RUNNING';
+      value.status.autoSleep.state = 'EXPIRED';
+      mutate(value);
+      assert.equal(
+        evaluatePreflight({
+          ...inputs(value.status),
+          purpose: 'runtime-deploy-sleeping',
+          configuredAmplifyPhase: 'connected',
+        }).every(({ ok }) => ok),
+        false,
+      );
+    });
+  }
 
   for (const [name, mutate] of [
     ['wrong account', (value) => (value.identity.Account = '000000000000')],

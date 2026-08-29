@@ -48,6 +48,13 @@ const profiles = Object.freeze({
     rds: 'available',
     pipe: 'STOPPED',
   }),
+  'runtime-deploy-sleeping': Object.freeze({
+    applicationActivation: 'READY',
+    api: Object.freeze({ desiredCount: 0, runningCount: 0, pendingCount: 0 }),
+    rds: 'stopped',
+    pipe: 'RUNNING',
+    wakeDeadline: 'EXPIRED',
+  }),
 });
 
 const amplifyArguments = Object.freeze([
@@ -60,6 +67,7 @@ const amplifyArguments = Object.freeze([
   'to-connected',
   'connected',
   'control-plane',
+  'runtime-deploy-sleeping',
 ]);
 
 export const resolvePreflightPurpose = (purpose, configuredAmplifyPhase) => {
@@ -80,13 +88,15 @@ export const parsePreflightArguments = (args = []) => {
   if (args.length === 0 || (args.length === 1 && args[0] === '--amplify'))
     return 'amplify-configured';
   if (args.length === 1 && args[0] === '--phase2') return 'phase2';
+  if (args.length === 1 && args[0] === '--runtime-deploy-sleeping')
+    return 'runtime-deploy-sleeping';
   if (args.length === 1 && amplifyArguments.some((phase) => args[0] === `--amplify-${phase}`))
     return args[0].slice(2);
   throw new Error(
     'Usage: staging:preflight [--amplify|--amplify-manual|--amplify-to-domain-detached|' +
       '--amplify-domain-detached|--amplify-to-detached|--amplify-detached|' +
       '--amplify-repository-connected|--amplify-to-connected|--amplify-connected|' +
-      '--amplify-control-plane|--phase2]',
+      '--amplify-control-plane|--phase2|--runtime-deploy-sleeping]',
   );
 };
 
@@ -143,7 +153,7 @@ export const evaluatePreflight = ({
       check('Pipe current state', pipeState ?? 'unknown', expected.pipe),
       check('Worker Scheduler', status.scheduler?.state ?? 'unknown', 'DISABLED'),
       check('Queue visible/in-flight/delayed', queueState, '0/0/0'),
-      check('Wake deadline', deadline ?? 'unknown', 'ACTIVE'),
+      check('Wake deadline', deadline ?? 'unknown', expected.wakeDeadline ?? 'ACTIVE'),
     );
   }
   if (expected.amplify) {
