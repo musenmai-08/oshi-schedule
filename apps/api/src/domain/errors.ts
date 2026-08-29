@@ -62,7 +62,9 @@ export class WorkerExecutionError extends Error {
   readonly failure: SafeWorkerFailure;
 
   constructor(fallbackPhase: WorkerFailurePhase, error: unknown) {
-    super('Worker execution failed');
+    // Keep the existing in-process error contract for callers. The Worker log
+    // intentionally emits only `failure`, never this message.
+    super(error instanceof Error ? error.message : 'Worker execution failed');
     this.name = 'WorkerExecutionError';
     this.failure = classifyWorkerFailure(error, fallbackPhase);
   }

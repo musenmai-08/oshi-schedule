@@ -143,6 +143,8 @@ ECR Basic Scanは`COMPLETE`となり、CRITICAL 3 / HIGH 8（合計11件）のCV
 
 2026-08-29に直前Workerのlogと実行経路を再調査した。terminal summaryが出ているためruntime初期化は通過しており、`syncSubscription`内で必ず出る`subscription sync failed`構造化ログもないことから、最有力箇所は`claimSyncRun`のPrisma transaction（またはその直後のDB read）である。既存ログだけでは確定できないため、推測でDB、Google、Calendarのいずれかを断定しない。次runtimeでは、初期化、SyncRun claim、Prisma DB、credential復号、Google認証、YouTube、Calendar、同期処理、shutdownを固定の安全なphaseへ分類し、terminal worker logへ`failurePhase`、`failureCode`、`failureClass`だけを出力する。raw error message、token、secret、credential、メール、ID、Calendar IDは出力しない。次回はこのruntimeをdeployした後、別途承認されたtargeted Workerを1回だけ実行して、`SYNC_RUN_CLAIM`／`DATABASE`または外部API分類を確認する。
 
+この観測追加の初回CIでは、分類wrapperが既存のin-process error messageを置き換え、initial sync失敗時の既存契約testを壊した。wrapperのWorker logは分類値だけに保ったまま、呼出元に渡すmessageは元のError messageを維持する最小修正を追加した。API full test 148 passed（MySQL integration 8 skipped）、Worker関連17 passed、両workspaceのtypecheckとlintが成功している。
+
 ## 恒久的なAWS安全ルール
 
 - AWS CLI/CDKは`--profile oshi-schedule`、account `741448960817`、region `ap-northeast-1`だけを使用し、`default`を使わない。
