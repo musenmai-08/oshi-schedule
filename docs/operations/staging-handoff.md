@@ -50,14 +50,14 @@ sleep中のstatusとAmplify control-plane preflightを確認後、`pnpm staging:
 
 | Task Definition                   | Revision | Status   |
 | --------------------------------- | -------: | -------- |
-| `oshi-schedule-staging-api`       |        4 | `ACTIVE` |
-| `oshi-schedule-staging-worker`    |        4 | `ACTIVE` |
-| `oshi-schedule-staging-migration` |        3 | `ACTIVE` |
+| `oshi-schedule-staging-api`       |        6 | `ACTIVE` |
+| `oshi-schedule-staging-worker`    |        6 | `ACTIVE` |
+| `oshi-schedule-staging-migration` |        5 | `ACTIVE` |
 
 3つとも次のimmutable digestを参照する。
 
 ```text
-sha256:724b4edd23c7b9b71790623414895aa53f0ddc82249b164b9798d09cf756b99e
+sha256:a8d9a7fa64246f6b035a1c551561de5678ee9c39830858dd058fcd46e239f1c1
 ```
 
 ## 解消済み障害
@@ -129,7 +129,7 @@ ECR Basic Scanは`COMPLETE`となり、CRITICAL 3 / HIGH 8（合計11件）のCV
 
 現在はAPI 0/0/0、RDS `STOPPED`、Worker Scheduler `DISABLED`、Cloud Map登録0、status `SLEEPING`で、API/Worker/MigrationのTask Definitionはすべてこのdigestを参照する。Amplify build、OAuth、migration、同期は実行していない。productionへはstaging限定例外を含むため昇格できない。
 
-2026-08-29に承認済みWorker env validation修正版digestを`infra/config/staging-deploy.json`へ反映し、commit `465216b`としてpushした。Phase 2 CDK diffはAPI/Worker/Migration Task Definitionのruntime digest更新3件だけだったが、sleep中の現状（RDS停止遷移中、wake deadline expired、activation READY、Pipe RUNNING）に対してruntime用`--phase2` preflightの期待値（RDS available、deadline ACTIVE、activation NOT_READY、Pipe STOPPED）が一致せずFAILしたため、AWS deployは実行していない。Task Definition、ECS Service、RDS、Pipe、Scheduler、Queueは未変更で、次回はsleep状態に対応した用途別preflightまたは承認済みwake後の再確認が必要である。
+2026-08-29に承認済みWorker env validation修正版digestを`infra/config/staging-deploy.json`へ反映し、commit `465216b`としてpushした。sleep状態対応の`--runtime-deploy-sleeping` preflightは全PASS、Phase 2 CDK diffはAPI/Worker/Migration Task Definitionのruntime digest更新3件だけだったため、承認済みPhase 2 CDK deployを実行した。CloudFormationは`UPDATE_COMPLETE`、Task DefinitionはAPI rev6 / Worker rev6 / Migration rev5へ更新され、3つすべてが指定digestを参照している。deploy中にAPIは一時1/1/0へ起動したが、`pnpm staging:sleep`でAPI 0/0/0、RDS `STOPPED`、Scheduler `DISABLED`、queue 0、最終status `SLEEPING`へ復旧した。deploy後CDK diffは0である。
 
 2026-08-28 23:16〜23:20 JSTにAmplify `main`のjob `7`を1回だけ実行し、BUILD/DEPLOY/VERIFYすべて`SUCCEED`した。接続済みmainのHEAD（OAuth `calendar.app.created`最小scope実装を含む）をbuildし、`https://staging.oshi-schedule.com/`はHTTP 200で実アプリの識別表示を返し、Welcomeプレースホルダーではなかった。build中もAPI/RDSをwakeせず、完了後のstatusはAPI 0/0/0、RDS `STOPPED`、Scheduler `DISABLED`、`SLEEPING`である。OAuth実ログイン、Sync、wakeは行っていない。
 
