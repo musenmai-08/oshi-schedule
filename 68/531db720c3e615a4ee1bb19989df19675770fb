@@ -1,0 +1,21 @@
+apps/api/src/domain/errors.ts
+  s_3a50bad78ea1cd::t_357ac02021051d 65-67
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_90c6218dd2c7cf 146-147
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "68531db720c3e615a4ee1bb19989df19675770fb",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
