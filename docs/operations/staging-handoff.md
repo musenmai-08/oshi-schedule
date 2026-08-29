@@ -183,6 +183,10 @@ ECR Basic Scanは`COMPLETE`となり、CRITICAL 3 / HIGH 8（合計11件）のCV
 
 DomainAssociationを削除してから`connected`で再作成し`AVAILABLE`になるまで、`https://staging.oshi-schedule.com`は停止する。Route 53のAPI用record、API Gateway、Amplify App ID、App環境変数は変更対象外である。Branch/DomainをConsoleやAmplify CLIで直接削除せず、各段階のCloudFormation rollback可能性を維持する。
 
+2026-08-29に、current HEAD由来のWorker分類済みエラー観測candidateをstaging ECRへpushし、digest `sha256:c7f1893e2317012c14fb77710fbb87b78d6c48db47dd186c264c71566021b7b6`を確定した。ECR Basic ScanはCOMPLETE（CRITICAL 3 / HIGH 9）で、既存のproduction例外および承認済みstaging限定例外だけに一致し、未承認Critical/Highは0件だった。production policyへのstaging限定例外混入もない。
+
+同digestを`infra/config/staging-deploy.json`へ反映し、`--runtime-deploy-sleeping` preflight（API 0/0/0、RDS STOPPED、Pipe RUNNING、Scheduler DISABLED、queue 0、wake deadline EXPIRED）とruntime-only CDK diff（API/Worker/Migration Task Definition更新3件）を確認してPhase 2 deployを実施した。CloudFormationは`UPDATE_COMPLETE`、API/Worker/Migrationの全Task Definitionが同digestを参照し、deploy後CDK diffは0だった。deploy中にAPIが一時起動したため`pnpm staging:sleep`で復旧し、現在はAPI 0/0/0、RDS `STOPPED`、Worker Scheduler `DISABLED`、Cloud Map登録0、status `SLEEPING`である。Worker実行、OAuth、Sync、Amplify build、migrationは行っていない。
+
 ## 次工程
 
 今回のOAuth/login、チャンネル登録、再Sync、削除、再登録、定期Scheduler同期の受入、バックエンド監査、staging sleep、リリース前最終監査は完了した。招待制stagingは技術的受入完了で`SLEEPING`を維持する。production公開設定guardとOAuth scope最小化コードは解消済みで、一般公開へ残るHighは[High 2詳細監査](../reviews/high-2-production-oauth-legal-audit.md)の限定scope実受入、法務表示、branding、production外部設定・公開審査である。次は新runtime candidateのECR固有OpenSSL 3件について、2026-09-11までの期限付き例外を明示承認するか判断する。承認後に限定deployを再開し、その完了後、Google/Supabase Data Access変更と旧grantを排除したstaging手動受入を別途承認の上で行う。
