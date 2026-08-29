@@ -187,6 +187,10 @@ DomainAssociationを削除してから`connected`で再作成し`AVAILABLE`に�
 
 同digestを`infra/config/staging-deploy.json`へ反映し、`--runtime-deploy-sleeping` preflight（API 0/0/0、RDS STOPPED、Pipe RUNNING、Scheduler DISABLED、queue 0、wake deadline EXPIRED）とruntime-only CDK diff（API/Worker/Migration Task Definition更新3件）を確認してPhase 2 deployを実施した。CloudFormationは`UPDATE_COMPLETE`、API/Worker/Migrationの全Task Definitionが同digestを参照し、deploy後CDK diffは0だった。deploy中にAPIが一時起動したため`pnpm staging:sleep`で復旧し、現在はAPI 0/0/0、RDS `STOPPED`、Worker Scheduler `DISABLED`、Cloud Map登録0、status `SLEEPING`である。Worker実行、OAuth、Sync、Amplify build、migrationは行っていない。
 
+2026-08-29に分類済みエラー観測runtimeで既存のtargeted `QUEUED` SyncRun回収を試行した。`pnpm staging:wake --hours 1`後、RDS `AVAILABLE`、API `1/1/0`、`/health`・`/ready` HTTP 200を確認した。停止済みECS taskの保持期限によりrun IDを外部メタデータから復元できなかったため、承認されたWorker taskを1回だけ起動し、container内で`QUEUED`かつ`INITIAL`/`MANUAL`のrunがちょうど1件であることをread-only照会してから、そのIDだけを`SYNC_RUN_ID`へ設定する保護手順を用いた。
+
+この照会は`queued_sync_run_count_mismatch`で安全に停止し、taskはexit `64`となった。Worker本体は開始されなかったため、`failurePhase`/`failureCode`/`failureClass`は生成されず、SyncRun claim、Google認証、YouTube、Calendar、scope/permission処理も実行されていない。新しい再Syncは作成しておらず、sync queue、sync DLQ、Worker Scheduler DLQはいずれも0/0/0だった。再実行はしていない。`pnpm staging:sleep`によりAPI 0/0/0、RDS `STOPPED`、Scheduler `DISABLED`、Cloud Map登録0、status `SLEEPING`へ復旧した。
+
 ## 次工程
 
 今回のOAuth/login、チャンネル登録、再Sync、削除、再登録、定期Scheduler同期の受入、バックエンド監査、staging sleep、リリース前最終監査は完了した。招待制stagingは技術的受入完了で`SLEEPING`を維持する。production公開設定guardとOAuth scope最小化コードは解消済みで、一般公開へ残るHighは[High 2詳細監査](../reviews/high-2-production-oauth-legal-audit.md)の限定scope実受入、法務表示、branding、production外部設定・公開審査である。次は新runtime candidateのECR固有OpenSSL 3件について、2026-09-11までの期限付き例外を明示承認するか判断する。承認後に限定deployを再開し、その完了後、Google/Supabase Data Access変更と旧grantを排除したstaging手動受入を別途承認の上で行う。
