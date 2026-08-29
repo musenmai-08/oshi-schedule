@@ -1,0 +1,36 @@
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_1c66a0f89b15e4 144-145
+apps/api/src/application/sync-service.test.ts
+  s_3a50bad78ea1cd::t_a0afd8c8178754 49,51-56,423-438
+  s_3a50bad78ea1cd::t_8abb3a6bd681e1 50
+  s_3a50bad78ea1cd::t_d5a9fd77f9e9cc 439-441
+apps/api/src/domain/errors.test.ts
+  s_3a50bad78ea1cd::t_ce6c48a1fb3b17 1-38
+apps/api/src/domain/errors.ts
+  s_3a50bad78ea1cd::t_1ce5ad67d7eda4 14-70
+apps/worker/src/scheduled-worker.test.ts
+  s_3a50bad78ea1cd::t_873fb7a785fcea 8,47,51-55,81-118
+  s_3a50bad78ea1cd::t_5cbbb6255c4db5 119
+apps/api/src/application/sync-service.ts
+  s_3a50bad78ea1cd::t_1ce5ad67d7eda4 3,78-87,99-104,107-117,119
+apps/worker/src/scheduled-worker.ts
+  s_3a50bad78ea1cd::t_80a93dacebbaf7 13,16-48,66-72,84-116,148,153,164-170
+apps/worker/src/index.ts
+  s_3a50bad78ea1cd::t_80a93dacebbaf7 6,20-34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "9eebac8723dab8a747e3eb90a17f37a9282b5656",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
