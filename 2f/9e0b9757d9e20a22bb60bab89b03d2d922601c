@@ -1,0 +1,29 @@
+docs/reviews/high-2-production-oauth-legal-audit.md
+  s_3a50bad78ea1cd::t_ae4655398fe55f 211
+  s_3a50bad78ea1cd::t_54d730b1c086e8 210,214-219
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_54d730b1c086e8 217-218
+apps/web/src/lib/legal-content.ts
+  s_3a50bad78ea1cd::t_4bd8cd8351b22a 85,90,95
+apps/web/src/lib/legal-content.test.ts
+  s_3a50bad78ea1cd::t_2c9ed1b5d11640 42
+  s_3a50bad78ea1cd::t_4bd8cd8351b22a 43-46
+docs/operations/backup-and-recovery.md
+  s_3a50bad78ea1cd::t_fd4fe28067030a 3,12-15,18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "2f9e0b9757d9e20a22bb60bab89b03d2d922601c",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
