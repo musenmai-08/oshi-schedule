@@ -99,6 +99,7 @@ jobs:
           image-ref: oshi-schedule:ci
           format: table
           exit-code: '1'
+          cache: 'false'
           ignore-unfixed: false
           severity: HIGH,CRITICAL
           trivyignores: .trivyignore

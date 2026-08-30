@@ -116,6 +116,7 @@ jobs:
           image-ref: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.STAGING_ECR_REPOSITORY }}@${{ env.IMAGE_DIGEST }}
           format: table
           exit-code: '1'
+          cache: 'false'
           ignore-unfixed: false
           severity: HIGH,CRITICAL
           trivyignores: .trivyignore

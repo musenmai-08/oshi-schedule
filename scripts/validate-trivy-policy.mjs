@@ -85,6 +85,9 @@ for (const [name, workflow] of [
   if (workflow.includes('.trivyignore.staging')) {
     errors.push(`${name} must not reference .trivyignore.staging`);
   }
+  if (!workflow.includes("cache: 'false'")) {
+    errors.push(`${name} must disable the Trivy Action cache so each production gate uses a fresh vulnerability database`);
+  }
 }
 
 for (const id of approvedStagingOnlyEntries.keys()) {

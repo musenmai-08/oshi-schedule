@@ -51,7 +51,8 @@ production ECR repositoryはCDKの`bootstrapOnly=true` phaseが唯一の所有�
 1. production専用の非秘密contextと`confirmProduction=DEPLOY_PRODUCTION`を使い、`bootstrapOnly=true`のCDK diffが`AWS::ECR::Repository` CREATE 1件だけであることを確認する。
 2. このbootstrap deployを別途承認後に実施し、CloudFormationが`UPDATE_COMPLETE`、ECR repositoryがCDK管理で存在することだけを確認する。
 3. production policyを通過したimageをimmutable digestでpushする。staging限定CVE例外を含むimageはpromotion・push対象にしない。
-4. そのdigestとfull production contextでCDK diffを確認し、full production deployは別途承認する。
+4. CIとpromotion workflowのTrivy gateは`cache: 'false'`でfresh vulnerability DBを使い、production `.trivyignore`だけを適用してHIGH/CRITICALを0件にする。push後はECR Basic Scanも`COMPLETE`まで待ち、同じproduction policyで未承認Critical/Highが0件であることを確認する。
+5. そのdigestとfull production contextでCDK diffを確認し、full production deployは別途承認する。
 
 `SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`、`GOOGLE_CLIENT_ID`は秘密ではないが、production専用値をCDK contextへ渡す。`SUPABASE_SERVICE_ROLE_KEY`、`GOOGLE_CLIENT_SECRET`、`YOUTUBE_API_KEY`、`TOKEN_ENCRYPTION_KEYS`、`ALLOWED_EMAILS`の値はCDK context、Amplify、GitHub Variables、Git、shell引数へ渡さない。
 
@@ -101,6 +102,7 @@ production ECR repositoryはCDKの`bootstrapOnly=true` phaseが唯一の所有�
 
 - [ ] production CDK synth/diffでWeb=`oshi-schedule.com`、API=`api.oshi-schedule.com`、Amplify root-domain Prefix空、`WEB_ORIGIN`、`NEXT_PUBLIC_API_URL`が一致する。
 - [ ] mainの最新commitでGitHub Actions `validate`と`e2e`がともにgreenであり、workflow logで失敗がない。
+- [ ] production imageはfresh DBのTrivy production gateとECR Basic Scanの双方で、production `.trivyignore`外のCritical/Highが0件である。
 - [ ] production専用Secret/SSM/Google/Supabase値が揃い、staging由来値・localhost・placeholderがない。
 - [ ] Google ConsoleとSupabaseのURL matrixが上表どおりで、production redirect allowlistは完全一致である。
 - [ ] Google consent screen、scope justification、demo video、必要なverificationが承認済みである。
