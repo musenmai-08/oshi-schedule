@@ -1,0 +1,26 @@
+docs/operations/production-release-checklist.md
+  s_3a50bad78ea1cd::t_5285d75e924d85 53
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_5285d75e924d85 247-248
+scripts/validate-ecr-basic-scan.test.mjs
+  s_3a50bad78ea1cd::t_f12a5a0ba5ead9 21,41
+scripts/validate-ecr-basic-scan.mjs
+  s_3a50bad78ea1cd::t_f12a5a0ba5ead9 41,59,63
+  s_3a50bad78ea1cd::t_28277d5b03b200 26-30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "a1091164aa44bfbbf9600256aad2bb1d1cbc224e",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
