@@ -117,16 +117,6 @@ export class OshiScheduleStack extends Stack {
         'Imported SSM parameter names are referenced by ECS secret ARNs at runtime; CDK lookup parameters are intentionally not Ref-ed.',
     });
 
-    const vpc = new ec2.Vpc(this, 'Vpc', {
-      vpcName: `${prefix}-vpc`,
-      maxAzs: 2,
-      natGateways: 0,
-      subnetConfiguration: [
-        { name: 'public', subnetType: ec2.SubnetType.PUBLIC, cidrMask: 24 },
-        { name: 'database', subnetType: ec2.SubnetType.PRIVATE_ISOLATED, cidrMask: 24 },
-      ],
-    });
-
     const repository = new ecr.Repository(this, 'Repository', {
       repositoryName: prefix,
       imageScanOnPush: true,
@@ -140,6 +130,17 @@ export class OshiScheduleStack extends Stack {
       new CfnOutput(this, 'EcrRepositoryUri', { value: repository.repositoryUri });
       return;
     }
+
+    const vpc = new ec2.Vpc(this, 'Vpc', {
+      vpcName: `${prefix}-vpc`,
+      maxAzs: 2,
+      natGateways: 0,
+      subnetConfiguration: [
+        { name: 'public', subnetType: ec2.SubnetType.PUBLIC, cidrMask: 24 },
+        { name: 'database', subnetType: ec2.SubnetType.PRIVATE_ISOLATED, cidrMask: 24 },
+      ],
+    });
+
     const cluster = new ecs.Cluster(this, 'Cluster', {
       clusterName: `${prefix}-cluster`,
       vpc,

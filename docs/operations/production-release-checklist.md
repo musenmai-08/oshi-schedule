@@ -44,6 +44,15 @@ productionの値はstagingからコピーしない。production用Supabase proje
 - Amplify環境変数: `WEB_ORIGIN`、`NEXT_PUBLIC_API_URL`、`NEXT_PUBLIC_DEMO_MODE=false`、`NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 - RDS managed secret、ECS task definition内のSecret/Parameter参照
 
+### ECR-first bootstrap
+
+production ECR repositoryはCDKの`bootstrapOnly=true` phaseが唯一の所有者として作成する。最初のdeployではECR Repositoryだけを作成し、VPC、RDS、ECS、Amplify、Route 53などのfull-stack resourceは作成しない。repository名をAWS CLIやConsoleで手動作成してCloudFormation ownershipと衝突させない。
+
+1. production専用の非秘密contextと`confirmProduction=DEPLOY_PRODUCTION`を使い、`bootstrapOnly=true`のCDK diffが`AWS::ECR::Repository` CREATE 1件だけであることを確認する。
+2. このbootstrap deployを別途承認後に実施し、CloudFormationが`UPDATE_COMPLETE`、ECR repositoryがCDK管理で存在することだけを確認する。
+3. production policyを通過したimageをimmutable digestでpushする。staging限定CVE例外を含むimageはpromotion・push対象にしない。
+4. そのdigestとfull production contextでCDK diffを確認し、full production deployは別途承認する。
+
 `SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`、`GOOGLE_CLIENT_ID`は秘密ではないが、production専用値をCDK contextへ渡す。`SUPABASE_SERVICE_ROLE_KEY`、`GOOGLE_CLIENT_SECRET`、`YOUTUBE_API_KEY`、`TOKEN_ENCRYPTION_KEYS`、`ALLOWED_EMAILS`の値はCDK context、Amplify、GitHub Variables、Git、shell引数へ渡さない。
 
 ### 安全な投入と確認

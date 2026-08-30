@@ -169,15 +169,16 @@ const renderFromCliContext = (context: Record<string, unknown>): Template => {
 };
 
 describe('OshiScheduleStack', () => {
-  it('supports an ECR-first bootstrap from CLI string context without full-stack resources', () => {
+  it('supports an ECR-only production bootstrap without infrastructure resources', () => {
     const template = renderFromCliContext({
-      environment: 'staging',
+      environment: 'production',
       deployReady: 'true',
       bootstrapOnly: 'true',
       awsAccount: '111111111111',
       awsRegion: 'ap-northeast-1',
+      confirmProduction: 'DEPLOY_PRODUCTION',
     });
-    template.resourceCountIs('AWS::EC2::VPC', 1);
+    template.resourceCountIs('AWS::EC2::VPC', 0);
     template.resourceCountIs('AWS::ECR::Repository', 1);
     template.resourceCountIs('AWS::ECS::Service', 0);
     template.resourceCountIs('AWS::RDS::DBInstance', 0);
@@ -193,7 +194,7 @@ describe('OshiScheduleStack', () => {
     template.resourceCountIs('AWS::Budgets::Budget', 0);
     template.resourceCountIs('AWS::SecretsManager::Secret', 0);
     template.resourceCountIs('AWS::SSM::Parameter', 0);
-    template.hasOutput('EnvironmentName', { Value: 'staging' });
+    template.hasOutput('EnvironmentName', { Value: 'production' });
   }, 15_000);
 
   it('synthesizes full staging resources from CLI string context', () => {

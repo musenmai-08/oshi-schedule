@@ -69,7 +69,7 @@ AWS_PROFILE=<profile> pnpm aws:cdk deploy \
   -c awsRegion=<region>
 ```
 
-この段階はVPC（public subnetとisolated database subnet、NATなし）とimmutable ECR repositoryだけを同じstackに作る。ECS、RDS、HTTP API/VPC Link/Cloud Map、SQS/Pipes、Scheduler、Amplify、Budget、application Secret/Parameterは作らない。`deployReady=true`はaccountを必須化し、`bootstrapOnly=true`との組み合わせではfull deploy入力を要求しない。出力されたrepositoryへ検証済みimageをcommit SHA tagでpushし、digestを記録する。
+この段階はimmutable ECR repositoryだけを同じstackに作る。VPC、ECS、RDS、HTTP API/VPC Link/Cloud Map、SQS/Pipes、Scheduler、Amplify、Budget、application Secret/Parameterは作らない。`deployReady=true`はaccountを必須化し、`bootstrapOnly=true`との組み合わせではfull deploy入力を要求しない。出力されたrepositoryへ検証済みimageをcommit SHA tagでpushし、digestを記録する。
 
 ```bash
 docker build --platform linux/amd64 -t oshi-schedule:<commit-sha> .
