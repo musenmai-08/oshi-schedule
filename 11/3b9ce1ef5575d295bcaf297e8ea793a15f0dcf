@@ -1,0 +1,44 @@
+infra/lib/oshi-schedule-stack.ts
+  s_3a50bad78ea1cd::t_c53a235555f2b0 1084-1089
+infra/lib/config.ts
+  s_3a50bad78ea1cd::t_c53a235555f2b0 12-14,253-256
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_0d81cefc5b2649 221-222
+docs/operations/production-release-checklist.md
+  s_3a50bad78ea1cd::t_ef47b440849985 7-13
+  s_3a50bad78ea1cd::t_a539a6038d6dc7 1-6,14-75
+infra/test/config.test.ts
+  s_3a50bad78ea1cd::t_c53a235555f2b0 115
+  s_3a50bad78ea1cd::t_566102ce36dc90 275-276
+docs/reviews/high-2-production-oauth-legal-audit.md
+  s_3a50bad78ea1cd::t_0d81cefc5b2649 24,26-30,125,129,151,220-224
+  s_3a50bad78ea1cd::t_87c350960d45ab 119,164
+  s_3a50bad78ea1cd::t_b957274e12d66b 225
+apps/web/src/lib/legal-content.ts
+  s_3a50bad78ea1cd::t_c53a235555f2b0 24
+.github/workflows/deploy-production.yml
+  s_3a50bad78ea1cd::t_f17d68c30e55c9 80-87
+apps/web/src/app/page.tsx
+  s_3a50bad78ea1cd::t_c53a235555f2b0 37,72
+infra/test/oshi-schedule-stack.test.ts
+  s_3a50bad78ea1cd::t_c53a235555f2b0 92
+  s_3a50bad78ea1cd::t_566102ce36dc90 523-532
+apps/web/src/lib/legal-content.test.ts
+  s_3a50bad78ea1cd::t_c53a235555f2b0 58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "113b9ce1ef5575d295bcaf297e8ea793a15f0dcf",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
