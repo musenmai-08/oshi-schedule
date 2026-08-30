@@ -6,18 +6,18 @@ local、test、staging、productionのデータとcredentialを混在させな�
 
 ## 環境マトリクス
 
-| 項目               | local                             | test/CI                          | staging                                                                       | production                                            |
-| ------------------ | --------------------------------- | -------------------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------- |
-| URL                | `http://localhost:3001` / `:4000` | localhost/ephemeral              | `https://staging.oshi-schedule.com` / `https://api-staging.oshi-schedule.com` | `https://app.example.com` / `https://api.example.com` |
-| `APP_MODE`         | realで実受入、fakeで開発          | fake中心                         | real                                                                          | real                                                  |
-| MySQL              | Docker MySQL 8.4                  | disposable MySQL 8.4             | 独立RDS                                                                       | 独立RDS                                               |
-| Supabase           | staging projectを明示利用         | fake、または専用test             | staging project                                                               | production project                                    |
-| Google Cloud       | staging project/client            | fake                             | staging project/client                                                        | production project/client                             |
-| YouTube/Calendar   | 必要時のみ実service               | fake                             | 実service                                                                     | 実service                                             |
-| Secret             | 追跡外`.env`                      | GitHubにapp secretを置かずtest値 | staging専用                                                                   | production専用                                        |
-| GitHub Environment | なし                              | pull request                     | `staging`                                                                     | `production` + manual approval                        |
+| 項目               | local                             | test/CI                          | staging                                                                       | production                                                    |
+| ------------------ | --------------------------------- | -------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| URL                | `http://localhost:3001` / `:4000` | localhost/ephemeral              | `https://staging.oshi-schedule.com` / `https://api-staging.oshi-schedule.com` | `https://oshi-schedule.com` / `https://api.oshi-schedule.com` |
+| `APP_MODE`         | realで実受入、fakeで開発          | fake中心                         | real                                                                          | real                                                          |
+| MySQL              | Docker MySQL 8.4                  | disposable MySQL 8.4             | 独立RDS                                                                       | 独立RDS                                                       |
+| Supabase           | staging projectを明示利用         | fake、または専用test             | staging project                                                               | production project                                            |
+| Google Cloud       | staging project/client            | fake                             | staging project/client                                                        | production project/client                                     |
+| YouTube/Calendar   | 必要時のみ実service               | fake                             | 実service                                                                     | 実service                                                     |
+| Secret             | 追跡外`.env`                      | GitHubにapp secretを置かずtest値 | staging専用                                                                   | production専用                                                |
+| GitHub Environment | なし                              | pull request                     | `staging`                                                                     | `production` + manual approval                                |
 
-production欄の`example.com`は設計上のplaceholderであり、production domain確定後に置換する。staging欄は現在の実domainである。
+production Web/API domainは確定済みである。staging欄は現在の実domainであり、productionへ流用しない。
 
 ## 分離単位
 
@@ -32,10 +32,10 @@ production欄の`example.com`は設計上のplaceholderであり、production do
 
 | 設定先                         | staging                                                      | production                                                      |
 | ------------------------------ | ------------------------------------------------------------ | --------------------------------------------------------------- |
-| Supabase Site URL              | `https://staging.oshi-schedule.com`                          | `https://app.example.com`                                       |
-| Supabase Redirect URL          | `https://staging.oshi-schedule.com/auth/callback`            | `https://app.example.com/auth/callback`                         |
+| Supabase Site URL              | `https://staging.oshi-schedule.com`                          | `https://oshi-schedule.com`                                     |
+| Supabase Redirect URL          | `https://staging.oshi-schedule.com/auth/callback`            | `https://oshi-schedule.com/auth/callback`                       |
 | アプリcallback                 | 同上                                                         | 同上                                                            |
-| Google OAuth authorized origin | `https://staging.oshi-schedule.com`                          | `https://app.example.com`                                       |
+| Google OAuth authorized origin | `https://staging.oshi-schedule.com`                          | `https://oshi-schedule.com`                                     |
 | Google provider redirect URI   | `https://<staging-project-ref>.supabase.co/auth/v1/callback` | `https://<production-project-ref>.supabase.co/auth/v1/callback` |
 
 Supabase project refや実domainはSecretではないが環境設定として管理し、document例の値をそのまま使わない。

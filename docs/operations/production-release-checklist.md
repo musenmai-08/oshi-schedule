@@ -22,6 +22,38 @@ production IaCはWeb domainを`oshi-schedule.com`、API domainを`api.oshi-sched
 - production Supabase AuthはSite URLとRedirect URLsをproduction Webだけに限定する。staging、localhost、preview wildcardをproduction allowlistへ追加しない。
 - production OAuthは`openid`、`https://www.googleapis.com/auth/userinfo.email`、`https://www.googleapis.com/auth/userinfo.profile`、`https://www.googleapis.com/auth/calendar.app.created`だけを要求する。広い`calendar` scopeを登録・許可しない。
 
+## AWS投入前のSecret・Parameter境界
+
+productionの値はstagingからコピーしない。production用Supabase project、Google Cloud projectと、それぞれで新規発行した値だけを使う。`ALLOWED_EMAILS`はproductionで独立して管理するSecureStringであり、同じ利用者を許可する場合もstaging値を自動コピーしない。
+
+### CDK deploy前に外部作成する項目
+
+| 種別             | AWS名                                                    | 注入先      | 値の提供元                                       |
+| ---------------- | -------------------------------------------------------- | ----------- | ------------------------------------------------ |
+| Secrets Manager  | `oshi-schedule-production/app/supabase-service-role-key` | API・Worker | production Supabase service-role key             |
+| Secrets Manager  | `oshi-schedule-production/app/google-client-secret`      | API・Worker | production Google OAuth client secret            |
+| Secrets Manager  | `oshi-schedule-production/app/youtube-api-key`           | API・Worker | production Google Cloud projectのYouTube API key |
+| Secrets Manager  | `oshi-schedule-production/app/token-encryption-keys`     | API・Worker | production専用のCSPRNG生成鍵                     |
+| SSM SecureString | `/oshi-schedule-production/runtime/allowed-emails`       | APIのみ     | productionで許可するメールアドレスのカンマ区切り |
+
+`TOKEN_ENCRYPTION_KEYS`は`key-id:32-byte-base64`形式とし、先頭を新規暗号化用、後続を旧ciphertext復号用にする。production初回は新しい32-byte CSPRNG鍵だけを設定する。RDS credentialはCDKが`oshi-schedule-production/rds/credentials`として生成するため、事前作成しない。
+
+### CDKが生成するため事前作成しない項目
+
+- SSM String Parameter: `app-mode`、`trust-proxy-hops`、`log-level`、`web-origin`、`youtube-daily-quota-budget`、`youtube-daily-search-quota-budget`、`application-activated`、`supabase-url`、`google-client-id`
+- Amplify環境変数: `WEB_ORIGIN`、`NEXT_PUBLIC_API_URL`、`NEXT_PUBLIC_DEMO_MODE=false`、`NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- RDS managed secret、ECS task definition内のSecret/Parameter参照
+
+`SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`、`GOOGLE_CLIENT_ID`は秘密ではないが、production専用値をCDK contextへ渡す。`SUPABASE_SERVICE_ROLE_KEY`、`GOOGLE_CLIENT_SECRET`、`YOUTUBE_API_KEY`、`TOKEN_ENCRYPTION_KEYS`、`ALLOWED_EMAILS`の値はCDK context、Amplify、GitHub Variables、Git、shell引数へ渡さない。
+
+### 安全な投入と確認
+
+1. 値はpassword managerなどから、`set +x`の対話shellで標準入力または保護された一時fileへだけ渡す。CLI引数、環境変数export、履歴、deploy recordへ書かない。
+2. Secret作成・更新後は`aws secretsmanager describe-secret`で**名前とcomplete ARNだけ**を確認し、`GetSecretValue`をpreflightに使わない。complete ARN（6文字suffix付き）はCDK contextにだけ渡す。
+3. `ALLOWED_EMAILS`はSecureStringとして作成後、`aws ssm describe-parameters`で名前と型だけを確認する。値取得や`--with-decryption`は不要である。
+4. customer managed KMS keyを選ぶ場合だけ、ECS execution roleへの最小`kms:Decrypt`権限をCDK diffで追加確認する。AWS managed keyでは追加しない。
+5. production contextはGit管理外の短命なローカル入力に限定し、secret値を含めない。実deploy前にIaC validation、Secret ARNのaccount/region/name/suffix検証、staging fingerprint拒否を通す。
+
 ## ユーザーが行う外部管理画面作業
 
 ### 1. 公開前のdomain・Web確認
