@@ -1,0 +1,32 @@
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_6945276a97e3af 235-238
+  s_3a50bad78ea1cd::t_0293c90ec5f323 231-232
+  s_3a50bad78ea1cd::t_51a189a1dbc126 227-230
+  s_3a50bad78ea1cd::t_cea5d31b5c1236 233-234
+infra/test/oshi-schedule-stack.test.ts
+  s_3a50bad78ea1cd::t_ea9ce3b92c0b8a 172,174,179
+  s_3a50bad78ea1cd::t_50ece03ecb5e2f 181
+  s_3a50bad78ea1cd::t_0a00210494554b 197
+docs/operations/aws-bootstrap.md
+  s_3a50bad78ea1cd::t_6945276a97e3af 72
+infra/lib/oshi-schedule-stack.ts
+  s_3a50bad78ea1cd::t_50ece03ecb5e2f 133-143
+docs/operations/production-release-checklist.md
+  s_3a50bad78ea1cd::t_50ece03ecb5e2f 47-55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "c69d9ac464b59f55feb2f7e84abcf585c8675881",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
