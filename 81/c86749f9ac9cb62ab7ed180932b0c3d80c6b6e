@@ -1,0 +1,58 @@
+apps/api/src/infrastructure/database/memory-store.ts
+  s_3a50bad78ea1cd::t_98e2222e5e1e44 720-722,728-730
+  s_3a50bad78ea1cd::t_76da3665f85254 723-727
+infra/test/oshi-schedule-stack.test.ts
+  s_3a50bad78ea1cd::t_e922517065cf8a 116,965
+apps/web/src/lib/legal-content.ts
+  s_3a50bad78ea1cd::t_3ad779e0181623 19,47-52,57-62,67,95,100
+docs/operations/backup-and-recovery.md
+  s_3a50bad78ea1cd::t_f7ba092c44bdd6 14,18,20,27-29
+  s_3a50bad78ea1cd::t_5470edc0703c0e 30
+docs/reviews/high-2-production-oauth-legal-audit.md
+  s_3a50bad78ea1cd::t_76da3665f85254 92-105
+  s_3a50bad78ea1cd::t_ef8360ff34cb6c 202,204,208,210,212,214,216,218
+  s_3a50bad78ea1cd::t_dbab99bd696254 123,125,149-150
+  s_3a50bad78ea1cd::t_5e4b7270ddbcf8 13,22
+infra/test/config.test.ts
+  s_3a50bad78ea1cd::t_76da3665f85254 163
+  s_3a50bad78ea1cd::t_0515f6e7122a6a 162
+  s_3a50bad78ea1cd::t_e922517065cf8a 157,161,164
+  s_3a50bad78ea1cd::t_e7ff1c536a2669 165-166
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_84d78f45913c78 219-220
+infra/lib/config.ts
+  s_3a50bad78ea1cd::t_e922517065cf8a 364-367,384-393
+apps/api/src/application/sync-service.test.ts
+  s_3a50bad78ea1cd::t_76da3665f85254 410-413,418-423
+  s_3a50bad78ea1cd::t_3f552669a2767c 416,430-435,438,450-455,471
+  s_3a50bad78ea1cd::t_7df86b33eaa9fe 403-409,414-415,417,424-429,436-437,439-449,456-470,472-473
+apps/api/src/application/models.ts
+  s_3a50bad78ea1cd::t_98e2222e5e1e44 279
+apps/api/src/infrastructure/database/prisma-store.ts
+  s_3a50bad78ea1cd::t_98e2222e5e1e44 972-976
+apps/web/src/lib/legal-content.test.ts
+  s_3a50bad78ea1cd::t_3fea4e5d04508c 42-44,46-58
+apps/api/src/application/sync-service.ts
+  s_3a50bad78ea1cd::t_98e2222e5e1e44 23,487-488
+  s_3a50bad78ea1cd::t_ef341e595285fa 489
+docs/operations/deployment.md
+  s_3a50bad78ea1cd::t_f7ba092c44bdd6 69
+docs/database/schema.md
+  s_3a50bad78ea1cd::t_f7ba092c44bdd6 28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "81c86749f9ac9cb62ab7ed180932b0c3d80c6b6e",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
