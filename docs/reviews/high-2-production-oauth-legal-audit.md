@@ -112,8 +112,8 @@ Google sign-inに必要なidentity scopeはCalendar scopeとは別で、producti
 
 - ~~Calendar scopeを共有定数化し、`calendar.app.created`へ縮小する。~~ 実装済み。
 - ~~実付与scopeを確認し、部分拒否と旧grant混入を検出し、未使用`providerAccessToken`と固定scope保存を整理する。~~ 実装済み。
-- Calendar権限を要求する直前に、専用Calendarの作成、event同期、暗号化refresh tokenによるbackground同期を簡潔に説明し、Privacyへリンクする。現在の「ログインすると同意したものとみなす」だけに依存しない。
-- 現在のGoogleログインボタンはMUIの単色Google iconをアプリのprimary色背景に置く独自実装である。Googleの承認済みassetまたは現行branding guidelineどおりの標準色G、背景、font、padding、文言へ変更し、visual regressionで固定する。
+- ~~Calendar権限を要求する直前に、専用Calendarの作成、event同期、暗号化refresh tokenによるbackground同期を簡潔に説明し、Privacyへリンクする。現在の「ログインすると同意したものとみなす」だけに依存しない。~~ 2026-08-30にログイン前と再連携前へ、専用カレンダーと配信予定の作成・更新・削除だけに使う旨、および既存カレンダーを読み取らない旨を表示した。
+- ~~現在のGoogleログインボタンはMUIの単色Google iconをアプリのprimary色背景に置く独自実装である。Googleの承認済みassetまたは現行branding guidelineどおりの標準色G、背景、font、padding、文言へ変更し、visual regressionで固定する。~~ 2026-08-30にGoogleの標準的な白背景・境界線・黒文字・Roboto系font・ローカライズ文言（`Google でログイン`）へ変更し、再連携ボタンにも同じブランドスタイルを適用した。
 - productionホームから「招待制プレビュー」などstaging限定表示を除き、アプリ機能とGoogle user dataを必要とする理由を正確に説明する。
 - Terms/Privacyを正式版へ差し替え、placeholder/demo文字列をproduction build testで拒否する。
 - policy version/effective dateを単一sourceから表示し、利用者判断で必要になった場合は同意versionを記録する。
@@ -156,8 +156,8 @@ Google Cloud / Supabase Dashboardの現在値はrepositoryから確認できな�
 
 - [x] Calendar用scopeが`calendar.app.created`へ統一され、Web request、API保存、test、文書に別値がない。
 - [x] 実付与scopeの不足・旧grant混入を検出でき、DBのscope記録が検証済みの意味を持つ。
-- [ ] Calendar permissionをin-contextで説明し、拒否時はCalendar機能を呼ばず安全に再案内する。
-- [ ] Googleログインボタンが現行branding guidelineに準拠する。
+- [x] Calendar permissionをin-contextで説明し、拒否時はCalendar機能を呼ばず安全に再案内する。
+- [x] Googleログインボタンが現行branding guidelineに準拠する。
 - [ ] productionホーム、Terms、Privacyからdemo、placeholder、staging限定表示が消え、認証なしで2xxになる。
 - [ ] production build/testが法務placeholder、広いCalendar scope、公開URL不整合をfail-fastする。
 

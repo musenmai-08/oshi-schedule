@@ -28,6 +28,12 @@ import { startGoogleOAuth } from '@/lib/google-oauth';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { APP_ROUTES } from '@/lib/routes';
 import { publicEnv } from '@/lib/env';
+import {
+  GOOGLE_CALENDAR_PERMISSION_NOTICE,
+  GOOGLE_CALENDAR_PERMISSION_TITLE,
+  GOOGLE_RECONNECT_LABEL,
+} from '@/lib/google-login-copy';
+import { GOOGLE_BRANDED_BUTTON_SX } from './google-brand';
 
 export function AccountSettings() {
   const [connection, setConnection] = useState<GoogleConnectionState>({ status: 'loading' });
@@ -133,13 +139,19 @@ export function AccountSettings() {
               </Typography>
               <Typography>{connectionView.calendarLabel}</Typography>
             </Box>
+            <Box>
+              <Typography variant="subtitle2">{GOOGLE_CALENDAR_PERMISSION_TITLE}</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.7 }}>
+                {GOOGLE_CALENDAR_PERMISSION_NOTICE}
+              </Typography>
+            </Box>
             <Button
               variant="outlined"
               startIcon={<GoogleIcon />}
               onClick={() => void reconnect()}
-              sx={{ alignSelf: 'flex-start' }}
+              sx={{ ...GOOGLE_BRANDED_BUTTON_SX, alignSelf: 'flex-start' }}
             >
-              Googleを再連携
+              {GOOGLE_RECONNECT_LABEL}
             </Button>
           </Stack>
         </CardContent>

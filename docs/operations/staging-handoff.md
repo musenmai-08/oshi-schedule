@@ -210,3 +210,5 @@ INITIAL/MANUAL SyncRunの最終状態を確認するときは`pnpm staging:inspe
 2026-08-30に限定scope（`calendar.app.created`）で行った直前の手動Syncをread-onlyで最終監査した。対応するWorker taskはexit code `0`で終了し、terminal summaryは`total=1 / success=1 / skipped=0 / deferred=0 / failed=0`だった。targeted manual runは、`syncSubscription`が`finishSyncRun(..., 'SUCCESS')`を完了してからSUCCESSをWorkerへ返すため、この結果をもって対象SyncRunの終端SUCCESSを確認した。対象時間帯のWorker/APIログにCalendar scope・permission、Calendar API、YouTube API、同期失敗のイベントはなく、sync queue、sync DLQ、Worker Scheduler DLQはすべて`0/0/0`、Pipeは`RUNNING`だった。決定的event ID・既存mapping/hash一致時skip・409時patchの同期契約と今回のエラーなしの結果から重複生成の兆候はない。Google Calendar実イベント一覧の独立照会はこのread-only監査の対象外である。
 
 同日、限定scope手動Syncの受入完了後に承認済み`pnpm staging:sleep`を実行した。APIは`0/0/0`、RDSは`STOPPED`、Worker Schedulerは`DISABLED`、sync queue・sync DLQ・Worker Scheduler DLQはすべて`0/0/0`となり、最終statusは`SLEEPING`である。追加のSync、Worker、OAuth、Calendar操作は行っていない。
+
+2026-08-30にHigh 2対応として、Google OAuth開始前（初回ログイン・再連携）に、`calendar.app.created`の用途を専用カレンダーと配信予定の作成・更新・削除に限定して説明するUIを追加した。既存カレンダーを読み取らないことも明示している。Googleボタンは白背景、標準境界線、黒文字、Roboto系font、ローカライズ済み`Google でログイン`文言のブランド準拠スタイルへ統一した。Terms/Privacy本文、AWS、Google/Supabase設定は変更していない。関連UIコピーtest、Web lint、typecheckは成功した。

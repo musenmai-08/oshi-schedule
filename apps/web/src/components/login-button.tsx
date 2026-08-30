@@ -5,6 +5,8 @@ import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { startGoogleOAuth } from '@/lib/google-oauth';
 import { publicEnv } from '@/lib/env';
 import { APP_ROUTES, DEMO_AUTH_COOKIE } from '@/lib/routes';
+import { GOOGLE_LOGIN_LABEL } from '@/lib/google-login-copy';
+import { GOOGLE_BRANDED_BUTTON_SX } from './google-brand';
 
 export function LoginButton() {
   const login = async () => {
@@ -18,12 +20,12 @@ export function LoginButton() {
   return (
     <Button
       onClick={login}
-      variant="contained"
+      variant="outlined"
       size="large"
       startIcon={<GoogleIcon />}
-      sx={{ px: 4, boxShadow: '0 10px 24px rgba(230,62,109,.25)' }}
+      sx={GOOGLE_BRANDED_BUTTON_SX}
     >
-      Googleでログイン
+      {GOOGLE_LOGIN_LABEL}
     </Button>
   );
 }

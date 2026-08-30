@@ -5,6 +5,10 @@ import { Box, Chip, Container, Link, Paper, Stack, Typography } from '@mui/mater
 import NextLink from 'next/link';
 import { LoginButton } from '@/components/login-button';
 import { APP_ROUTES } from '@/lib/routes';
+import {
+  GOOGLE_CALENDAR_PERMISSION_NOTICE,
+  GOOGLE_CALENDAR_PERMISSION_TITLE,
+} from '@/lib/google-login-copy';
 
 export default function LoginPage() {
   return (
@@ -55,9 +59,15 @@ export default function LoginPage() {
             >
               YouTubeのライブ配信とプレミア公開を自動で見つけて、あなた専用のGoogleカレンダーにまとめます。
             </Typography>
-            <Box>
+            <Stack spacing={1.25}>
               <LoginButton />
-            </Box>
+              <Box>
+                <Typography variant="subtitle2">{GOOGLE_CALENDAR_PERMISSION_TITLE}</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.7 }}>
+                  {GOOGLE_CALENDAR_PERMISSION_NOTICE}
+                </Typography>
+              </Box>
+            </Stack>
             <Typography variant="caption" color="text.secondary">
               ログインすると、利用規約とプライバシーポリシーに同意したものとみなされます。
             </Typography>
