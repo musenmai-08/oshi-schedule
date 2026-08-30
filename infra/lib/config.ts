@@ -361,7 +361,10 @@ export const loadConfig = (app: App): DeploymentConfig => {
     workerMemoryMiB: Number(app.node.tryGetContext('workerMemoryMiB') ?? 512),
     rdsInstanceType: optionalString(app, 'rdsInstanceType') ?? 't4g.micro',
     rdsAllocatedStorageGiB: Number(app.node.tryGetContext('rdsAllocatedStorageGiB') ?? 20),
-    rdsBackupRetentionDays: Number(app.node.tryGetContext('rdsBackupRetentionDays') ?? 1),
+    rdsBackupRetentionDays: Number(
+      app.node.tryGetContext('rdsBackupRetentionDays') ??
+        (environmentName === 'production' ? 7 : 1),
+    ),
     rdsMultiAz: parseBooleanContext('rdsMultiAz', app.node.tryGetContext('rdsMultiAz'), false),
     rdsDeletionProtection: parseBooleanContext(
       'rdsDeletionProtection',
@@ -377,6 +380,16 @@ export const loadConfig = (app: App): DeploymentConfig => {
 
   if (!Number.isFinite(config.monthlyBudgetUsd) || config.monthlyBudgetUsd <= 0) {
     throw new Error('monthlyBudgetUsd must be a positive number');
+  }
+  if (
+    !Number.isInteger(config.rdsBackupRetentionDays) ||
+    config.rdsBackupRetentionDays < 0 ||
+    config.rdsBackupRetentionDays > 35
+  ) {
+    throw new Error('rdsBackupRetentionDays must be an integer between 0 and 35');
+  }
+  if (environmentName === 'production' && config.rdsBackupRetentionDays !== 7) {
+    throw new Error('production requires rdsBackupRetentionDays=7');
   }
   if (environmentName === 'production' && config.amplifyConnectionPhase !== 'connected') {
     throw new Error('production requires amplifyConnectionPhase=connected');

@@ -12,7 +12,6 @@
     "workerMemoryMiB": 512,
     "rdsInstanceType": "t4g.micro",
     "rdsAllocatedStorageGiB": 20,
-    "rdsBackupRetentionDays": 1,
     "rdsMultiAz": false,
     "rdsDeletionProtection": true,
     "workerScheduleEnabled": false,

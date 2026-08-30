@@ -20,6 +20,7 @@ import type {
 
 const STALE_SYNC_RUN_MILLISECONDS = 24 * 60 * 60_000;
 const SYNC_RUN_RETENTION_MILLISECONDS = 90 * 24 * 60 * 60_000;
+const ACCOUNT_DELETION_TOMBSTONE_RETENTION_MILLISECONDS = 30 * 24 * 60 * 60_000;
 const TARGETED_RUN_STALE_MILLISECONDS = 30 * 60_000;
 
 const deterministicEventId = (userId: string, youtubeVideoId: string) =>
@@ -482,6 +483,9 @@ export class SyncService {
       new Date(now.getTime() - STALE_SYNC_RUN_MILLISECONDS),
       new Date(now.getTime() - SYNC_RUN_RETENTION_MILLISECONDS),
       now,
+    );
+    await this.store.purgeCompletedAccountDeletionRequests(
+      new Date(now.getTime() - ACCOUNT_DELETION_TOMBSTONE_RETENTION_MILLISECONDS),
     );
     const targets = await this.store.listActiveSubscriptions();
     const runId = await this.store.startSyncRun('SCHEDULED', null, targets.length, now);

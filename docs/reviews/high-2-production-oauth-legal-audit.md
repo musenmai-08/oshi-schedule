@@ -10,7 +10,7 @@
 
 Calendar scopeのコードは`https://www.googleapis.com/auth/calendar.app.created`へ統一した。incremental grantを無効化し、実refresh tokenのgrantを検証・保存して、旧Calendar scope混入や必須scope不足を再同意へ分類する。外部設定変更とdeployは未実施であり、既存grantの縮小とstagingでの全操作受入もまだ完了していない。
 
-規約・Privacyはrouteと公開URLを持つが、公開中のstagingページにもデモ警告と未確定文言が残る。production domain、運営者・問い合わせ先、保存期間、Limited Useを含む正式文面、Google Cloudのproduction project・branding・data access・verification状態も未確定である。
+規約・Privacyは正式文面、運営者・問い合わせ先、保存期間、Limited Use、日本国内向け・無料・準拠法/管轄を記載する。production domain、Google Cloudのproduction project・branding・data access・verification状態、委託先/越境と対象法令の専門家確認は未確定である。
 
 ## 確認した公開URL
 
@@ -19,7 +19,7 @@ Calendar scopeのコードは`https://www.googleapis.com/auth/calendar.app.creat
 - `https://staging.oshi-schedule.com/terms`
 - `https://staging.oshi-schedule.com/privacy`
 
-どちらにも「開発・動作確認用のデモ文面」が表示される。Termsには未定の問い合わせ先、Privacyには未定の問い合わせ先、保存期間、Limited Use準拠確認の予告が残る。
+現在のstagingページは正式文面を表示する。Termsには運営者・問い合わせ先・日本国内向け・無料・将来有料化時の事前表示・日本法/東京地方裁判所を、Privacyには保存期間とLimited Useを記載する。
 
 productionの実URLは未確定である。文書内の`https://app.example.com`はplaceholderであり、test fixtureの`app.oshi-schedule.com`もproduction決定値ではない。production domain決定後、同一origin上の次のURLを公開し、Google CloudのApp domainと一致させる。
 
@@ -89,20 +89,20 @@ Google sign-inに必要なidentity scopeはCalendar scopeとは別で、producti
 
 ### production公開前の不足
 
-| 不足             | 現状                                                                                          | 完了に必要な内容                                      |
-| ---------------- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| 文書の正式性     | 2026-08-30にデモwarningを除去し、制定日・最終更新日を表示                                     | 法律・運営上の最終承認とproduction公開URLでの表示確認 |
-| 運営主体         | 推しスケジュール運営者を記載                                                                  | 適用法令上必要な事業者表示の専門家確認                |
-| 問い合わせ       | `oshi.schedule@gmail.com`を記載                                                               | 継続監視体制の確認                                    |
-| 保存期間         | アクティブなアカウント期間、SyncRun通常90日、productionログ30日、削除墓石の自動削除なしを記載 | production backup保持期間、墓石の削除SLAを確定        |
-| Google user data | access / use / storage / sharingをデータ種別と目的ごとに記載                                  | production運用との最終照合                            |
-| Limited Use      | Google API Services User Data Policy（Limited Useを含む）への準拠と公式policy linkを記載      | Google審査要件との最終確認                            |
-| 委託・第三者     | Supabase、AWS、Google、YouTubeの役割と国外取扱いの可能性を記載                                | 各委託先・越境取扱いの法的確認                        |
-| 人による閲覧等   | support/security等に必要な場合だけの運営者アクセス、広告・販売・AI学習への不使用を記載        | 実運用access review                                   |
-| 利用者の権利     | 設定画面の削除申請とメールでの問い合わせを記載                                                | 適用法令上の処理期限・本人確認手順を確定              |
-| 削除の例外       | 外部削除失敗時の再開記録、墓石、backupの非即時削除を記載                                      | 墓石・backupの期限を確定                              |
-| 規約条件         | サービス内容、禁止事項、停止、免責、変更通知を記載                                            | 対象地域、料金、準拠法・管轄を利用者判断で確定        |
-| policy変更       | 掲載時効力と重要変更の周知を記載                                                              | 再同意が必要となる変更基準を確定                      |
+| 不足             | 現状                                                                                         | 完了に必要な内容                                      |
+| ---------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| 文書の正式性     | 2026-08-30にデモwarningを除去し、制定日・最終更新日を表示                                    | 法律・運営上の最終承認とproduction公開URLでの表示確認 |
+| 運営主体         | 推しスケジュール運営者を記載                                                                 | 適用法令上必要な事業者表示の専門家確認                |
+| 問い合わせ       | `oshi.schedule@gmail.com`を記載                                                              | 継続監視体制の確認                                    |
+| 保存期間         | アクティブなアカウント期間、SyncRun通常90日、productionログ30日、完了済み墓石30日purgeを記載 | production運用と削除実行記録の継続確認                |
+| Google user data | access / use / storage / sharingをデータ種別と目的ごとに記載                                 | production運用との最終照合                            |
+| Limited Use      | Google API Services User Data Policy（Limited Useを含む）への準拠と公式policy linkを記載     | Google審査要件との最終確認                            |
+| 委託・第三者     | Supabase、AWS、Google、YouTubeの役割と国外取扱いの可能性を記載                               | 各委託先・越境取扱いの法的確認                        |
+| 人による閲覧等   | support/security等に必要な場合だけの運営者アクセス、広告・販売・AI学習への不使用を記載       | 実運用access review                                   |
+| 利用者の権利     | 設定画面の削除申請とメールでの問い合わせを記載                                               | 適用法令上の処理期限・本人確認手順を確定              |
+| 削除の例外       | 外部削除失敗時の再開記録、完了済み墓石30日purge、backupの非即時削除を記載                    | 法令上の例外保持と運用記録の継続確認                  |
+| 規約条件         | サービス内容、禁止事項、停止、免責、変更通知、日本国内向け、無料、準拠法・管轄を記載         | 有料化前の料金表示・規約・法令対応                    |
+| policy変更       | 掲載時効力と重要変更の周知を記載                                                             | 再同意が必要となる変更基準を確定                      |
 
 法的適合性は対象地域、運営主体、事業形態で変わるため、この監査は法律意見の代替ではない。最終文面は事実関係を決定した上で専門家確認を受ける。
 
@@ -120,9 +120,9 @@ Google sign-inに必要なidentity scopeはCalendar scopeとは別で、producti
 
 ### ユーザー判断必要
 
-- productionの運営主体、公開domain、対象地域、対象年齢/利用資格、招待制か一般公開か、料金、準拠法・管轄を決める。
+- productionの公開domain、対象年齢/利用資格、招待制か一般公開かを決める。対象地域は日本国内、現時点は無料、準拠法は日本法、第一審管轄は東京地方裁判所と決定済みである。
 - support emailとPrivacy問い合わせ窓口、監視責任者を決める。
-- データ種別ごとの保存期間、backup/log/tombstoneの保持、削除SLA、人によるsupport access、委託先、越境移転、広告・販売・AI trainingの有無を決める。
+- 人によるsupport access、委託先、越境移転、広告・販売・AI trainingの実態と、法令上の例外保持の運用手順を継続確認する。production backup/PITRは7日、手動snapshotは原則30日以内、完了済み墓石は30日purge、SyncRunは90日、production logは30日と決定済みである。
 - Calendar権限をsign-inと同時に要求するか、Calendar接続時のin-context authorizationへ分離するかを決める。
 - production専用Google Cloud/Supabase project、app name、logo、公開homepage/Terms/Privacy URLを決める。
 - 正式なTerms/Privacyを専門家確認し、公開版を承認する。
@@ -146,8 +146,8 @@ Google Cloud / Supabase Dashboardの現在値はrepositoryから確認できな�
 
 ### A. 利用者判断と正式文面
 
-- [ ] production domain、運営主体、公開対象、support/contact、適用地域、料金、準拠法・管轄が決定済み。
-- [ ] retention matrixがtoken、アプリDB、log、backup、tombstoneを含み、削除SLAと例外を定義済み。
+- [ ] production domain、公開対象、対象年齢/利用資格が決定済み。運営主体、support/contact、日本国内向け、現時点無料、準拠法・管轄は決定済み。
+- [x] retention matrixがtoken、アプリDB、log、backup、tombstoneを含み、完了済み墓石30日purgeと法令上の例外保持を定義済み。
 - [ ] 委託先、第三者提供、越境、人による閲覧、広告・販売・AI trainingの実態が確認済み。
 - [ ] Terms/Privacyが実態と一致し、Limited Useを含むGoogle policyと対象法令について専門家確認済み。
 - [ ] 発効日、version、重要変更の通知/再同意方針が承認済み。
@@ -199,23 +199,23 @@ Google Cloud / Supabase Dashboardの現在値はrepositoryから確認できな�
 
 `/terms`と`/privacy`を正式文面へ更新した。運営者を「推しスケジュール運営者」、問い合わせ先を`oshi.schedule@gmail.com`、制定日・最終更新日を2026年8月30日として表示する。Privacyは、Google識別子・メールアドレス・暗号化refresh token・実grant・専用Calendar ID・登録channel・配信予定・同期結果・削除記録と、短期access tokenを永続保存しないことを実装と照合して記載した。
 
-実装済みの保持・削除は、アクティブなアカウント期間の利用者データ保持、通常workerによる完了SyncRunの90日後削除、production templateのログ30日保持、account削除でのCalendar削除試行・Google認可取り消し・アプリUser削除・Supabase Auth削除である。共有YouTube channel/broadcastは利用者との関連を外した後も残り得る。削除墓石は安全な再開のためSupabase subject、Calendar ID snapshot、状態・時刻・error codeを持つが、現行は自動削除期間がない。backupは通常データ削除と同時に消去されない。
+実装済みの保持・削除は、アクティブなアカウント期間の利用者データ保持、通常workerによる完了SyncRunの90日後削除、production templateのログ30日保持、account削除でのCalendar削除試行・Google認可取り消し・アプリUser削除・Supabase Auth削除である。共有YouTube channel/broadcastは利用者との関連を外した後も残り得る。完了済み削除墓石は完了から30日を超えた定期メンテナンスでpurgeし、未完了の墓石は再試行のため保持する。production RDSの自動backup/PITRは7日、手動snapshotは原則30日以内に削除する。backupは通常データ削除と同時に消去されない。
 
-このため、production backupの実保持期間、削除墓石の削除SLA、対象地域・料金・準拠法・管轄、適用法令上のアクセス請求処理、委託先/越境の法的確認および専門家承認は未解決のHigh 2 blockerとして残す。production URL、Google/Supabase外部設定、OAuth審査は変更していない。
+対象地域は日本国内、現時点は無料、準拠法は日本法、第一審管轄は東京地方裁判所と決定した。有料機能を追加する場合は、料金表示、規約および必要な法令対応を開始前に別途行う。production URL、Google/Supabase外部設定、OAuth審査、委託先/越境・対象法令の専門家確認は引き続きHigh 2 blockerである。
 
 ## 推奨する着手順
 
-scope最小化、限定scope受入、in-context説明、Google branding button、Terms/Privacyのアプリ実装は完了した。次は、**production backup・墓石保持の方針、対象地域等の利用者判断と専門家確認を完了し、その後にproduction URL、Google Cloud/Supabase外部設定・OAuth審査を進める。**
+scope最小化、限定scope受入、in-context説明、Google branding button、Terms/Privacy、production retention方針の実装は完了した。次は、**production URL、対象年齢・公開対象、委託先/越境および対象法令の専門家確認を完了し、その後にproduction Google Cloud/Supabase外部設定・OAuth審査を進める。**
 
-## 2026-08-30 Terms / Privacy技術事項の再確認
+## 2026-08-30 承認済みproduction保持・運営方針
+
+production IaCは`rdsBackupRetentionDays=7`以外をsynth前に拒否し、RDSの自動backup/PITRを7日保持する。`deleteAutomatedBackups=false`、deletion protection、暗号化、private subnetを維持する。手動snapshotは作成時に削除期限（30日以内）と担当者をdeploy recordへ記録し、期限超過には理由・承認者・見直し日を必要とする運用guardを追加した。
+
+アカウント削除では、Userと利用者専用のCredential、CalendarConnection、subscription、mappingを削除し、共有YouTube channel/broadcastは残る。SyncRunは`requestedBy`をNULLにして残り、完了から90日を超えた次回定期メンテナンスで削除される。完了済みAccountDeletionRequestは同じ定期メンテナンスで完了から30日を超えるとpurgeする。未完了・失敗状態の墓石は外部削除を安全に再試行できるまでpurgeしない。API/Worker/HTTP API/RDSログはproduction 30日、staging 14日をIaCで設定する。RDS backupは通常データ削除と同時に消えず、7日retention経過後に失効する。
+
+対象地域は日本国内、現時点は無料、将来有料機能を追加する場合は開始前に料金表示、規約と必要な法令対応を行う。準拠法は日本法、第一審管轄は東京地方裁判所である。法令上必要な情報は必要期間に限り例外保持する。
 
 ## 公式根拠
-
-CDKとPrismaの実装を再確認し、公開文面へ反映した。RDS自動backupは`rdsBackupRetentionDays`で設定され、未指定時は1日、`deleteAutomatedBackups=false`、production deletion protection、非公開サブネット、暗号化を使用する。運用文書にあるproduction 7日/PITRは目標値であり、現行IaCはproduction専用値やPITRを強制しない。手動snapshotの自動削除期限も未設定である。production構築前に最終値を決める必要がある。
-
-アカウント削除では、Userと利用者専用のCredential、CalendarConnection、subscription、mappingを削除し、共有YouTube channel/broadcastは残る。SyncRunは`requestedBy`をNULLにして残り、完了から90日を超えた次回定期メンテナンスで削除される。削除墓石（AccountDeletionRequest）は状態・時刻・error code・subject/calendar snapshotを保持し、自動purgeも完了SLAも実装されていない。API/Worker/HTTP API/RDSログはproduction 30日、staging 14日をIaCで設定する。RDS backupは通常データ削除と同時に消えず、設定retention経過後に失効するため、backup・log・SyncRun・墓石は同時削除ではない。
-
-この再確認で確定できなかったのは、production contextの最終backup日数/PITR、手動snapshotと墓石の保持・削除SLA、対象地域・料金・準拠法・管轄、法令上の請求処理期限、委託先/越境の法的確認および専門家承認である。
 
 - [Google Calendar API scopes](https://developers.google.com/workspace/calendar/api/auth)
 - [Google OAuth 2.0 policies](https://developers.google.com/identity/protocols/oauth2/policies)

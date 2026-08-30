@@ -717,6 +717,17 @@ export class MemoryStore implements Store {
       if (expiredIds.has(this.syncTargets[index]!.runId)) this.syncTargets.splice(index, 1);
     }
   }
+  async purgeCompletedAccountDeletionRequests(retainAfter: Date) {
+    for (let index = this.deletions.length - 1; index >= 0; index -= 1) {
+      const deletion = this.deletions[index]!;
+      if (
+        deletion.status === 'COMPLETED' &&
+        deletion.completedAt &&
+        deletion.completedAt < retainAfter
+      )
+        this.deletions.splice(index, 1);
+    }
+  }
   async deleteUserData(requestId: string, userId: string, at: Date, lease: LeaseOwnership) {
     if (!this.ownsLease(lease, at)) return false;
     this.users = this.users.filter((item) => item.id !== userId);

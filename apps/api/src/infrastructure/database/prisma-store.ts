@@ -969,6 +969,11 @@ export class PrismaStore implements Store {
       });
     });
   }
+  async purgeCompletedAccountDeletionRequests(retainAfter: Date) {
+    await this.prisma.accountDeletionRequest.deleteMany({
+      where: { status: 'COMPLETED', completedAt: { lt: retainAfter } },
+    });
+  }
   async deleteUserData(requestId: string, userId: string, at: Date, lease: LeaseOwnership) {
     return this.prisma.$transaction(async (transaction) => {
       const valid = await transaction.$queryRaw<Array<{ valid: number }>>`

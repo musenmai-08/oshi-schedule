@@ -400,6 +400,77 @@ describe('SyncService', () => {
     expect(store.syncRuns.some((run) => run.id === expiredRun)).toBe(false);
   });
 
+  it('purges only completed account-deletion tombstones after thirty days', async () => {
+    const store = new MemoryStore();
+    const oldUser = await store.ensureUser({ subject: 'old-deletion', email: 'old@example.com' });
+    const recentUser = await store.ensureUser({
+      subject: 'recent-deletion',
+      email: 'recent@example.com',
+    });
+    const failedUser = await store.ensureUser({
+      subject: 'failed-deletion',
+      email: 'failed@example.com',
+    });
+    const oldDeletion = await store.beginAccountDeletion(oldUser);
+    const recentDeletion = await store.beginAccountDeletion(recentUser);
+    const failedDeletion = await store.beginAccountDeletion(failedUser);
+    const now = new Date('2026-07-20T10:00:00Z');
+    const oldLease = await store.acquireSyncLease(
+      'deletion:old',
+      'old-owner',
+      now,
+      60 * 24 * 60 * 60_000,
+    );
+    const recentLease = await store.acquireSyncLease(
+      'deletion:recent',
+      'recent-owner',
+      now,
+      60 * 24 * 60 * 60_000,
+    );
+    const failedLease = await store.acquireSyncLease(
+      'deletion:failed',
+      'failed-owner',
+      now,
+      60 * 24 * 60 * 60_000,
+    );
+    expect(oldLease).not.toBeNull();
+    expect(recentLease).not.toBeNull();
+    expect(failedLease).not.toBeNull();
+    await store.markAccountDeletionStep(
+      oldDeletion.id,
+      'COMPLETED',
+      new Date('2026-06-01T00:00:00Z'),
+      oldLease!,
+    );
+    await store.markAccountDeletionStep(
+      recentDeletion.id,
+      'COMPLETED',
+      new Date('2026-07-01T00:00:00Z'),
+      recentLease!,
+    );
+    await store.markAccountDeletionFailed(
+      failedDeletion.id,
+      'GOOGLE_DELETE_RETRY',
+      new Date('2026-06-01T00:00:00Z'),
+      failedLease!,
+    );
+    const service = new SyncService(
+      store,
+      new MutableYouTube(),
+      new FakeCalendarGateway(),
+      { now: () => now },
+      logger,
+    );
+
+    await service.runScheduled();
+
+    expect(await store.findAccountDeletion('old-deletion')).toBeNull();
+    expect(await store.findAccountDeletion('recent-deletion')).toMatchObject({
+      status: 'COMPLETED',
+    });
+    expect(await store.findAccountDeletion('failed-deletion')).toMatchObject({ status: 'FAILED' });
+  });
+
   it('recovers a queued targeted run when the next worker starts', async () => {
     const store = new MemoryStore();
     const { user, subscription } = await setup(store);

@@ -276,6 +276,7 @@ export interface Store {
     errorCode?: string,
   ): Promise<void>;
   maintainSyncRuns(staleBefore: Date, retainAfter: Date, at: Date): Promise<void>;
+  purgeCompletedAccountDeletionRequests(retainAfter: Date): Promise<void>;
   deleteUserData(
     requestId: string,
     userId: string,

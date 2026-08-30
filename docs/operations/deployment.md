@@ -66,7 +66,7 @@ flowchart LR
 
 1. `workflow_dispatch`でstaging稼働中の`sha256` digestを指定し、workflowがstaging ECS serviceの実task definitionと一致することを確認する。
 2. GitHub `production` Environmentのmanual approvalを得る。
-3. RDSのon-demand pre-deploy snapshotを作成し、availableを確認する。
+3. RDSのon-demand pre-deploy snapshotを作成し、availableを確認する。snapshot ID、担当者、作成日から30日以内の削除期限をdeploy recordへ記録する。例外保持は理由・承認者・見直し日を同じrecordへ残す。
 4. production migration taskを1つだけ実行し、exit 0を確認する。
 5. 同じmanifestをproduction ECRへ昇格し、API、worker task definition、Webの順にstagingで検証済みdigestへ更新する。
 6. smoke testとalarm状態を確認し、deploy recordにcommit、image digest、migration、承認者を残す。

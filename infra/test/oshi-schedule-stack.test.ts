@@ -113,7 +113,7 @@ const configFor = (environmentName: EnvironmentName): DeploymentConfig => ({
   workerMemoryMiB: 512,
   rdsInstanceType: 't4g.micro',
   rdsAllocatedStorageGiB: 20,
-  rdsBackupRetentionDays: 1,
+  rdsBackupRetentionDays: environmentName === 'production' ? 7 : 1,
   rdsMultiAz: false,
   rdsDeletionProtection: true,
   workerScheduleEnabled: false,
@@ -962,7 +962,7 @@ describe('OshiScheduleStack', () => {
     render('production').hasResource('AWS::RDS::DBInstance', {
       DeletionPolicy: 'Retain',
       UpdateReplacePolicy: 'Retain',
-      Properties: Match.objectLike({ DeletionProtection: true }),
+      Properties: Match.objectLike({ DeletionProtection: true, BackupRetentionPeriod: 7 }),
     });
   });
 

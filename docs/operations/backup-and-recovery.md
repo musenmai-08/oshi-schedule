@@ -11,18 +11,22 @@ RPO/RTOは小規模betaの暫定目標でありSLAではない。一般公開、
 
 ### IaCで確定している実設定
 
-上表のproduction「7日 retention + PITR」は運用上の目標であり、現行CDKが自動的に強制する値ではない。CDKは`rdsBackupRetentionDays` contextを受け取り、未指定時は1日、`deleteAutomatedBackups=false`、productionではdeletion protectionを有効にする。productionの最終context値、PITRの有効化、手動snapshotの保持期限は、production構築前に明示的に決定・検証する。手動snapshotの自動削除期限はCDKで設定していない。
+production CDKは`rdsBackupRetentionDays=7`を必須とし、RDSの自動backup/PITRを7日保持する。`deleteAutomatedBackups=false`、deletion protection、暗号化、private subnetを使用する。stagingの既定値は1日である。productionで7日以外のcontextを指定するとsynth前に失敗する。
 
 ## RDS保護
 
-- production RDSはencryption at rest、deletion protection、`rdsBackupRetentionDays`で指定した自動backup、`deleteAutomatedBackups=false`を使用する。7日/PITRはproduction contextとAWS設定で明示確認するまで目標値であり、CDK既定値ではない。backup windowとworker実行時間をずらす。
+- production RDSはencryption at rest、deletion protection、7日間の自動backup/PITR、`deleteAutomatedBackups=false`を使用する。backup windowとworker実行時間をずらす。
 - stagingはCDK既定でdeletion protectionを有効にし、自動backup 1日を維持する。初期構築時に一時的に解除する場合もcontext reviewを必須にし、通常は長期snapshotを持たない。破壊的test/migration前だけsnapshotを取得し、30日以内に削除する。
-- productionのschema migration前にsnapshotを取り、migration ID、image digest、取得時刻をdeploy recordへ残す。
+- productionのschema migration前にsnapshotを取り、migration ID、image digest、取得時刻、snapshot ID、削除期限（取得から30日以内）をdeploy recordへ残す。
 - automated backup/snapshotの削除、retention短縮、deletion protection解除はmanual approval対象とする。
 - 四半期ごとにproduction backupから隔離した新RDSへrestore rehearsalを行う。元RDSを上書きしない。
 - CDK stackを削除してもRDS snapshot、RDS managed secret、ECR imageがretain/snapshot policyにより残る。stack削除をdata完全削除とみなさず、残存resourceと費用を手動確認する。
 
 production stackは常にRDS`Retain`とdeletion protectionを使う。`cdk destroy`は日常の停止手段ではなく、productionでは別reviewとbackup復元確認なしに実行しない。
+
+### 手動snapshotの30日運用guard
+
+productionで手動snapshotを作成する承認には、削除期限（作成日から30日以内）と担当者を含める。deploy recordへsnapshot IDと削除期限を記録し、期限前の運用確認でsnapshot一覧とrecordを照合する。復旧・法令対応などで30日を超える保持が必要な場合は、理由、承認者、次回見直し日をrecordへ追記する。期限を過ぎたsnapshotは、承認された削除手順で削除する。CDKは手動snapshotの自動削除を行わない。
 
 ## production復元手順
 

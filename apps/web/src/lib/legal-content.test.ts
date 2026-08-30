@@ -39,10 +39,22 @@ describe('formal legal content', () => {
   it('documents the implemented retention and deletion behavior without inventing a backup period', () => {
     const privacy = contentOf(privacySections);
     expect(privacy).toContain('90日');
-    expect(privacy).toContain('自動削除期間または完了SLAがなく');
-    expect(privacy).toContain('未指定時既定値は1日');
-    expect(privacy).toContain('deleteAutomatedBackups=false');
-    expect(privacy).toContain('手動snapshotの自動削除期限はIaCで定めていません');
+    expect(privacy).toContain('完了から30日');
+    expect(privacy).toContain('7日間保持');
+    expect(privacy).toContain('手動snapshotは原則30日以内に削除');
     expect(privacy).toContain('IaC上30日保持');
+    expect(privacy).toContain('法令上保持が必要な情報');
+  });
+
+  it('states the approved Japan-only, free-service, and jurisdiction terms', () => {
+    const terms = contentOf(termsSections);
+    const privacy = contentOf(privacySections);
+    expect(terms).toContain('日本国内の利用者向け');
+    expect(terms).toContain('現時点では無料');
+    expect(terms).toContain('将来有料機能を追加する場合があります');
+    expect(terms).toContain('料金、支払条件');
+    expect(terms).toContain('日本法');
+    expect(terms).toContain('東京地方裁判所');
+    expect(privacy).toContain('日本国内の利用者向け');
   });
 });

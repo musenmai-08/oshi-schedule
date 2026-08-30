@@ -154,7 +154,14 @@ describe('loadConfig', () => {
       syncPipeDesiredState: 'RUNNING',
       applicationActivated: true,
       amplifyConnectionPhase: 'connected',
+      rdsBackupRetentionDays: 7,
     });
+  });
+
+  it('requires a seven-day RDS backup retention period in production', () => {
+    expect(() =>
+      loadConfig(new App({ context: { ...productionDeployContext, rdsBackupRetentionDays: 1 } })),
+    ).toThrow(/production requires rdsBackupRetentionDays=7/);
   });
 
   it('supports an explicit environment budget override', () => {
