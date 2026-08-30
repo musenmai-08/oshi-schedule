@@ -91,6 +91,7 @@ productionの値はstagingからコピーしない。production用Supabase proje
 ## production deploy前の完了条件
 
 - [ ] production CDK synth/diffでWeb=`oshi-schedule.com`、API=`api.oshi-schedule.com`、Amplify root-domain Prefix空、`WEB_ORIGIN`、`NEXT_PUBLIC_API_URL`が一致する。
+- [ ] mainの最新commitでGitHub Actions `validate`と`e2e`がともにgreenであり、workflow logで失敗がない。
 - [ ] production専用Secret/SSM/Google/Supabase値が揃い、staging由来値・localhost・placeholderがない。
 - [ ] Google ConsoleとSupabaseのURL matrixが上表どおりで、production redirect allowlistは完全一致である。
 - [ ] Google consent screen、scope justification、demo video、必要なverificationが承認済みである。
