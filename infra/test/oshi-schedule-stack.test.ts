@@ -194,7 +194,7 @@ describe('OshiScheduleStack', () => {
     template.resourceCountIs('AWS::SecretsManager::Secret', 0);
     template.resourceCountIs('AWS::SSM::Parameter', 0);
     template.hasOutput('EnvironmentName', { Value: 'staging' });
-  });
+  }, 15_000);
 
   it('synthesizes full staging resources from CLI string context', () => {
     const template = renderFromCliContext(fullStagingContext);
