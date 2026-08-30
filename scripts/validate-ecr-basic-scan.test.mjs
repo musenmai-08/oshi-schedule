@@ -18,8 +18,8 @@ test('accepts a complete ECR scan with only production-approved findings', async
     await writeFile(
       fixture,
       JSON.stringify({
+        imageScanStatus: { status: 'COMPLETE' },
         imageScanFindings: {
-          imageScanStatus: { status: 'COMPLETE' },
           findings: [{ name: 'CVE-2026-13221', severity: 'HIGH', attributes: [] }],
         },
       }),
@@ -38,8 +38,8 @@ test('rejects an unapproved critical finding without exposing its description', 
     await writeFile(
       fixture,
       JSON.stringify({
+        imageScanStatus: { status: 'COMPLETE' },
         imageScanFindings: {
-          imageScanStatus: { status: 'COMPLETE' },
           findings: [
             {
               name: 'CVE-2099-99999',

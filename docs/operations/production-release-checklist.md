@@ -50,7 +50,7 @@ production ECR repositoryはCDKの`bootstrapOnly=true` phaseが唯一の所有�
 
 1. production専用の非秘密contextと`confirmProduction=DEPLOY_PRODUCTION`を使い、`bootstrapOnly=true`のCDK diffが`AWS::ECR::Repository` CREATE 1件だけであることを確認する。
 2. このbootstrap deployを別途承認後に実施し、CloudFormationが`UPDATE_COMPLETE`、ECR repositoryがCDK管理で存在することだけを確認する。
-3. production policyを通過したimageをimmutable digestでpushする。staging限定CVE例外を含むimageはpromotion・push対象にしない。
+3. production policyを通過したimageをimmutable digestでpushする。staging限定CVE例外を含むimageはpromotion・push対象にしない。HEAD `951cc81`由来の検証済みcandidateは`sha256:99206b651bbcebd146c16894fb4f9f24036ec238b71959f10278d30dcd775daa`としてECR Basic Scan（Critical 0 / High 0）まで確認済みである。
 4. CIとpromotion workflowのTrivy gateは`cache: 'false'`でfresh vulnerability DBを使い、production `.trivyignore`だけを適用してHIGH/CRITICALを0件にする。push後はECR Basic Scanも`COMPLETE`まで待ち、同じproduction policyで未承認Critical/Highが0件であることを確認する。
 5. そのdigestとfull production contextでCDK diffを確認し、full production deployは別途承認する。
 

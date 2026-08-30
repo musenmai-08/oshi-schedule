@@ -23,7 +23,11 @@ const readFindings = async () => {
     if (!fixture || process.argv.length !== fixtureIndex + 2) {
       throw new Error('Usage: validate-ecr-basic-scan.mjs [--findings fixture.json]');
     }
-    return JSON.parse(await readFile(fixture, 'utf8')).imageScanFindings;
+    const response = JSON.parse(await readFile(fixture, 'utf8'));
+    return {
+      imageScanStatus: response.imageScanStatus,
+      findings: response.imageScanFindings?.findings ?? [],
+    };
   }
 
   const repository = process.env.STAGING_ECR_REPOSITORY;
@@ -34,7 +38,7 @@ const readFindings = async () => {
   }
 
   const findings = [];
-  let scan;
+  let imageScanStatus;
   let nextToken;
   do {
     const args = [
@@ -52,11 +56,11 @@ const readFindings = async () => {
     if (nextToken) args.push('--next-token', nextToken);
     const { stdout } = await execFile('aws', args);
     const response = JSON.parse(stdout);
-    scan ??= response.imageScanFindings;
+    imageScanStatus ??= response.imageScanStatus;
     findings.push(...(response.imageScanFindings?.findings ?? []));
     nextToken = response.nextToken;
   } while (nextToken);
-  return { ...scan, findings };
+  return { imageScanStatus, findings };
 };
 
 try {
