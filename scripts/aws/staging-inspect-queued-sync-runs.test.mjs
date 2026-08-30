@@ -5,6 +5,7 @@ import {
   parseInspectionArguments,
   parseInspectionLogMessages,
   parseStateInspectionLogMessages,
+  runInspectionTask,
 } from './staging-inspect-queued-sync-runs.mjs';
 
 test('inspection command requires an explicit execute opt-in', () => {
@@ -30,6 +31,50 @@ test('state inspection override is fixed to its read-only Worker entry point', (
   assert.deepEqual(JSON.parse(buildInspectionOverride('states')), {
     containerOverrides: [
       { name: 'worker', command: ['node', 'worker/dist/inspect-sync-run-states.js'] },
+    ],
+  });
+});
+
+test('execute passes state mode through to the ECS override', async () => {
+  const calls = [];
+  const aws = {
+    json: async (args) => {
+      calls.push(args);
+      return { tasks: [{ taskArn: 'arn:aws:ecs:region:account:task/cluster/task-id' }] };
+    },
+  };
+  await runInspectionTask(
+    aws,
+    {
+      cluster: 'cluster',
+      workerTaskDefinition: 'worker:1',
+      network: { Subnets: ['subnet'], SecurityGroups: ['sg'], AssignPublicIp: 'ENABLED' },
+    },
+    'states',
+  );
+  assert.deepEqual(JSON.parse(calls[0][calls[0].indexOf('--overrides') + 1]), {
+    containerOverrides: [
+      { name: 'worker', command: ['node', 'worker/dist/inspect-sync-run-states.js'] },
+    ],
+  });
+});
+
+test('execute keeps the queued inspector override by default', async () => {
+  const calls = [];
+  const aws = {
+    json: async (args) => {
+      calls.push(args);
+      return { tasks: [{ taskArn: 'arn:aws:ecs:region:account:task/cluster/task-id' }] };
+    },
+  };
+  await runInspectionTask(aws, {
+    cluster: 'cluster',
+    workerTaskDefinition: 'worker:1',
+    network: { Subnets: ['subnet'], SecurityGroups: ['sg'], AssignPublicIp: 'ENABLED' },
+  });
+  assert.deepEqual(JSON.parse(calls[0][calls[0].indexOf('--overrides') + 1]), {
+    containerOverrides: [
+      { name: 'worker', command: ['node', 'worker/dist/inspect-queued-sync-runs.js'] },
     ],
   });
 });

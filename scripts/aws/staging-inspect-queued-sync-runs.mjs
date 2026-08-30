@@ -213,7 +213,7 @@ export const getInspectionPlan = async (aws) => {
 
 const taskIdFromArn = (taskArn) => taskArn.split('/').at(-1);
 
-const runInspectionTask = async (aws, plan) => {
+export const runInspectionTask = async (aws, plan, mode = 'queued') => {
   const networkConfiguration = {
     awsvpcConfiguration: {
       subnets: plan.network.Subnets,
@@ -239,7 +239,7 @@ const runInspectionTask = async (aws, plan) => {
     '--network-configuration',
     JSON.stringify(networkConfiguration),
     '--overrides',
-    buildInspectionOverride(),
+    buildInspectionOverride(mode),
   ]);
   const taskArn = result.tasks?.[0]?.taskArn;
   if (!taskArn || result.failures?.length) throw new Error('Inspection task could not be started');
@@ -299,7 +299,7 @@ export const inspectQueuedSyncRuns = async (aws, { execute, mode = 'queued' }) =
       workerTaskDefinition: plan.workerTaskDefinition,
     };
   }
-  const taskArn = await runInspectionTask(aws, plan);
+  const taskArn = await runInspectionTask(aws, plan, mode);
   const task = await waitForStoppedTask(aws, plan.cluster, taskArn);
   return readInspectionResult(aws, plan, task, mode);
 };
