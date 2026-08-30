@@ -17,7 +17,7 @@
   "githubOwner": "musenmai-08",
   "githubRepository": "oshi-schedule",
   "amplifyConnectionPhase": "connected",
-  "imageTag": "sha256:d01f26c49a7c5fb02cfa84878d54346e31a7398c84650a81f2405f70e6eaf7b2",
+  "imageTag": "sha256:8eab040ceaf8b53b967ca07205198d54a3c6bcb503f5dc04f74a0b7ccca1da95",
   "apiCpu": 256,
   "apiMemoryMiB": 512,
   "workerCpu": 256,
