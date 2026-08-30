@@ -1,0 +1,23 @@
+scripts/aws/staging-inspect-queued-sync-runs.test.mjs
+  s_3a50bad78ea1cd::t_fdba1f56b5c10e 70-74,79
+  s_3a50bad78ea1cd::t_01e6571b2f4b1c 8,38-69,75-78,80
+  s_3a50bad78ea1cd::t_0f726d21c954bd 81
+scripts/aws/staging-inspect-queued-sync-runs.mjs
+  s_3a50bad78ea1cd::t_097c2f0d4d4feb 216,242,302
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "fd8cdb406f7e0ae39e2e298678c8a4cd00256cfc",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
