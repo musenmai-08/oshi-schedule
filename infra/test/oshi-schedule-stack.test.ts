@@ -89,7 +89,7 @@ const configFor = (environmentName: EnvironmentName): DeploymentConfig => ({
   applicationActivated: environmentName === 'production',
   hostedZoneName: 'oshi-schedule.com',
   webDomainName:
-    environmentName === 'production' ? 'app.oshi-schedule.com' : 'staging.oshi-schedule.com',
+    environmentName === 'production' ? 'oshi-schedule.com' : 'staging.oshi-schedule.com',
   apiDomainName:
     environmentName === 'production' ? 'api.oshi-schedule.com' : 'api-staging.oshi-schedule.com',
   nextPublicSupabaseUrl:
@@ -519,6 +519,16 @@ describe('OshiScheduleStack', () => {
     template.hasResourceProperties('AWS::SSM::Parameter', {
       Name: '/oshi-schedule-production/runtime/google-client-id',
       Value: '1234567890-prodabc123.apps.googleusercontent.com',
+    });
+    template.hasResourceProperties('AWS::Amplify::Domain', {
+      DomainName: 'oshi-schedule.com',
+      SubDomainSettings: [{ BranchName: 'main', Prefix: '' }],
+    });
+    template.hasResourceProperties('AWS::Amplify::App', {
+      EnvironmentVariables: Match.arrayWith([
+        { Name: 'WEB_ORIGIN', Value: 'https://oshi-schedule.com' },
+        { Name: 'NEXT_PUBLIC_API_URL', Value: 'https://api.oshi-schedule.com' },
+      ]),
     });
   });
 

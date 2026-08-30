@@ -112,7 +112,7 @@ describe('loadConfig', () => {
     apiDesiredCount: '1',
     syncPipeDesiredState: 'RUNNING',
     hostedZoneName: 'oshi-schedule.com',
-    webDomainName: 'app.oshi-schedule.com',
+    webDomainName: 'oshi-schedule.com',
     apiDomainName: 'api.oshi-schedule.com',
     certificateArn:
       'arn:aws:acm:ap-northeast-1:111111111111:certificate/11111111-1111-4111-8111-111111111111',
@@ -272,6 +272,8 @@ describe('loadConfig', () => {
     ['webDomainName', 'localhost'],
     ['webDomainName', 'app.example.com'],
     ['webDomainName', 'dev.oshi-schedule.com'],
+    ['webDomainName', 'app.oshi-schedule.com'],
+    ['apiDomainName', 'api2.oshi-schedule.com'],
     ['nextPublicSupabaseUrl', 'http://127.0.0.1:54321'],
     ['nextPublicSupabaseUrl', 'https://test.supabase.co'],
   ] as const)('rejects production development or placeholder %s=%s', (key, value) => {

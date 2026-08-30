@@ -1081,9 +1081,12 @@ export class OshiScheduleStack extends Stack {
         enablePullRequestPreview: false,
       });
       if (createAmplifyDomain && config.webDomainName && config.hostedZoneName) {
-        const prefixPart = config.webDomainName.endsWith(`.${config.hostedZoneName}`)
-          ? config.webDomainName.slice(0, -(config.hostedZoneName.length + 1))
-          : config.webDomainName;
+        const prefixPart =
+          config.webDomainName === config.hostedZoneName
+            ? ''
+            : config.webDomainName.endsWith(`.${config.hostedZoneName}`)
+              ? config.webDomainName.slice(0, -(config.hostedZoneName.length + 1))
+              : config.webDomainName;
         const amplifyDomain = new amplify.CfnDomain(this, 'AmplifyDomain', {
           appId: amplifyApp.attrAppId,
           domainName: config.hostedZoneName,

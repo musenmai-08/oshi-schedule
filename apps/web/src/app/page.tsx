@@ -34,7 +34,7 @@ export default function LoginPage() {
           <Stack spacing={3} flex={1}>
             <Chip
               icon={<AutoAwesomeIcon />}
-              label="招待制プレビュー"
+              label="YouTube配信予定をカレンダーへ"
               color="secondary"
               variant="outlined"
               sx={{ alignSelf: 'flex-start', bgcolor: '#fff' }}
@@ -69,7 +69,7 @@ export default function LoginPage() {
               </Box>
             </Stack>
             <Typography variant="caption" color="text.secondary">
-              ログインすると、利用規約とプライバシーポリシーに同意したものとみなされます。
+              13歳未満の方は利用できません。ログインすると、利用規約とプライバシーポリシーに同意したものとみなされます。
             </Typography>
           </Stack>
           <Paper

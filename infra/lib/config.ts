@@ -9,6 +9,9 @@ export type EnvironmentName = 'staging' | 'production';
 export type SyncPipeDesiredState = 'STOPPED' | 'RUNNING';
 export type AmplifyConnectionPhase = 'manual' | 'domain-detached' | 'detached' | 'connected';
 
+export const PRODUCTION_WEB_DOMAIN = 'oshi-schedule.com';
+export const PRODUCTION_API_DOMAIN = 'api.oshi-schedule.com';
+
 export const applicationSecretArnDefinitions = [
   {
     contextKey: 'supabaseServiceRoleSecretArn',
@@ -247,6 +250,10 @@ export const validateProductionIsolation = (
   }
   if (config.webDomainName && config.apiDomainName && config.webDomainName === config.apiDomainName)
     throw new Error('production webDomainName and apiDomainName must be different');
+  if (config.webDomainName && config.webDomainName !== PRODUCTION_WEB_DOMAIN)
+    throw new Error(`production webDomainName must be ${PRODUCTION_WEB_DOMAIN}`);
+  if (config.apiDomainName && config.apiDomainName !== PRODUCTION_API_DOMAIN)
+    throw new Error(`production apiDomainName must be ${PRODUCTION_API_DOMAIN}`);
 
   if (config.nextPublicSupabaseUrl)
     validateProductionHttpsOrigin('nextPublicSupabaseUrl', config.nextPublicSupabaseUrl);

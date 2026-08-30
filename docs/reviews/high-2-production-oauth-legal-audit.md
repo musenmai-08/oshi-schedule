@@ -21,11 +21,13 @@ Calendar scopeのコードは`https://www.googleapis.com/auth/calendar.app.creat
 
 現在のstagingページは正式文面を表示する。Termsには運営者・問い合わせ先・日本国内向け・無料・将来有料化時の事前表示・日本法/東京地方裁判所を、Privacyには保存期間とLimited Useを記載する。
 
-productionの実URLは未確定である。文書内の`https://app.example.com`はplaceholderであり、test fixtureの`app.oshi-schedule.com`もproduction決定値ではない。production domain決定後、同一origin上の次のURLを公開し、Google CloudのApp domainと一致させる。
+productionの公開URLは次に確定した。IaCとproduction deploy workflowはこのWeb/API URL以外を拒否する。Google CloudのApp domainとSupabase URL Configurationも同一値に合わせる。
 
-- `https://<production-web-origin>/`
-- `https://<production-web-origin>/terms`
-- `https://<production-web-origin>/privacy`
+- `https://oshi-schedule.com/`
+- `https://oshi-schedule.com/terms`
+- `https://oshi-schedule.com/privacy`
+- `https://oshi-schedule.com/auth/callback`
+- `https://api.oshi-schedule.com`
 
 ## 現在のOAuth scopeとgrant管理
 
@@ -114,17 +116,17 @@ Google sign-inに必要なidentity scopeはCalendar scopeとは別で、producti
 - ~~実付与scopeを確認し、部分拒否と旧grant混入を検出し、未使用`providerAccessToken`と固定scope保存を整理する。~~ 実装済み。
 - ~~Calendar権限を要求する直前に、専用Calendarの作成、event同期、暗号化refresh tokenによるbackground同期を簡潔に説明し、Privacyへリンクする。現在の「ログインすると同意したものとみなす」だけに依存しない。~~ 2026-08-30にログイン前と再連携前へ、専用カレンダーと配信予定の作成・更新・削除だけに使う旨、および既存カレンダーを読み取らない旨を表示した。
 - ~~現在のGoogleログインボタンはMUIの単色Google iconをアプリのprimary色背景に置く独自実装である。Googleの承認済みassetまたは現行branding guidelineどおりの標準色G、背景、font、padding、文言へ変更し、visual regressionで固定する。~~ 2026-08-30にGoogleの標準的な白背景・境界線・黒文字・Roboto系font・ローカライズ文言（`Google でログイン`）へ変更し、再連携ボタンにも同じブランドスタイルを適用した。
-- productionホームから「招待制プレビュー」などstaging限定表示を除き、アプリ機能とGoogle user dataを必要とする理由を正確に説明する。
+- ~~productionホームから「招待制プレビュー」などstaging限定表示を除き、アプリ機能とGoogle user dataを必要とする理由を正確に説明する。~~ 2026-08-30にstaging限定表示を、配信予定をCalendarへ同期する機能説明へ置き換えた。ログイン前のCalendar権限説明とTerms/Privacyへの導線は維持する。
 - ~~Terms/Privacyを正式版へ差し替え、placeholder/demo文字列をproduction build testで拒否する。~~ 2026-08-30に正式文面、運営者、問い合わせ先、制定日・最終更新日を単一sourceで表示する実装へ更新し、関連UI testでデモ・placeholder文言がないことを固定した。
 - ~~policy version/effective dateを単一sourceから表示し、利用者判断で必要になった場合は同意versionを記録する。~~ 発効日を単一sourceで表示する実装は完了。利用規約の同意version記録は、必要性の利用者判断後に別途実装する。
 
 ### ユーザー判断必要
 
-- productionの公開domain、対象年齢/利用資格、招待制か一般公開かを決める。対象地域は日本国内、現時点は無料、準拠法は日本法、第一審管轄は東京地方裁判所と決定済みである。
+- productionの公開対象、招待制か一般公開かを決める。公開domainは`oshi-schedule.com`、対象年齢は13歳以上、対象地域は日本国内、現時点は無料、準拠法は日本法、第一審管轄は東京地方裁判所と決定済みである。
 - support emailとPrivacy問い合わせ窓口、監視責任者を決める。
 - 人によるsupport access、委託先、越境移転、広告・販売・AI trainingの実態と、法令上の例外保持の運用手順を継続確認する。production backup/PITRは7日、手動snapshotは原則30日以内、完了済み墓石は30日purge、SyncRunは90日、production logは30日と決定済みである。
 - Calendar権限をsign-inと同時に要求するか、Calendar接続時のin-context authorizationへ分離するかを決める。
-- production専用Google Cloud/Supabase project、app name、logo、公開homepage/Terms/Privacy URLを決める。
+- production専用Google Cloud/Supabase project、app name、logoを決める。公開homepage/Terms/Privacy URLは`https://oshi-schedule.com/`、`/terms`、`/privacy`で確定している。
 - 正式なTerms/Privacyを専門家確認し、公開版を承認する。
 - Supabase production projectでGoogle provider client、Site URL、redirect allowlistをproduction専用値へ設定する工程を別途承認する。
 
@@ -146,7 +148,7 @@ Google Cloud / Supabase Dashboardの現在値はrepositoryから確認できな�
 
 ### A. 利用者判断と正式文面
 
-- [ ] production domain、公開対象、対象年齢/利用資格が決定済み。運営主体、support/contact、日本国内向け、現時点無料、準拠法・管轄は決定済み。
+- [ ] production domain、対象年齢/利用資格が決定済み。公開対象が決定済み。production domain=`oshi-schedule.com`、対象年齢=13歳以上、運営主体、support/contact、日本国内向け、現時点無料、準拠法・管轄は決定済み。
 - [x] retention matrixがtoken、アプリDB、log、backup、tombstoneを含み、完了済み墓石30日purgeと法令上の例外保持を定義済み。
 - [ ] 委託先、第三者提供、越境、人による閲覧、広告・販売・AI trainingの実態が確認済み。
 - [ ] Terms/Privacyが実態と一致し、Limited Useを含むGoogle policyと対象法令について専門家確認済み。
@@ -159,7 +161,7 @@ Google Cloud / Supabase Dashboardの現在値はrepositoryから確認できな�
 - [x] Calendar permissionをin-contextで説明し、拒否時はCalendar機能を呼ばず安全に再案内する。
 - [x] Googleログインボタンが現行branding guidelineに準拠する。
 - [x] `/terms`と`/privacy`からdemo warning、placeholder、未定の問い合わせ先を除去し、運営者、連絡先、発効日、Google user data取扱いを記載する。
-- [ ] productionホーム、Terms、Privacyからdemo、placeholder、staging限定表示が消え、認証なしで2xxになる。
+- [ ] productionホーム、Terms、Privacyが認証なしで2xxになり、demo、placeholder、staging限定表示がないことを公開URLで確認する。コード上のstaging限定表示は除去済み。
 - [ ] production build/testが法務placeholder、広いCalendar scope、公開URL不整合をfail-fastする。
 
 ### C. staging限定scope受入
@@ -214,6 +216,12 @@ production IaCは`rdsBackupRetentionDays=7`以外をsynth前に拒否し、RDS�
 アカウント削除では、Userと利用者専用のCredential、CalendarConnection、subscription、mappingを削除し、共有YouTube channel/broadcastは残る。SyncRunは`requestedBy`をNULLにして残り、完了から90日を超えた次回定期メンテナンスで削除される。完了済みAccountDeletionRequestは同じ定期メンテナンスで完了から30日を超えるとpurgeする。未完了・失敗状態の墓石は外部削除を安全に再試行できるまでpurgeしない。API/Worker/HTTP API/RDSログはproduction 30日、staging 14日をIaCで設定する。RDS backupは通常データ削除と同時に消えず、7日retention経過後に失効する。
 
 対象地域は日本国内、現時点は無料、将来有料機能を追加する場合は開始前に料金表示、規約と必要な法令対応を行う。準拠法は日本法、第一審管轄は東京地方裁判所である。法令上必要な情報は必要期間に限り例外保持する。
+
+## 2026-08-30 production公開設定設計
+
+production Webは`https://oshi-schedule.com`、APIは`https://api.oshi-schedule.com`で確定した。CDK validationはこのdomain pairだけを許可し、root Web domainのAmplify Domain Associationを`Prefix: ''`として生成する。CDKがAPI runtimeの`WEB_ORIGIN`とAmplifyの`NEXT_PUBLIC_API_URL`を同じpairから生成し、production deploy workflowもGitHub EnvironmentのURL変数が一致しなければ停止する。
+
+Google OAuthでは、browser origin=`https://oshi-schedule.com`、Supabase redirect=`https://oshi-schedule.com/auth/callback`、Google provider redirect URI=production Supabase projectが表示する`https://<project-ref>.supabase.co/auth/v1/callback`を厳密に区別する。Google Cloud、Supabase、OAuth verificationの具体的な順序、scope justification、demo video、最終受入は[production公開チェックリスト](../operations/production-release-checklist.md)へ固定した。13歳未満利用不可をTermsとlogin画面へ追加した。
 
 ## 公式根拠
 

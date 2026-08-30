@@ -55,6 +55,7 @@ describe('formal legal content', () => {
     expect(terms).toContain('料金、支払条件');
     expect(terms).toContain('日本法');
     expect(terms).toContain('東京地方裁判所');
+    expect(terms).toContain('13歳未満の方は利用できません');
     expect(privacy).toContain('日本国内の利用者向け');
   });
 });
