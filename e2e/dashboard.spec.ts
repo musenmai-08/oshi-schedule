@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 async function login(page: Page) {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Googleでログイン' }).click();
+  await page.getByRole('button', { name: 'Google でログイン' }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByText('最初の推しを登録しましょう')).toBeVisible();
 }
@@ -108,7 +108,7 @@ test('チャンネル登録上限をモーダル内で表示する', async ({ pa
 test('認証済みルート遷移とログアウト後のルート保護', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: /推しの予定を/ })).toBeVisible();
-  await page.getByRole('button', { name: 'Googleでログイン' }).click();
+  await page.getByRole('button', { name: 'Google でログイン' }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
 
   await page.goto('/');
@@ -116,7 +116,7 @@ test('認証済みルート遷移とログアウト後のルート保護', async
   const logout = page.getByRole('button', { name: 'ログアウト' });
   await logout.click();
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole('button', { name: 'Googleでログイン' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Google でログイン' })).toBeVisible();
 
   await page.goBack();
   await expect(page).toHaveURL(/\/$/);
@@ -206,7 +206,7 @@ test('Settingsの読み込み中・失敗・正常な接続状態を区別する
     await route.fulfill({ status: 503, contentType: 'application/json', body: '{}' });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Googleでログイン' }).click();
+  await page.getByRole('button', { name: 'Google でログイン' }).click();
   await page.goto('/settings');
   await expect(page.getByText('確認中', { exact: true })).toBeVisible();
   await expect(page.getByText('接続済み', { exact: true })).not.toBeVisible();
