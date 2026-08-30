@@ -1,0 +1,31 @@
+.github/workflows/ci.yml
+  s_3a50bad78ea1cd::t_1f0244925f5594 102
+.github/workflows/deploy-production.yml
+  s_3a50bad78ea1cd::t_1f0244925f5594 119
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_9f9f1d4aebecea 246
+  s_3a50bad78ea1cd::t_992911a55472bb 243-245
+Dockerfile
+  s_3a50bad78ea1cd::t_9f9f1d4aebecea 3,39
+  s_3a50bad78ea1cd::t_f82b5d322edd95 9,45
+scripts/validate-trivy-policy.mjs
+  s_3a50bad78ea1cd::t_1f0244925f5594 88-90
+docs/operations/production-release-checklist.md
+  s_3a50bad78ea1cd::t_992911a55472bb 54-55,105
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "b3ff1f64cbdd226c6d2663a252bdd3347e510251",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
