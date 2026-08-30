@@ -212,3 +212,5 @@ INITIAL/MANUAL SyncRunの最終状態を確認するときは`pnpm staging:inspe
 同日、限定scope手動Syncの受入完了後に承認済み`pnpm staging:sleep`を実行した。APIは`0/0/0`、RDSは`STOPPED`、Worker Schedulerは`DISABLED`、sync queue・sync DLQ・Worker Scheduler DLQはすべて`0/0/0`となり、最終statusは`SLEEPING`である。追加のSync、Worker、OAuth、Calendar操作は行っていない。
 
 2026-08-30にHigh 2対応として、Google OAuth開始前（初回ログイン・再連携）に、`calendar.app.created`の用途を専用カレンダーと配信予定の作成・更新・削除に限定して説明するUIを追加した。既存カレンダーを読み取らないことも明示している。Googleボタンは白背景、標準境界線、黒文字、Roboto系font、ローカライズ済み`Google でログイン`文言のブランド準拠スタイルへ統一した。Terms/Privacy本文、AWS、Google/Supabase設定は変更していない。関連UIコピーtest、Web lint、typecheckは成功した。
+
+2026-08-30にHigh 2のTerms/Privacyを正式化した。`/terms`と`/privacy`からデモwarning・未定の問い合わせ先を除き、運営者「推しスケジュール運営者」、問い合わせ先`oshi.schedule@gmail.com`、制定日・最終更新日を表示した。Google user dataの取得・利用・暗号化保存・委託先・国外取扱いの可能性・人によるアクセス・Limited Use、広告/販売/AI学習への不使用、削除手続、実装済みのSyncRun通常90日・productionログ30日保持を実装と照合して記載した。production backupの実保持期間と削除墓石の削除SLA、対象地域・料金・準拠法・管轄、専門家確認は未解決のHigh 2 blockerとして残る。AWS、Google/Supabase外部設定、OAuth審査は変更していない。関連UI test、Web lint、typecheckは成功した。

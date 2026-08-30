@@ -1,16 +1,25 @@
 import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
 import FavoriteRoundedIcon from '@mui/icons-material/FavoriteRounded';
-import { Alert, Box, Button, Container, Paper, Stack, Typography } from '@mui/material';
+import { Box, Button, Container, Link as MuiLink, Paper, Stack, Typography } from '@mui/material';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { APP_ROUTES } from '@/lib/routes';
 
-interface LegalSection {
+export interface LegalSection {
   title: string;
   content: ReactNode;
+  link?: { label: string; href: string };
 }
 
-export function LegalDocument({ title, sections }: { title: string; sections: LegalSection[] }) {
+export function LegalDocument({
+  title,
+  effectiveDate,
+  sections,
+}: {
+  title: string;
+  effectiveDate: string;
+  sections: LegalSection[];
+}) {
   return (
     <Box component="main" minHeight="100vh" sx={{ py: { xs: 3, md: 7 } }}>
       <Container maxWidth="md">
@@ -34,12 +43,9 @@ export function LegalDocument({ title, sections }: { title: string; sections: Le
                   {title}
                 </Typography>
                 <Typography color="text.secondary" mt={1}>
-                  最終更新日：2026年8月2日
+                  制定日・最終更新日：{effectiveDate}
                 </Typography>
               </Box>
-              <Alert severity="warning">
-                これは開発・動作確認用のデモ文面です。一般公開前に専門家による確認が必要です。
-              </Alert>
               {sections.map((section) => (
                 <Box component="section" key={section.title}>
                   <Typography component="h2" variant="h5" gutterBottom>
@@ -48,6 +54,11 @@ export function LegalDocument({ title, sections }: { title: string; sections: Le
                   <Typography component="div" color="text.secondary" sx={{ lineHeight: 1.9 }}>
                     {section.content}
                   </Typography>
+                  {section.link && (
+                    <MuiLink href={section.link.href} target="_blank" rel="noreferrer">
+                      {section.link.label}
+                    </MuiLink>
+                  )}
                 </Box>
               ))}
             </Stack>
