@@ -207,7 +207,15 @@ Google Cloud / Supabase Dashboardの現在値はrepositoryから確認できな�
 
 scope最小化、限定scope受入、in-context説明、Google branding button、Terms/Privacyのアプリ実装は完了した。次は、**production backup・墓石保持の方針、対象地域等の利用者判断と専門家確認を完了し、その後にproduction URL、Google Cloud/Supabase外部設定・OAuth審査を進める。**
 
+## 2026-08-30 Terms / Privacy技術事項の再確認
+
 ## 公式根拠
+
+CDKとPrismaの実装を再確認し、公開文面へ反映した。RDS自動backupは`rdsBackupRetentionDays`で設定され、未指定時は1日、`deleteAutomatedBackups=false`、production deletion protection、非公開サブネット、暗号化を使用する。運用文書にあるproduction 7日/PITRは目標値であり、現行IaCはproduction専用値やPITRを強制しない。手動snapshotの自動削除期限も未設定である。production構築前に最終値を決める必要がある。
+
+アカウント削除では、Userと利用者専用のCredential、CalendarConnection、subscription、mappingを削除し、共有YouTube channel/broadcastは残る。SyncRunは`requestedBy`をNULLにして残り、完了から90日を超えた次回定期メンテナンスで削除される。削除墓石（AccountDeletionRequest）は状態・時刻・error code・subject/calendar snapshotを保持し、自動purgeも完了SLAも実装されていない。API/Worker/HTTP API/RDSログはproduction 30日、staging 14日をIaCで設定する。RDS backupは通常データ削除と同時に消えず、設定retention経過後に失効するため、backup・log・SyncRun・墓石は同時削除ではない。
+
+この再確認で確定できなかったのは、production contextの最終backup日数/PITR、手動snapshotと墓石の保持・削除SLA、対象地域・料金・準拠法・管轄、法令上の請求処理期限、委託先/越境の法的確認および専門家承認である。
 
 - [Google Calendar API scopes](https://developers.google.com/workspace/calendar/api/auth)
 - [Google OAuth 2.0 policies](https://developers.google.com/identity/protocols/oauth2/policies)

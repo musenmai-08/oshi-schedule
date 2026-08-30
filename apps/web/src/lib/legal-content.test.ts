@@ -39,7 +39,10 @@ describe('formal legal content', () => {
   it('documents the implemented retention and deletion behavior without inventing a backup period', () => {
     const privacy = contentOf(privacySections);
     expect(privacy).toContain('90日');
-    expect(privacy).toContain('自動削除期間がありません');
-    expect(privacy).toContain('バックアップの保持期間');
+    expect(privacy).toContain('自動削除期間または完了SLAがなく');
+    expect(privacy).toContain('未指定時既定値は1日');
+    expect(privacy).toContain('deleteAutomatedBackups=false');
+    expect(privacy).toContain('手動snapshotの自動削除期限はIaCで定めていません');
+    expect(privacy).toContain('IaC上30日保持');
   });
 });

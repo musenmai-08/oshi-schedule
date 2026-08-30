@@ -1,6 +1,6 @@
 # バックアップ・障害復旧
 
-## 暫定目標
+## 暫定目標（運用方針）
 
 | 環境       | RPO    | RTO        | 自動backup           | 補足                                   |
 | ---------- | ------ | ---------- | -------------------- | -------------------------------------- |
@@ -9,9 +9,13 @@
 
 RPO/RTOは小規模betaの暫定目標でありSLAではない。一般公開、売上発生、または復旧演習で4時間を超えた場合はretention、Multi-AZ、automationを見直す。
 
+### IaCで確定している実設定
+
+上表のproduction「7日 retention + PITR」は運用上の目標であり、現行CDKが自動的に強制する値ではない。CDKは`rdsBackupRetentionDays` contextを受け取り、未指定時は1日、`deleteAutomatedBackups=false`、productionではdeletion protectionを有効にする。productionの最終context値、PITRの有効化、手動snapshotの保持期限は、production構築前に明示的に決定・検証する。手動snapshotの自動削除期限はCDKで設定していない。
+
 ## RDS保護
 
-- production RDSはencryption at rest、deletion protection、自動backup 7日、PITRを有効にする。backup windowとworker実行時間をずらす。
+- production RDSはencryption at rest、deletion protection、`rdsBackupRetentionDays`で指定した自動backup、`deleteAutomatedBackups=false`を使用する。7日/PITRはproduction contextとAWS設定で明示確認するまで目標値であり、CDK既定値ではない。backup windowとworker実行時間をずらす。
 - stagingはCDK既定でdeletion protectionを有効にし、自動backup 1日を維持する。初期構築時に一時的に解除する場合もcontext reviewを必須にし、通常は長期snapshotを持たない。破壊的test/migration前だけsnapshotを取得し、30日以内に削除する。
 - productionのschema migration前にsnapshotを取り、migration ID、image digest、取得時刻をdeploy recordへ残す。
 - automated backup/snapshotの削除、retention短縮、deletion protection解除はmanual approval対象とする。
