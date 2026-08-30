@@ -1,0 +1,26 @@
+docs/operations/production-release-checklist.md
+  s_3a50bad78ea1cd::t_8a24b8d5101308 31-37
+  s_3a50bad78ea1cd::t_79756f003fe630 25-30,38-56
+docs/operations/environment-strategy.md
+  s_3a50bad78ea1cd::t_79756f003fe630 11,20
+  s_3a50bad78ea1cd::t_8a24b8d5101308 9-10,12-18,35-36,38
+  s_3a50bad78ea1cd::t_8d9779beaff66a 19
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_79756f003fe630 223-224
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "614a8cd6ac9b3fa5e8a111057b333e0da2c588b0",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
