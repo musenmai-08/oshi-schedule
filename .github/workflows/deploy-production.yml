@@ -109,6 +109,8 @@ jobs:
             echo 'The image uses staging-only vulnerability exceptions and cannot be promoted to production' >&2
             exit 1
           }
+      - name: Gate ECR Basic Scan with production policy
+        run: node scripts/validate-ecr-basic-scan.mjs
       - uses: aws-actions/amazon-ecr-login@v2
       - name: Scan staging-verified image before promotion
         uses: aquasecurity/trivy-action@v0.36.0

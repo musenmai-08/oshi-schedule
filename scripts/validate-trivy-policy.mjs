@@ -75,6 +75,10 @@ if (!stagingWorkflow.includes('trivyignores: .trivyignore.staging')) {
   errors.push('deploy-staging.yml must scan with .trivyignore.staging');
 }
 
+if (!productionWorkflow.includes('node scripts/validate-ecr-basic-scan.mjs')) {
+  errors.push('deploy-production.yml must gate ECR Basic Scan findings with the production policy');
+}
+
 for (const [name, workflow] of [
   ['ci.yml', ciWorkflow],
   ['deploy-production.yml', productionWorkflow],
