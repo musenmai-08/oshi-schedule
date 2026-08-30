@@ -1,0 +1,21 @@
+e2e/dashboard.spec.ts
+  s_3a50bad78ea1cd::t_d3749313ac751d 5,111,119,209
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_00d5019ed6f497 226
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "30b3c5745d2cfa70d3b30f0e963805594109d34d",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
