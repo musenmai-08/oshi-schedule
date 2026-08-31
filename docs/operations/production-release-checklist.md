@@ -2,6 +2,8 @@
 
 この手順はproduction公開前の設計・受入用である。AWS、Google Cloud、Supabaseの設定変更およびverification申請は、各工程で別途承認を得てから行う。Secret値、token、OAuth code、個人情報をdeploy recordやissueへ記録しない。
 
+> 2026-08-31に現行ECS/RDS production deployを中止し、[serverless低コスト移行設計](../architecture/production-serverless-low-cost.md)を推奨案とした。このチェックリストのECR-first/RDS/ECS項目は実装履歴として残すが、新しいproduction deploy承認には使わない。次のdeploy前にはserverless設計のhard gateと、この文書のGoogle/Supabase/法務項目を併せて満たす。
+
 ## 確定した公開URLとアプリ設定
 
 | 用途                      | 値                                                                       | source of truth                                       |
