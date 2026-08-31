@@ -54,6 +54,8 @@ production ECR repositoryはCDKの`bootstrapOnly=true` phaseが唯一の所有�
 4. CIとpromotion workflowのTrivy gateは`cache: 'false'`でfresh vulnerability DBを使い、production `.trivyignore`だけを適用してHIGH/CRITICALを0件にする。push後はECR Basic Scanも`COMPLETE`まで待ち、同じproduction policyで未承認Critical/Highが0件であることを確認する。
 5. そのdigestとfull production contextでCDK diffを確認し、full production deployは別途承認する。
 
+2026-08-31に、上記digestとproduction専用の非秘密contextでfull preflightとCDK diffを実施した。production boundary、公開domain、RDS backup/PITR 7日、production Log Group 30日、4つのcomplete Secret ARN、`allowed-emails` SecureString、`api.oshi-schedule.com` ACM `ISSUED`、ECR Basic Scan（Critical 0 / High 0）はすべて確認済みである。初回full deploy差分は、bootstrap済みECR Repositoryを維持したまま、そのほかのruntime/network/observability/web resourceを新規作成する内容であり、DELETE/REPLACEはない。full deployは実行していない。
+
 `SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`、`GOOGLE_CLIENT_ID`は秘密ではないが、production専用値をCDK contextへ渡す。`SUPABASE_SERVICE_ROLE_KEY`、`GOOGLE_CLIENT_SECRET`、`YOUTUBE_API_KEY`、`TOKEN_ENCRYPTION_KEYS`、`ALLOWED_EMAILS`の値はCDK context、Amplify、GitHub Variables、Git、shell引数へ渡さない。
 
 ### 安全な投入と確認
@@ -101,6 +103,7 @@ production ECR repositoryはCDKの`bootstrapOnly=true` phaseが唯一の所有�
 ## production deploy前の完了条件
 
 - [ ] production CDK synth/diffでWeb=`oshi-schedule.com`、API=`api.oshi-schedule.com`、Amplify root-domain Prefix空、`WEB_ORIGIN`、`NEXT_PUBLIC_API_URL`が一致する。
+- [x] 上記のproduction contextとimmutable digestでfull CDK preflight/diffを実行し、bootstrap済みECRを維持、DELETE/REPLACEがないことを確認する（2026-08-31）。
 - [ ] mainの最新commitでGitHub Actions `validate`と`e2e`がともにgreenであり、workflow logで失敗がない。
 - [ ] production imageはfresh DBのTrivy production gateとECR Basic Scanの双方で、production `.trivyignore`外のCritical/Highが0件である。
 - [ ] production専用Secret/SSM/Google/Supabase値が揃い、staging由来値・localhost・placeholderがない。
