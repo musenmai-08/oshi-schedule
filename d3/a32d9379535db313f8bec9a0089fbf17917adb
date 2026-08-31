@@ -1,0 +1,26 @@
+docs/architecture/production-serverless-low-cost.md
+  s_3a50bad78ea1cd::t_44fd51e0f99df7 32,169,175,211,297
+  s_3a50bad78ea1cd::t_dac7a098e7522a 1-31,33-40,52-106,116-162,172-174,176-182,195-201,216-222,230-296,298
+  s_3a50bad78ea1cd::t_919e9896d6cf43 202-210,212-215
+  s_3a50bad78ea1cd::t_99ada2846f6767 41-51,107-115,163-168,170-171,183-194,223-229
+docs/operations/production-release-checklist.md
+  s_3a50bad78ea1cd::t_dac7a098e7522a 5-6
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_dac7a098e7522a 251-252
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "d3a32d9379535db313f8bec9a0089fbf17917adb",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
