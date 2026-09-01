@@ -56,7 +56,9 @@ if (command === 'synth' && !cdkOptions.includes('--quiet') && !cdkOptions.includ
 if (command === 'diff' && !cdkOptions.includes('--no-change-set'))
   cdkOptions.push('--no-change-set');
 
-const cdkExecutable = path.join(projectRoot, 'infra/node_modules/.bin/cdk');
+// pnpm hoists the workspace-owned CDK CLI to the repository root.  Do not
+// assume an infra-local node_modules directory exists in a clean checkout.
+const cdkExecutable = path.join(projectRoot, 'node_modules/.bin/cdk');
 const result = spawnSync(
   cdkExecutable,
   [command, ...cdkOptions, ...toCdkContextArgs(buildPhaseContext(common, phase))],
