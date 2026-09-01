@@ -1,0 +1,22 @@
+scripts/validate-trivy-policy.mjs
+  s_3a50bad78ea1cd::t_2bd677dcac39a5 22,64,76-80,89
+  s_3a50bad78ea1cd::t_3aa13b651266bc 1
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_b9540a69466531 254
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "3bb0054f6da79371c069768bad0d2de9cb69b6e0",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
