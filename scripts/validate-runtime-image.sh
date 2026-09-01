@@ -11,7 +11,6 @@ if [[ -z "$image" ]]; then
   exit 2
 fi
 
-ca_path='/etc/ssl/certs/aws-rds-global-bundle.pem'
 runtime_user="$(docker image inspect --format '{{.Config.User}}' "$image")"
 platform="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$image")"
 entrypoint="$(docker image inspect --format '{{json .Config.Entrypoint}}' "$image")"
@@ -36,18 +35,14 @@ default_command="$(docker image inspect --format '{{json .Config.Cmd}}' "$image"
 
 docker run --rm --platform linux/amd64 --entrypoint /bin/sh "$image" -eu -c '
   fail() { echo "$1" >&2; exit 1; }
-  ca_path=/etc/ssl/certs/aws-rds-global-bundle.pem
   test "$(id -u)" = 1000 || fail "Runtime UID must be 1000"
   test "$(id -un)" = node || fail "Runtime process must run as node"
-  test -f "$ca_path" || fail "RDS CA bundle is missing"
-  test "$(stat -c %U:%G "$ca_path")" = root:root || fail "RDS CA bundle must be root:root"
-  test "$(stat -c %a "$ca_path")" = 644 || fail "RDS CA bundle mode must be 0644"
-  test -r "$ca_path" || fail "RDS CA bundle is not readable by the runtime user"
-  node -e '\''const fs = require("node:fs"); fs.accessSync(process.argv[1], fs.constants.R_OK);'\'' "$ca_path"
-  grep -F "$ca_path" /opt/oshi-schedule/entrypoint.sh >/dev/null
-  grep -F "sslcert=" /opt/oshi-schedule/entrypoint.sh >/dev/null
   test -x /opt/oshi-schedule/api/node_modules/.bin/prisma
   test -f /opt/oshi-schedule/prisma/schema.prisma
+  find /opt/oshi-schedule/api/node_modules -name "libquery_engine-rhel-openssl-3.0.x.so.node" -print -quit | grep -q . \
+    || fail "Lambda Prisma engine is missing"
+  ! find /opt/oshi-schedule/api/node_modules -name "*darwin*" -print -quit | grep -q . \
+    || fail "macOS Prisma engine must not be packaged in runtime image"
   cd /opt/oshi-schedule/api
   node -e '\''
     const { Prisma, PrismaClient } = require("@prisma/client");
@@ -86,4 +81,4 @@ node_version="$(docker run --rm --platform linux/amd64 --entrypoint node "$image
   exit 1
 }
 
-echo "Runtime image contract validated: platform=$platform, user=$runtime_user, node=$node_version, Prisma=generated/importable/constructable, CA=root:root/0644/readable"
+echo "Runtime image contract validated: platform=$platform, user=$runtime_user, node=$node_version, Prisma=generated/importable/constructable/rhel-engine"

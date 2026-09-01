@@ -120,7 +120,7 @@ Supabase Site URL/Redirect URL、Google OAuth client、`WEB_ORIGIN` は環境ご
 
 ## STEP 4実装
 
-- `Dockerfile`はNode.js 22.23.1/pnpm 9.15.9のmulti-stage build、非root、RDS CA bundle、API/worker/migration共用である。
+- `Dockerfile`はNode.js 22.23.1/pnpm 9.15.9のmulti-stage build、非root、PostgreSQL `app` schema用Prisma ClientとLinux Lambda互換engineを含む互換runtimeである。serverless本体はCDKのLambda bundlingを使用し、RDS CA bundleには依存しない。
 - `infra/`はTypeScript AWS CDKで、NATなしのpublic compute/isolated RDS、HTTP API/VPC Link/Cloud Map、SQS/Pipes、environment別removal policyを定義する。
 - Schedulerは安全側の既定disabled、`rate(1 hour)`、retry 2回、最大event age 1時間、SQS DLQを持つ。ECS STOPPEDかつexit code非0をEventBridge ruleでSNSへ通知する。
 - Amplify App/branchはCDK管理するが、GitHub接続とdomain verificationは管理画面で人が完了する。
