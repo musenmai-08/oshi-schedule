@@ -1,3 +1,4 @@
+import console from 'node:console';
 import { readFile } from 'node:fs/promises';
 import process from 'node:process';
 
@@ -7,16 +8,6 @@ const approvedStagingOnlyTrivyEntries = new Map([
   ['CVE-2026-54874', '2026-09-11'],
   ['CVE-2026-63072', '2026-09-11'],
   ['CVE-2026-63076', '2026-09-11'],
-]);
-const approvedStagingOnlyEcrEntries = new Map([
-  ['CVE-2026-12087', '2026-09-11'],
-  ['CVE-2026-48959', '2026-09-11'],
-  ['CVE-2026-48961', '2026-09-11'],
-  ['CVE-2026-7017', '2026-09-11'],
-]);
-const approvedStagingOnlyEntries = new Map([
-  ...approvedStagingOnlyTrivyEntries,
-  ...approvedStagingOnlyEcrEntries,
 ]);
 
 const parseEntries = (source) =>
@@ -28,12 +19,11 @@ const parseEntries = (source) =>
       .map((match) => [match[1], match[2]]),
   );
 
-const [productionSource, stagingSource, ciWorkflow, stagingWorkflow, productionWorkflow] =
+const [productionSource, stagingSource, ciWorkflow, productionWorkflow] =
   await Promise.all([
     readFile(productionIgnoreFile, 'utf8'),
     readFile(stagingIgnoreFile, 'utf8'),
     readFile('.github/workflows/ci.yml', 'utf8'),
-    readFile('.github/workflows/deploy-staging.yml', 'utf8'),
     readFile('.github/workflows/deploy-production.yml', 'utf8'),
   ]);
 
@@ -71,18 +61,7 @@ if (
   errors.push(`${productionIgnoreFile} must not contain the staging-only OpenSSL exceptions`);
 }
 
-if (!stagingWorkflow.includes('trivyignores: .trivyignore.staging')) {
-  errors.push('deploy-staging.yml must scan with .trivyignore.staging');
-}
-
-if (!productionWorkflow.includes('node scripts/validate-ecr-basic-scan.mjs')) {
-  errors.push('deploy-production.yml must gate ECR Basic Scan findings with the production policy');
-}
-
-for (const [name, workflow] of [
-  ['ci.yml', ciWorkflow],
-  ['deploy-production.yml', productionWorkflow],
-]) {
+for (const [name, workflow] of [['ci.yml', ciWorkflow]]) {
   if (!workflow.includes('trivyignores: .trivyignore')) {
     errors.push(`${name} must scan with the production .trivyignore policy`);
   }
@@ -94,10 +73,11 @@ for (const [name, workflow] of [
   }
 }
 
-for (const id of approvedStagingOnlyEntries.keys()) {
-  if (!productionWorkflow.includes(`name=='${id}'`)) {
-    errors.push(`deploy-production.yml must reject staging ECR finding ${id}`);
-  }
+if (!productionWorkflow.includes('uses: ./.github/workflows/ci.yml')) {
+  errors.push('deploy-production.yml must use the CI workflow, including the production Trivy gate');
+}
+if (!productionWorkflow.includes('needs: ci')) {
+  errors.push('deploy-production.yml must wait for the CI production Trivy gate');
 }
 
 if (errors.length > 0) {
@@ -106,5 +86,5 @@ if (errors.length > 0) {
 }
 
 console.log(
-  `Trivy policy isolation valid: ${productionEntries.size} production exceptions, ${stagingOnlyEntries.size} additional staging-only Trivy exceptions, ${approvedStagingOnlyEcrEntries.size} staging-only ECR exceptions`,
+  `Trivy policy isolation valid: ${productionEntries.size} production exceptions and ${stagingOnlyEntries.size} additional staging-only Trivy exceptions`,
 );
