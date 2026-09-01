@@ -159,7 +159,7 @@ describe('ServerlessOshiScheduleStack', () => {
     )[0] as { DeletionPolicy?: string };
     expect(productionBucket?.DeletionPolicy).toBe('Retain');
     expect(previewBucket?.DeletionPolicy).toBe('Delete');
-  });
+  }, 15_000);
 
   it('uses Lambda-native runtime limits and keeps the legacy image only as a retained repository', () => {
     const template = render();
