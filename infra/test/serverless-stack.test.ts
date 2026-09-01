@@ -151,12 +151,14 @@ describe('ServerlessOshiScheduleStack', () => {
   });
 
   it('destroys an empty staging-preview backup bucket on rollback but retains production backups', () => {
-    expect(
-      render().toJSON().Resources.DatabaseBackupBucket.DeletionPolicy,
-    ).toBe('Retain');
-    expect(
-      renderStagingPreview().toJSON().Resources.DatabaseBackupBucket.DeletionPolicy,
-    ).toBe('Delete');
+    const productionBucket = Object.values(render().findResources('AWS::S3::Bucket'))[0] as {
+      DeletionPolicy?: string;
+    };
+    const previewBucket = Object.values(
+      renderStagingPreview().findResources('AWS::S3::Bucket'),
+    )[0] as { DeletionPolicy?: string };
+    expect(productionBucket?.DeletionPolicy).toBe('Retain');
+    expect(previewBucket?.DeletionPolicy).toBe('Delete');
   });
 
   it('uses Lambda-native runtime limits and keeps the legacy image only as a retained repository', () => {
