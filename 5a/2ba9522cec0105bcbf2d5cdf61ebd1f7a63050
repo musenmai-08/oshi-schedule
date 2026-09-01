@@ -1,0 +1,178 @@
+.env.example
+  s_3a50bad78ea1cd::t_398b630adad784 8
+infra/config/staging-deploy.json
+  s_3a50bad78ea1cd::t_282d66e8fecf0b 5
+docs/architecture/production-serverless-low-cost.md
+  s_3a50bad78ea1cd::t_9dc5d2fb9c7faf 245,256-258
+  s_3a50bad78ea1cd::t_7436a32808106d 5-7,37,46,161,163,165,173,182-183,233,235,273,277,284,286
+prisma/migrations/migration_lock.toml
+  s_3a50bad78ea1cd::t_e9e6aa8e3e0e25 1
+.github/workflows/deploy-staging.yml
+  s_3a50bad78ea1cd::t_8b7e7539c1ae82 1,5-9,16,21,25,33-34,37-42,47-59
+infra/test/serverless-stack.test.ts
+  s_3a50bad78ea1cd::t_a74373b7c92cce 3
+  s_3a50bad78ea1cd::t_ddb087a1bb2cd8 18
+  s_3a50bad78ea1cd::t_84f78e63f63566 158-163
+  s_3a50bad78ea1cd::t_b8457c8645bb22 143-154
+  s_3a50bad78ea1cd::t_1e0f7350e64f65 155-157,164-165,176
+  s_3a50bad78ea1cd::t_c998c2c3420925 1-2,4-17,19-65,81-97,99-121,123-141,177
+  s_3a50bad78ea1cd::t_c4fb2ca87e23a9 66-80,166-175
+  s_3a50bad78ea1cd::t_f18a77e184424b 98,122,142
+apps/api/src/app.ts
+  s_3a50bad78ea1cd::t_c1bd1bd36f6820 11,62-64
+docs/operations/serverless-staging-cutover.md
+  s_3a50bad78ea1cd::t_a5ff8c3c32e426 1-39
+.github/workflows/deploy-production.yml
+  s_3a50bad78ea1cd::t_8b7e7539c1ae82 1,7,16,21,25,33-34,37-42,47-59
+docker/entrypoint.sh
+  s_3a50bad78ea1cd::t_83bf38395db52b 4-5,7,17-18
+apps/api/src/infrastructure/database/prisma-store.ts
+  s_3a50bad78ea1cd::t_7c75335351454f 160-164,185-189,323-325,384-388,407-411,484-488,644-649,653-654,657-659,668-674,692-695,698-702,715-721,792-793,856-863,865,867-868,1002-1006
+  s_3a50bad78ea1cd::t_cc9bb1276ce5cf 78-95,321,787
+prisma/schema.prisma
+  s_3a50bad78ea1cd::t_e9e6aa8e3e0e25 120,122-123,142-144,156-158,166-183,197-198,202-203,223-224,226-227,229-231,247-249,264-267,282-292,294-296,312-318,330-332,344-345
+  s_3a50bad78ea1cd::t_b8457c8645bb22 2-3
+  s_3a50bad78ea1cd::t_7a39e194e4fa10 9,15-16,23-24,34-35,43-44,51-52,64-65,74-75,84-85,92-93,104-105,111-112,132,146-147,160-161,188,210,237,255,277,300,322,335,349
+  s_3a50bad78ea1cd::t_aabb999cecfb73 7
+apps/worker/src/lambda.ts
+  s_3a50bad78ea1cd::t_0c5e3911d1a163 42-43
+  s_3a50bad78ea1cd::t_035578810ad2fa 1-10,12-41,44,52,63-100
+  s_3a50bad78ea1cd::t_c4b2fbb776db89 45-51,53-62
+  s_3a50bad78ea1cd::t_e64e6f69894f05 11
+infra/bin/infra.ts
+  s_3a50bad78ea1cd::t_68656e38940320 12-17,19
+  s_3a50bad78ea1cd::t_ae058cf04d1e10 5,10-11,18
+scripts/aws/serverless-deploy.mjs
+  s_3a50bad78ea1cd::t_9d5ffa6e4003d8 2
+  s_3a50bad78ea1cd::t_7a0a12c2e3a547 3-4,105
+  s_3a50bad78ea1cd::t_8b7e7539c1ae82 1,5-69,71-80,82-89,93-104,106-109
+  s_3a50bad78ea1cd::t_0c5e3911d1a163 90-92
+  s_3a50bad78ea1cd::t_88d75321ae1312 70,81
+infra/test/config.test.ts
+  s_3a50bad78ea1cd::t_c6da1dbf604968 7,79-87,93,113-116,147-150,171,180,182-183
+scripts/aws/serverless-deploy.test.mjs
+  s_3a50bad78ea1cd::t_8b7e7539c1ae82 1-44
+apps/api/src/runtime.test.ts
+  s_3a50bad78ea1cd::t_42c073bc64c0d9 11-12
+prisma/runtime-role.sql
+  s_3a50bad78ea1cd::t_a5ff8c3c32e426 1-17
+scripts/aws/postgresql-baseline.test.mjs
+  s_3a50bad78ea1cd::t_f85cb88fd29e20 32
+  s_3a50bad78ea1cd::t_07aaec1664a41a 1-31,33-42
+apps/api/src/infrastructure/lambda/runtime-env.test.ts
+  s_3a50bad78ea1cd::t_80c1e76bc12117 1-48
+apps/api/package.json
+  s_3a50bad78ea1cd::t_8c28a57460246c 37-38,40-41
+  s_3a50bad78ea1cd::t_419baa40fb1526 15-18
+  s_3a50bad78ea1cd::t_e281c018945366 42
+  s_3a50bad78ea1cd::t_f054816034eb59 43,58
+apps/web/src/lib/legal-content.ts
+  s_3a50bad78ea1cd::t_7a17a3956641cf 100,110
+infra/test/oshi-schedule-stack.test.ts
+  s_3a50bad78ea1cd::t_ac55a1865ff1a3 89,91
+  s_3a50bad78ea1cd::t_a3be9507c64552 58
+  s_3a50bad78ea1cd::t_ddb087a1bb2cd8 59,90
+prisma.config.ts
+  s_3a50bad78ea1cd::t_aabb999cecfb73 8-11
+infra/lib/config.ts
+  s_3a50bad78ea1cd::t_0c5e3911d1a163 340-342
+  s_3a50bad78ea1cd::t_68656e38940320 12,51,154-160,363,366,459-460
+  s_3a50bad78ea1cd::t_3e5b8dd6459bd9 11,50,68-70,147-153,298,327-339,362,394-400,448-452,455-458,496-498,511
+  s_3a50bad78ea1cd::t_ddb087a1bb2cd8 364-365
+  s_3a50bad78ea1cd::t_c6da1dbf604968 406
+  s_3a50bad78ea1cd::t_b16ebba3152e51 343
+scripts/aws/staging-context.mjs
+  s_3a50bad78ea1cd::t_282d66e8fecf0b 16,120-121
+apps/api/src/infrastructure/rate-limit/dynamodb-store.ts
+  s_3a50bad78ea1cd::t_c1bd1bd36f6820 1-71
+apps/worker/package.json
+  s_3a50bad78ea1cd::t_c4b2fbb776db89 24
+  s_3a50bad78ea1cd::t_36058eacc3eab2 6-8
+docker-compose.yml
+  s_3a50bad78ea1cd::t_aabb999cecfb73 2-3,6-8,11,13,15,20
+README.md
+  s_3a50bad78ea1cd::t_773019c204e91e 130-131,134,155-156,164-165,172
+  s_3a50bad78ea1cd::t_c2f74b064b1815 3,11,42,94,113,147,149
+  s_3a50bad78ea1cd::t_5ee5a531530654 45,97
+apps/api/src/infrastructure/env.test.ts
+  s_3a50bad78ea1cd::t_6557817a609a64 13-14,48-79
+  s_3a50bad78ea1cd::t_ac0e4f2cb821d4 21
+  s_3a50bad78ea1cd::t_9dd1f3e624448d 80
+infra/lib/serverless-stack.ts
+  s_3a50bad78ea1cd::t_ae058cf04d1e10 1-46,48-51,53-64,67-68,70-77,81-93,104,106-108,111,114-115,117-122,124-131,133-139,141-143,145-148,152,155,158-174,176-183,185-200,202-209,211-228,246-265,267-277,279-283,291-292,298-306,308-340,342-368,370,374-385,411,416,421,434-466,468-492,497-498
+  s_3a50bad78ea1cd::t_a47d7936a0c8c0 229-245,371-372
+  s_3a50bad78ea1cd::t_0c5e3911d1a163 97-103,112-113,153-154,156-157,293-297,373,387-410,412-415,417-420,422-433,493-496
+  s_3a50bad78ea1cd::t_8deaf41a3ed016 144
+  s_3a50bad78ea1cd::t_38c1c3da398d55 47,52,69
+  s_3a50bad78ea1cd::t_ee2c08f8b0a1b7 341
+  s_3a50bad78ea1cd::t_68656e38940320 78-80,94-96,105,109-110,116,123,132,140,175,184,201,210,266,278,284-290,307,369,386,467
+  s_3a50bad78ea1cd::t_b8457c8645bb22 65-66
+  s_3a50bad78ea1cd::t_b058d2e99a9964 149-151
+apps/api/src/prisma-api.integration.test.ts
+  s_3a50bad78ea1cd::t_398b630adad784 61,159,197,247,270,289,293
+.github/workflows/ci.yml
+  s_3a50bad78ea1cd::t_406199576adf8d 87
+  s_3a50bad78ea1cd::t_398b630adad784 31-32,34-36,38,40,45-46,75
+docs/operations/production-release-checklist.md
+  s_3a50bad78ea1cd::t_f33b6f8ebc3688 5,35,39-40,43,48,60,69,109,111,116
+apps/api/src/infrastructure/lambda/runtime-env.ts
+  s_3a50bad78ea1cd::t_80c1e76bc12117 1-89
+docs/operations/supabase-backup-and-restore.md
+  s_3a50bad78ea1cd::t_d5838423532134 1-38
+apps/api/src/lambda.test.ts
+  s_3a50bad78ea1cd::t_80c1e76bc12117 1-44,48-49
+  s_3a50bad78ea1cd::t_aa05acbdda9ccd 45-47
+apps/api/src/infrastructure/env.ts
+  s_3a50bad78ea1cd::t_c1bd1bd36f6820 35,144-145
+  s_3a50bad78ea1cd::t_419baa40fb1526 112,135,138-141,156-167
+  s_3a50bad78ea1cd::t_aa05acbdda9ccd 116
+  s_3a50bad78ea1cd::t_5e51e7ba550dcd 168
+infra/cdk.json
+  s_3a50bad78ea1cd::t_68656e38940320 10
+  s_3a50bad78ea1cd::t_c6da1dbf604968 8-9,11
+apps/api/src/infrastructure/rate-limit/dynamodb-store.test.ts
+  s_3a50bad78ea1cd::t_c1bd1bd36f6820 1-20
+apps/api/src/lambda.ts
+  s_3a50bad78ea1cd::t_d6b3a00e788e5f 1
+  s_3a50bad78ea1cd::t_80c1e76bc12117 2-33
+.github/workflows/backup-production.yml
+  s_3a50bad78ea1cd::t_d5838423532134 1-53,58-62
+  s_3a50bad78ea1cd::t_76f482f76b506f 54-57
+apps/web/src/lib/legal-content.test.ts
+  s_3a50bad78ea1cd::t_7a17a3956641cf 39,43-45
+prisma/migrations/20260901000000_postgresql_baseline/migration.sql
+  s_3a50bad78ea1cd::t_d0be1c7a3b43d7 1-3,8-345
+  s_3a50bad78ea1cd::t_621e5715e00fa1 4-7
+scripts/aws/staging-context.test.mjs
+  s_3a50bad78ea1cd::t_282d66e8fecf0b 25
+docs/operations/backup-and-recovery.md
+  s_3a50bad78ea1cd::t_f78ce9b58bb84b 3,5,7-10,12,14,16-20,22,24,26-32,34,36-43,45,47
+apps/worker/src/lambda.test.ts
+  s_3a50bad78ea1cd::t_035578810ad2fa 1-63,65-77,83-84,114
+  s_3a50bad78ea1cd::t_e64e6f69894f05 64
+  s_3a50bad78ea1cd::t_0c5e3911d1a163 78-82,95-103,109-111
+  s_3a50bad78ea1cd::t_c4b2fbb776db89 85-94,104-108,112-113
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_ffe8e5d2dcbfc7 253
+  s_3a50bad78ea1cd::t_5ed2a23d71beb2 254
+pnpm-lock.yaml
+  s_3a50bad78ea1cd::t_a0e6c72efe918b 17-19,56-61,65-73,114-116,224-226,258-260,319-326,331-334,339-342,347-350,355-358,363-366,371-374,379-382,387-390,395-398,403-424,433-436,441-444,449-452,457-466,471-474,524-527,591-592,603-604,615-616,627-628,639-640,651-652,663-664,675-676,687-688,699-700,711-712,723-724,735-736,747-748,759-760,771-772,783-784,795-796,807-808,819-820,831-832,843-844,855-856,867-868,879-880,891-892,1442-1445,1454-1457,1462-1465,1474-1477,1546-1548,2061-2062,2431-2433,2486-2488,3046-3069,3082-3092,3104-3114,3123-3130,3141-3150,3167-3182,3185,3187-3198,3215-3228,3237-3244,3255-3264,3274-3311,3321,3323-3338,3343,3345-3352,3357,3359-3370,3378-3387,3393-3397,3456-3457,3549,3555,3561,3567,3573,3579,3585,3591,3597,3603,3609,3615,3621,3627,3633,3639,3645,3651,3657,3663,3669,3675,3681,3687,3693,3699,4127-4131,4144-4149,4156-4161,4172-4175,4237-4238,4811,4813-4838,5215-5218,5263-5264,5691
+infra/package.json
+  s_3a50bad78ea1cd::t_1463b97594fcc6 20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "5a2ba9522cec0105bcbf2d5cdf61ebd1f7a63050",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
