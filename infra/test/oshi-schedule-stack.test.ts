@@ -68,6 +68,7 @@ const fullStagingContext: Record<string, unknown> = {
   hostedZoneName: 'example.invalid',
   webDomainName: 'staging.example.invalid',
   apiDomainName: 'api.staging.example.invalid',
+  webApiOrigin: 'https://preview.execute-api.ap-northeast-1.amazonaws.com',
   certificateArn:
     'arn:aws:acm:ap-northeast-1:111111111111:certificate/00000000-0000-4000-8000-000000000000',
   ...applicationSecretArns('staging'),
@@ -284,7 +285,10 @@ describe('OshiScheduleStack', () => {
       ].sort(),
     );
     expect(app!.Properties?.EnvironmentVariables).toEqual(
-      expect.arrayContaining([{ Name: 'WEB_ORIGIN', Value: 'https://staging.example.invalid' }]),
+      expect.arrayContaining([
+        { Name: 'WEB_ORIGIN', Value: 'https://staging.example.invalid' },
+        { Name: 'NEXT_PUBLIC_API_URL', Value: 'https://preview.execute-api.ap-northeast-1.amazonaws.com' },
+      ]),
     );
     expect(environmentNames).not.toEqual(
       expect.arrayContaining([

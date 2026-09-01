@@ -29,6 +29,7 @@ const repositoryContext = {
   hostedZoneName: 'example.com',
   webDomainName: 'staging.example.com',
   apiDomainName: 'api-staging.example.com',
+  webApiOrigin: 'https://preview.execute-api.ap-northeast-1.amazonaws.com',
   certificateArn:
     'arn:aws:acm:ap-northeast-1:123456789012:certificate/12345678-1234-1234-1234-123456789abc',
   supabaseServiceRoleSecretArn:
@@ -175,6 +176,7 @@ describe('staging common deploy context', () => {
     ['region', { awsRegion: 'tokyo' }, /awsRegion/],
     ['certificate', { certificateArn: 'not-an-arn' }, /certificateArn/],
     ['domain', { apiDomainName: 'localhost' }, /apiDomainName/],
+    ['web API origin', { webApiOrigin: 'http://preview.example.com' }, /webApiOrigin/],
     ['digest', { imageTag: 'latest' }, /imageTag/],
     ['budget', { monthlyBudgetUsd: 0 }, /monthlyBudgetUsd/],
     ['worker schedule', { workerScheduleEnabled: true }, /workerScheduleEnabled/],

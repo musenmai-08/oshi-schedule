@@ -9,6 +9,7 @@
   "hostedZoneName": "oshi-schedule.com",
   "webDomainName": "staging.oshi-schedule.com",
   "apiDomainName": "api-staging.oshi-schedule.com",
+  "webApiOrigin": "https://6rj0xjeb60.execute-api.ap-northeast-1.amazonaws.com",
   "certificateArn": "arn:aws:acm:ap-northeast-1:741448960817:certificate/34f4c02d-769a-4bfa-b85d-829a6ed67774",
   "supabaseServiceRoleSecretArn": "arn:aws:secretsmanager:ap-northeast-1:741448960817:secret:oshi-schedule-staging/app/supabase-service-role-key-UFRYya",
   "googleClientSecretArn": "arn:aws:secretsmanager:ap-northeast-1:741448960817:secret:oshi-schedule-staging/app/google-client-secret-J9b2rp",

@@ -20,6 +20,7 @@ export const repositoryContextKeys = Object.freeze([
   'hostedZoneName',
   'webDomainName',
   'apiDomainName',
+  'webApiOrigin',
   'certificateArn',
   'supabaseServiceRoleSecretArn',
   'googleClientSecretArn',
@@ -134,6 +135,22 @@ export const validateRepositoryContext = (context) => {
     fail('webDomainName must belong to hostedZoneName');
   if (!context.apiDomainName.endsWith(`.${context.hostedZoneName}`))
     fail('apiDomainName must belong to hostedZoneName');
+  const webApiOrigin = requireString(context, 'webApiOrigin');
+  let parsedWebApiOrigin;
+  try {
+    parsedWebApiOrigin = new URL(webApiOrigin);
+  } catch {
+    fail('webApiOrigin must be a valid HTTPS origin');
+  }
+  if (
+    parsedWebApiOrigin.protocol !== 'https:' ||
+    parsedWebApiOrigin.username ||
+    parsedWebApiOrigin.password ||
+    parsedWebApiOrigin.pathname !== '/' ||
+    parsedWebApiOrigin.search ||
+    parsedWebApiOrigin.hash
+  )
+    fail('webApiOrigin must be an HTTPS origin without credentials, path, or query');
 
   const certificateArn = requireString(context, 'certificateArn');
   const certificatePattern = new RegExp(

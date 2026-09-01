@@ -56,6 +56,12 @@ export interface DeploymentConfig {
   hostedZoneName?: string;
   webDomainName?: string;
   apiDomainName?: string;
+  /**
+   * Public API origin used by the Web build.  This is intentionally separate
+   * from apiDomainName so a staging preview can retain the legacy API custom
+   * domain for rollback while its Web traffic is evaluated against HTTP API.
+   */
+  webApiOrigin?: string;
   certificateArn?: string;
   alertEmail?: string;
   nextPublicSupabaseUrl?: string;
@@ -382,6 +388,7 @@ export const loadConfig = (app: App): DeploymentConfig => {
     hostedZoneName: optionalString(app, 'hostedZoneName'),
     webDomainName: optionalString(app, 'webDomainName'),
     apiDomainName: optionalString(app, 'apiDomainName'),
+    webApiOrigin: optionalString(app, 'webApiOrigin'),
     certificateArn: optionalString(app, 'certificateArn'),
     alertEmail: optionalString(app, 'alertEmail'),
     nextPublicSupabaseUrl: optionalString(app, 'nextPublicSupabaseUrl'),
@@ -460,6 +467,31 @@ export const loadConfig = (app: App): DeploymentConfig => {
     throw new Error('production requires serverlessStagingMode=cutover');
   if (environmentName === 'production' && config.amplifyConnectionPhase !== 'connected') {
     throw new Error('production requires amplifyConnectionPhase=connected');
+  }
+  if (config.webApiOrigin) {
+    let parsedWebApiOrigin: URL;
+    try {
+      parsedWebApiOrigin = new URL(config.webApiOrigin);
+    } catch {
+      throw new Error('webApiOrigin must be a valid HTTPS origin');
+    }
+    if (
+      parsedWebApiOrigin.protocol !== 'https:' ||
+      parsedWebApiOrigin.username ||
+      parsedWebApiOrigin.password ||
+      parsedWebApiOrigin.pathname !== '/' ||
+      parsedWebApiOrigin.search ||
+      parsedWebApiOrigin.hash
+    ) {
+      throw new Error('webApiOrigin must be an HTTPS origin without credentials, path, or query');
+    }
+    if (
+      environmentName === 'production' &&
+      config.apiDomainName &&
+      parsedWebApiOrigin.origin !== `https://${config.apiDomainName}`
+    ) {
+      throw new Error('production webApiOrigin must equal the configured apiDomainName origin');
+    }
   }
   if (
     !config.bootstrapOnly &&

@@ -254,6 +254,19 @@ describe('loadConfig', () => {
     expect(() => loadConfig(new App({ context }))).toThrow(/requires context: googleClientId/);
   });
 
+  it('does not allow production Web builds to override their API custom-domain origin', () => {
+    expect(() =>
+      loadConfig(
+        new App({
+          context: {
+            ...productionDeployContext,
+            webApiOrigin: 'https://preview.execute-api.ap-northeast-1.amazonaws.com',
+          },
+        }),
+      ),
+    ).toThrow(/production webApiOrigin must equal the configured apiDomainName origin/);
+  });
+
   it.each([
     ['webDomainName', 'staging.oshi-schedule.com'],
     ['apiDomainName', 'api-staging.oshi-schedule.com'],

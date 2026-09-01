@@ -1042,7 +1042,9 @@ export class OshiScheduleStack extends Stack {
         { name: 'WEB_ORIGIN', value: webOrigin },
         {
           name: 'NEXT_PUBLIC_API_URL',
-          value: config.apiDomainName ? `https://${config.apiDomainName}` : 'REQUIRED_AT_DEPLOY',
+          value:
+            config.webApiOrigin ??
+            (config.apiDomainName ? `https://${config.apiDomainName}` : 'REQUIRED_AT_DEPLOY'),
         },
         { name: 'NEXT_PUBLIC_DEMO_MODE', value: 'false' },
         {
