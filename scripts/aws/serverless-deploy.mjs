@@ -76,7 +76,6 @@ export const buildCdkArguments = (operation, environment, context) => {
   };
   return [
     'aws:cdk',
-    '--',
     operation,
     environment === 'staging' ? 'oshi-schedule-staging-serverless' : 'oshi-schedule-production',
     ...Object.entries(values).flatMap(([key, value]) => ['-c', `${key}=${String(value)}`]),

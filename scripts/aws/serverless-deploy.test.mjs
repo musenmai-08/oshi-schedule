@@ -29,6 +29,8 @@ describe('serverless deploy context', () => {
   it('builds a production deploy without legacy runtime controls', () => {
     const parsed = parseServerlessContext('production', JSON.stringify(context));
     const args = buildCdkArguments('deploy', 'production', parsed);
+    assert.deepEqual(args.slice(0, 3), ['aws:cdk', 'deploy', 'oshi-schedule-production']);
+    assert.ok(!args.includes('--'));
     assert.ok(args.includes('runtimeArchitecture=serverless'));
     assert.ok(args.includes('backupRetentionDays=7'));
     assert.ok(args.includes('confirmProduction=DEPLOY_PRODUCTION'));
