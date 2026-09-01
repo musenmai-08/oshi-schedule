@@ -491,6 +491,26 @@ describe('SyncService', () => {
     });
   });
 
+  it('claims one targeted run only once when two SQS worker invocations overlap', async () => {
+    const store = new MemoryStore();
+    const { user, subscription } = await setup(store);
+    const clock = { now: () => new Date('2026-07-20T10:00:00Z') };
+    const first = new SyncService(store, new MutableYouTube(), new FakeCalendarGateway(), clock, logger);
+    const second = new SyncService(store, new MutableYouTube(), new FakeCalendarGateway(), clock, logger);
+    const queued = await first.queueSubscription(user.id, subscription.id);
+
+    const results = await Promise.all([
+      first.runTargeted(queued.run.id),
+      second.runTargeted(queued.run.id),
+    ]);
+
+    expect(results.map(({ status }) => status).sort()).toEqual(['SKIPPED', 'SUCCESS']);
+    expect(store.syncRuns.find((run) => run.id === queued.run.id)).toMatchObject({
+      status: 'SUCCESS',
+    });
+    expect(store.syncTargets.filter((target) => target.runId === queued.run.id)).toHaveLength(1);
+  });
+
   it('classifies a targeted SyncRun claim database failure without retaining the cause', async () => {
     const service = new SyncService(
       new ClaimFailingStore(),

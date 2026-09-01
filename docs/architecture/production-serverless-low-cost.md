@@ -21,7 +21,7 @@ flowchart LR
   HttpApi --> ApiLambda[API Lambda]
   ApiLambda --> Queue[SQS sync jobs]
   Queue --> WorkerLambda[Worker Lambda]
-  Scheduler[EventBridge Scheduler] --> WorkerLambda
+  Scheduler[EventBridge Scheduler] --> Queue
   ApiLambda --> Pooler[Supavisor transaction pooler]
   WorkerLambda --> Pooler
   Pooler --> Postgres[(Supabase Postgres app schema)]
@@ -45,7 +45,7 @@ flowchart LR
 | API compute        | ECS Fargate 1 task        | Lambda、provisioned concurrency 0     | idle compute費を除去       |
 | application DB     | RDS MySQL Single-AZ       | Supabase Postgres Free                | AuthとDBのprojectを統合    |
 | manual/initial job | SQS → Pipe → Fargate task | SQS → Lambda event source             | Pipe/ECS task起動を除去    |
-| scheduled job      | Scheduler → Fargate task  | Scheduler → Worker Lambda             | 同じ1時間周期を維持        |
+| scheduled job      | Scheduler → Fargate task  | Scheduler → SQS → Worker Lambda       | 同じ1時間周期を維持        |
 | migration          | one-off ECS task          | protected GitHub Actions job          | migration専用computeを除去 |
 | rate limit         | 1 processのmemory store   | API Gateway throttle + DynamoDB store | Lambda横断で一貫させる     |
 | outbound           | task public IPv4          | Lambdaのpublic AWS network            | VPC/NAT/public IPv4不要    |
@@ -59,7 +59,7 @@ production full stackは未deployで、現時点のAWS production resourceはECR
 1. `createApp(env, container)`と既存route/middlewareを維持する。
 2. `server.ts`はlocal/ECS互換entry pointとして残し、API Gateway payload v2をExpressへ渡すLambda handlerを追加する。実装候補は保守されているExpress用adapter（`@codegenie/serverless-express`等）で、独自HTTP変換は作らない。
 3. env、Prisma client、JWKS cache、Google/YouTube gateway、Secret取得結果はhandler外で初期化し、warm invocationで再利用する。API handler終了ごとの`$disconnect()`は禁止する。
-4. API Lambdaはx86_64、512 MiB、timeout 29秒、reserved concurrency 5から開始する。Prisma engine packagingを安定させてからARM64を別最適化として評価する。
+4. API Lambdaはx86_64、512 MiB、timeout 29秒、reserved concurrencyを設定せずaccount unreserved poolを使う。HTTP APIの50 rps / 100 burst throttleとDynamoDBの共有rate limitを維持し、Prisma engine packagingを安定させてからARM64を別最適化として評価する。
 5. API Gateway custom domain `api.oshi-schedule.com`、ACM、Route 53 Alias、CORS origin、request ID、安全なaccess logを維持する。
 
 ### Lambda化でそのままでは維持できない点
@@ -74,14 +74,14 @@ production full stackは未deployで、現時点のAWS production resourceはECR
 ### Targeted worker
 
 - Standard SQSとsync DLQ、message bodyの`syncRunId`、DB上のatomic claim、heartbeat、stale recoveryを維持する。
-- Lambda event source mappingはbatch size 1、`ReportBatchItemFailures`、maximum concurrency 1から開始する。
+- Lambda event source mappingはbatch size 1、`ReportBatchItemFailures`、maximum concurrency 2で開始する。API/Workerのreserved concurrencyは使わない。account quotaが小さい間も、APIが一時的にunreserved poolを使い切った場合はWorkerをthrottleしてSQS retryに戻るため、同期jobは失われない。
 - Lambda handlerは既存`runTargeted(syncRunId)`を呼ぶ。retryable infrastructure failureはthrow/failed itemとしてSQS retryへ返し、terminal business resultは正常ackする。現行CLIのexit codeだけではLambda retryを制御できないため明示変換する。
 - deliveryは引き続きat-least-onceである。SyncRun claim、active-run dedupe、SyncLease fencing、deterministic Calendar event IDを削らない。
 - timeoutは最大14分、queue visibility timeoutは少なくとも90分、redriveは3回を初期値とする。実測p95が10分を超えたら、Lambda timeoutを延ばすのではなくchannel/subscription単位fan-outへ移る。
 
 ### Scheduled worker
 
-- EventBridge Scheduler `rate(1 hour)`から同じWorker Lambdaを非同期invokeする。
+- EventBridge Scheduler `rate(1 hour)`は`{kind:"scheduled"}`を同じsync SQSへ送る。Worker LambdaはSQS payloadを検証して、targeted runまたは`runPendingManual()`後の`runScheduled()`を実行する。SchedulerがWorkerを直接invokeしないため、manual/initial/periodicの全経路がSQSのretry/DLQ/最大2並列に統一される。
 - `runPendingManual()`のorphan回収後に`runScheduled()`を実行する現行順序、maximum event age 1時間、retry 2、Scheduler DLQを維持する。
 - Lambdaの最大実行時間は15分で、現行Fargate workerの期待上限45分より短い。stagingデータで14分以内をcontract testし、duration 10分超をalarmにすることをproduction enableの必須条件とする。
 - 14分に収まらない場合の確定fallbackは、Schedulerをenumerator Lambdaへ変更し、channel/subscriptionごとのSQS messageへfan-outすること。Fargateへ戻すことを通常fallbackにしない。
@@ -134,7 +134,7 @@ MySQLとPostgreSQLを一つのmigration directoryで恒久的にdual-runしな�
 
 - Lambdaの`DATABASE_URL`はSupavisor shared poolerのtransaction mode（port 6543、TLS必須）を使う。これはSupabaseがserverless向けとする接続方式である。
 - Prisma 6.19.3はSupavisor用に`pgbouncer=true`を使い、`connection_limit=1`から開始する。PrismaClientはhandler外で1 instanceだけ生成し、invocationごとにdisconnectしない。
-- API reserved concurrency 5、Worker concurrency 1〜2に制限し、pooler/client connectionの上限を構成testにする。無制限Lambda concurrencyをDBへ接続させない。
+- Worker concurrencyはSQS event sourceの最大2、各LambdaのPrisma connection limitは1に制限する。APIはHTTP API throttleとDynamoDB共有rate limitを使い、pooler/client connectionの上限を構成testにする。account quotaが10の間も、最大2本のWorker DB connectionと短命API invocationの合計で成立し、Workerの一時throttleはSQS retryで回復する。
 - runtime role `oshi_runtime`は`app` schemaの必要なDMLだけを持つ。migration owner、`postgres`、Supabase `service_role` DB roleをruntime connectionに使わない。
 
 Supabaseはserverlessにtransaction poolerを推奨し、transaction modeではprepared statement制約がある。[Supabase接続方式](https://supabase.com/docs/guides/database/connecting-to-postgres)と[Prisma/Supavisor設定](https://docs.prisma.io/docs/orm/prisma-client/setup-and-configuration/databases-connections/pgbouncer)を契約元とする。

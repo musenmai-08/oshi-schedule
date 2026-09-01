@@ -1,4 +1,4 @@
-import type { Handler, ScheduledEvent, SQSEvent, SQSBatchResponse } from 'aws-lambda';
+import type { Handler, SQSEvent, SQSBatchResponse } from 'aws-lambda';
 import { createRuntime } from '@oshi-schedule/api/runtime';
 import { loadLambdaRuntimeEnvironment } from '@oshi-schedule/api/lambda-env';
 import { summarizeScheduledResults, workerFailureFrom } from './scheduled-worker.js';
@@ -8,12 +8,17 @@ interface WorkerRuntime {
   runTargeted(syncRunId: string): Promise<{ status: string }>;
 }
 
-type WorkerEvent = SQSEvent | ScheduledEvent<{ kind: 'scheduled' }>;
+type WorkerJob = { kind: 'scheduled' } | { syncRunId: string };
 
-const isSqsEvent = (event: WorkerEvent): event is SQSEvent => 'Records' in event;
-
-const parseSyncRunId = (body: string): string => {
+const parseWorkerJob = (body: string): WorkerJob => {
   const value = JSON.parse(body) as unknown;
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    'kind' in value &&
+    value.kind === 'scheduled'
+  )
+    return { kind: 'scheduled' };
   if (
     typeof value !== 'object' ||
     value === null ||
@@ -22,7 +27,7 @@ const parseSyncRunId = (body: string): string => {
     !/^[A-Za-z0-9_-]{8,128}$/.test(value.syncRunId)
   )
     throw new Error('Invalid sync job payload');
-  return value.syncRunId;
+  return { syncRunId: value.syncRunId };
 };
 
 const safeFailure = (event: string, error: unknown, extra: Record<string, string> = {}) => {
@@ -40,7 +45,7 @@ const safeFailure = (event: string, error: unknown, extra: Record<string, string
 };
 
 export const createWorkerLambdaHandler =
-  (getRuntime: () => Promise<WorkerRuntime>): Handler<WorkerEvent, SQSBatchResponse | void> =>
+  (getRuntime: () => Promise<WorkerRuntime>): Handler<SQSEvent, SQSBatchResponse> =>
   async (event) => {
     let runtime: WorkerRuntime;
     try {
@@ -49,23 +54,18 @@ export const createWorkerLambdaHandler =
       safeFailure('worker_initialization_failed', error, {});
       throw new Error('Worker initialization failed safely');
     }
-    if (!isSqsEvent(event)) {
-      try {
-        const summary = summarizeScheduledResults(await runtime.runScheduled());
-        process.stdout.write(
-          `${JSON.stringify({ level: 'info', event: 'scheduled_sync_completed', ...summary })}\n`,
-        );
-        return;
-      } catch (error) {
-        safeFailure('scheduled_sync_failed', error, {});
-        throw new Error('Scheduled synchronization failed safely');
-      }
-    }
-
     const batchItemFailures: Array<{ itemIdentifier: string }> = [];
     for (const record of event.Records) {
       try {
-        const result = await runtime.runTargeted(parseSyncRunId(record.body));
+        const job = parseWorkerJob(record.body);
+        if ('kind' in job) {
+          const summary = summarizeScheduledResults(await runtime.runScheduled());
+          process.stdout.write(
+            `${JSON.stringify({ level: 'info', event: 'scheduled_sync_completed', ...summary })}\n`,
+          );
+          continue;
+        }
+        const result = await runtime.runTargeted(job.syncRunId);
         process.stdout.write(
           `${JSON.stringify({
             level: result.status === 'FAILED' ? 'warn' : 'info',
@@ -76,7 +76,7 @@ export const createWorkerLambdaHandler =
         );
       } catch (error) {
         batchItemFailures.push({ itemIdentifier: record.messageId });
-        safeFailure('targeted_sync_failed', error, { messageId: record.messageId });
+        safeFailure('sync_job_failed', error, { messageId: record.messageId });
       }
     }
     return { batchItemFailures };

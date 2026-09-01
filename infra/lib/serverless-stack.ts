@@ -179,7 +179,6 @@ export class ServerlessOshiScheduleStack extends Stack {
       architecture: lambda.Architecture.X86_64,
       memorySize: 512,
       timeout: Duration.minutes(14),
-      reservedConcurrentExecutions: 1,
       logGroup: new logs.LogGroup(this, 'WorkerLogGroup', {
         logGroupName: `/oshi-schedule/${isStagingPreview ? 'staging-serverless' : config.environmentName}/worker`,
         retention: logRetention,
@@ -193,6 +192,7 @@ export class ServerlessOshiScheduleStack extends Stack {
     workerFunction.addEventSource(
       new lambdaEventSources.SqsEventSource(syncQueue, {
         batchSize: 1,
+        maxConcurrency: 2,
         reportBatchItemFailures: true,
       }),
     );
@@ -205,7 +205,6 @@ export class ServerlessOshiScheduleStack extends Stack {
       architecture: lambda.Architecture.X86_64,
       memorySize: 512,
       timeout: Duration.seconds(29),
-      reservedConcurrentExecutions: 5,
       logGroup: new logs.LogGroup(this, 'ApiLogGroup', {
         logGroupName: `/oshi-schedule/${isStagingPreview ? 'staging-serverless' : config.environmentName}/api`,
         retention: logRetention,
@@ -266,7 +265,7 @@ export class ServerlessOshiScheduleStack extends Stack {
       scheduleName: `${resourcePrefix}-hourly-worker`,
       schedule: scheduler.ScheduleExpression.rate(Duration.hours(1)),
       enabled: config.workerScheduleEnabled,
-      target: new schedulerTargets.LambdaInvoke(workerFunction, {
+      target: new schedulerTargets.SqsSendMessage(syncQueue, {
         input: scheduler.ScheduleTargetInput.fromObject({ kind: 'scheduled' }),
         deadLetterQueue: schedulerDlq,
         retryAttempts: 2,
@@ -351,7 +350,9 @@ export class ServerlessOshiScheduleStack extends Stack {
           abortIncompleteMultipartUploadAfter: Duration.days(1),
         },
       ],
-      removalPolicy: RemovalPolicy.RETAIN,
+      // Preview rollback must not leave an empty named bucket that prevents the
+      // next CloudFormation create. Production backups remain retained.
+      removalPolicy,
       autoDeleteObjects: false,
     });
 

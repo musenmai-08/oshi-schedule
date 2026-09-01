@@ -1,4 +1,4 @@
-import type { ScheduledEvent, SQSEvent } from 'aws-lambda';
+import type { SQSEvent } from 'aws-lambda';
 import { describe, expect, it, vi } from 'vitest';
 import { createWorkerLambdaHandler } from './lambda.js';
 
@@ -45,26 +45,12 @@ describe('Worker Lambda handler', () => {
     expect(response).toEqual({ batchItemFailures: [{ itemIdentifier: 'message-1' }] });
   });
 
-  it('runs recovery and scheduled synchronization from Scheduler without creating SQS work', async () => {
+  it('runs recovery and scheduled synchronization from its SQS job', async () => {
     const runScheduled = vi.fn(async () => [{ status: 'SUCCESS' }, { status: 'DEFERRED' }]);
     const runTargeted = vi.fn();
     const handler = createWorkerLambdaHandler(async () => ({ runTargeted, runScheduled }));
 
-    await handler(
-      {
-        version: '0',
-        id: 'event-id',
-        'detail-type': 'scheduled-sync',
-        source: 'oshi-schedule.scheduler',
-        account: '111111111111',
-        time: '2026-09-01T00:00:00Z',
-        region: 'ap-northeast-1',
-        resources: [],
-        detail: { kind: 'scheduled' },
-      } satisfies ScheduledEvent<{ kind: 'scheduled' }>,
-      {} as never,
-      () => undefined,
-    );
+    await handler(sqsEvent([JSON.stringify({ kind: 'scheduled' })]), {} as never, () => undefined);
 
     expect(runScheduled).toHaveBeenCalledOnce();
     expect(runTargeted).not.toHaveBeenCalled();
@@ -83,29 +69,15 @@ describe('Worker Lambda handler', () => {
     expect(response).toEqual({ batchItemFailures: [{ itemIdentifier: 'message-0' }] });
   });
 
-  it('sanitizes scheduler and bootstrap failures before Lambda reports them', async () => {
+  it('sanitizes scheduled-job and bootstrap failures before Lambda reports them', async () => {
     const write = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     const scheduled = createWorkerLambdaHandler(async () => ({
       runTargeted: vi.fn(),
       runScheduled: vi.fn().mockRejectedValue(new Error('refresh-token-should-not-be-logged')),
     }));
     await expect(
-      scheduled(
-        {
-          version: '0',
-          id: 'event-id',
-          'detail-type': 'scheduled-sync',
-          source: 'test',
-          account: '111111111111',
-          time: '2026-09-01T00:00:00Z',
-          region: 'ap-northeast-1',
-          resources: [],
-          detail: { kind: 'scheduled' },
-        } satisfies ScheduledEvent<{ kind: 'scheduled' }>,
-        {} as never,
-        () => undefined,
-      ),
-    ).rejects.toThrow('Scheduled synchronization failed safely');
+      scheduled(sqsEvent([JSON.stringify({ kind: 'scheduled' })]), {} as never, () => undefined),
+    ).resolves.toEqual({ batchItemFailures: [{ itemIdentifier: 'message-0' }] });
     expect(write).toHaveBeenCalledWith(
       expect.not.stringContaining('refresh-token-should-not-be-logged'),
     );

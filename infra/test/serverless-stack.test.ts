@@ -97,17 +97,15 @@ describe('ServerlessOshiScheduleStack', () => {
     template.resourceCountIs('AWS::Scheduler::Schedule', 1);
   }, 15_000);
 
-  it('keeps bounded concurrency, SQS retry/DLQ and the 14-minute worker contract', () => {
+  it('keeps account-wide Lambda concurrency unreserved and bounds worker delivery through SQS', () => {
     const template = render();
     template.hasResourceProperties('AWS::Lambda::Function', {
       FunctionName: 'oshi-schedule-production-api',
-      ReservedConcurrentExecutions: 5,
       Timeout: 29,
       Environment: { Variables: { RATE_LIMIT_TABLE_NAME: Match.anyValue() } },
     });
     template.hasResourceProperties('AWS::Lambda::Function', {
       FunctionName: 'oshi-schedule-production-worker',
-      ReservedConcurrentExecutions: 1,
       Timeout: 840,
     });
     template.hasResourceProperties('AWS::SQS::Queue', {
@@ -117,8 +115,19 @@ describe('ServerlessOshiScheduleStack', () => {
     });
     template.hasResourceProperties('AWS::Lambda::EventSourceMapping', {
       BatchSize: 1,
+      ScalingConfig: { MaximumConcurrency: 2 },
       FunctionResponseTypes: ['ReportBatchItemFailures'],
     });
+    template.hasResourceProperties('AWS::Scheduler::Schedule', {
+      Target: Match.objectLike({
+        Arn: { 'Fn::GetAtt': [Match.stringLikeRegexp('SyncJobQueue'), 'Arn'] },
+        Input: '{"kind":"scheduled"}',
+      }),
+    });
+    const functions = Object.values(
+      render().toJSON().Resources as Record<string, { Type?: string; Properties?: Record<string, unknown> }>,
+    ).filter((resource) => resource.Type === 'AWS::Lambda::Function');
+    for (const fn of functions) expect(fn.Properties?.ReservedConcurrentExecutions).toBeUndefined();
   }, 15_000);
 
   it('stores seven daily backup generations in a private encrypted S3 bucket', () => {
@@ -139,7 +148,16 @@ describe('ServerlessOshiScheduleStack', () => {
         RestrictPublicBuckets: true,
       },
     });
-  }, 15_000);
+  });
+
+  it('destroys an empty staging-preview backup bucket on rollback but retains production backups', () => {
+    expect(
+      render().toJSON().Resources.DatabaseBackupBucket.DeletionPolicy,
+    ).toBe('Retain');
+    expect(
+      renderStagingPreview().toJSON().Resources.DatabaseBackupBucket.DeletionPolicy,
+    ).toBe('Delete');
+  });
 
   it('uses Lambda-native runtime limits and keeps the legacy image only as a retained repository', () => {
     const template = render();

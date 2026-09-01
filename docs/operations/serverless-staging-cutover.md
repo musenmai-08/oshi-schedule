@@ -22,13 +22,22 @@
 
 1. `serverless-deploy.mjs diff staging`でLambda API/Worker、HTTP API、SQS/DLQ、Scheduler、DynamoDB、S3 backup、Amplifyだけが差分であることを確認する。
 2. RDS/ECS/VPC/VPC Link/Cloud Map/Pipe/Public IPv4の新規作成が0であること、既存旧resourceのDELETE/REPLACEが0であることを確認する。
-3. deploy後、Schedulerは`DISABLED`のまま、API `/health`/`ready`、Lambda reserved concurrency、SQS event source、Secret exact ARN、log retentionを確認する。
+3. deploy後、Schedulerは`DISABLED`のまま、API `/health`/`ready`、API/Workerのreserved concurrencyが未設定、SQS event sourceのbatch size `1`・maximum concurrency `2`、Secret exact ARN、log retentionを確認する。Scheduler有効時はWorkerを直接invokeせず、`{kind:"scheduled"}` messageをsync queueへ送ることを確認する。
 4. OAuth、manual sync、duplicate delivery、Calendar CRUD、account deletion、14分以内のscheduled syncを順に受入する。
 5. 日次backupを手動dispatchし、S3 object、暗号化、restore list、7日lifecycleを確認する。Supabase Authがdump対象外であることも記録する。
 
 ## rollback
 
 cutover前またはdata write前はdeployを中止する。cutover後はScheduler/event sourceを停止し、Amplify/API originを旧stagingへ戻す。PostgreSQL dataをMySQLへ自動逆変換しない。旧RDS/ECSは受入完了後30日間sleep/disabledで保持し、削除はresource別承認にする。
+
+### 初回preview rollback後の再作成
+
+staging previewのempty backup bucketはrollback時に`DELETE`となるようtemplateを設定する。productionのbucketだけは`RETAIN`する。既に`ROLLBACK_COMPLETE`で`DELETE_SKIPPED`となったnamed bucketは、削除禁止のため自動createでは再利用しない。再deploy前に次を別承認のwriteとして行う。
+
+1. bucketが空、SSE-S3、public access block、7日lifecycleであることをread-only確認する。
+2. `ROLLBACK_COMPLETE` stackを削除する。この操作はretained bucketを削除しない。
+3. `DatabaseBackupBucket`のresource import change setで同じphysical bucketを新stackへimportし、import後のdiffが0であることを確認する。
+4. import成功後だけpreview deployを再開する。import失敗時はbucketを削除・名前変更せず停止する。
 
 ## hard blockers
 
