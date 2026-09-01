@@ -2,7 +2,7 @@ import { App } from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import { describe, expect, it } from 'vitest';
 import type { DeploymentConfig } from '../lib/config.js';
-import { ServerlessOshiScheduleStack } from '../lib/serverless-stack.js';
+import { lambdaBundling, ServerlessOshiScheduleStack } from '../lib/serverless-stack.js';
 
 const account = '111111111111';
 const secret = (suffix: string) =>
@@ -79,6 +79,12 @@ const renderStagingPreview = () => {
 };
 
 describe('ServerlessOshiScheduleStack', () => {
+  it('supplies Node createRequire to ESM Lambda bundles with CommonJS dependencies', () => {
+    expect(lambdaBundling.format).toBeDefined();
+    expect(lambdaBundling.banner).toContain('createRequire');
+    expect(lambdaBundling.banner).toContain('const require');
+  });
+
   it('eliminates the legacy network, database, ECS and Pipe resources', () => {
     const template = render();
     for (const type of [

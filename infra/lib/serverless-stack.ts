@@ -49,11 +49,15 @@ const findRepositoryFile = (relative: string) => {
   return path;
 };
 
-const lambdaBundling: lambdaNodejs.BundlingOptions = {
+export const lambdaBundling: lambdaNodejs.BundlingOptions = {
   format: lambdaNodejs.OutputFormat.ESM,
   target: 'node22',
   minify: true,
   sourceMap: true,
+  // Prisma and serverless-express retain CommonJS dynamic requires. In an ESM
+  // Lambda bundle, supply Node's scoped require rather than esbuild's throwing
+  // browser fallback (for example, dynamic require of "util").
+  banner: 'import { createRequire } from "node:module";const require = createRequire(import.meta.url);',
   externalModules: ['@prisma/client', '.prisma/client'],
   commandHooks: {
     beforeBundling: () => [],
