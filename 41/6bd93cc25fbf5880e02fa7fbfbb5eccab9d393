@@ -1,0 +1,32 @@
+scripts/aws/staging-context.mjs
+  s_3a50bad78ea1cd::t_a7d137672ce76e 23,138-153
+infra/lib/config.ts
+  s_3a50bad78ea1cd::t_a7d137672ce76e 59-64,391,471-494
+  s_3a50bad78ea1cd::t_0fb00350d924ba 495
+infra/test/config.test.ts
+  s_3a50bad78ea1cd::t_33729b3c9fdd10 257-269
+infra/lib/oshi-schedule-stack.ts
+  s_3a50bad78ea1cd::t_a7d137672ce76e 1045-1047
+scripts/aws/staging-context.test.mjs
+  s_3a50bad78ea1cd::t_a7d137672ce76e 32,179
+infra/config/staging-deploy.json
+  s_3a50bad78ea1cd::t_a7d137672ce76e 12
+infra/test/oshi-schedule-stack.test.ts
+  s_3a50bad78ea1cd::t_a7d137672ce76e 71,288-291
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "416bd93cc25fbf5880e02fa7fbfbb5eccab9d393",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
