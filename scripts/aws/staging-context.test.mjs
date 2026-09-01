@@ -22,6 +22,7 @@ const repositoryContext = {
   environment: 'staging',
   deployReady: true,
   bootstrapOnly: false,
+  runtimeArchitecture: 'legacy-ecs',
   awsAccount: '123456789012',
   awsRegion: 'ap-northeast-1',
   hostedZoneId: 'Z0123456789ABCDEF',

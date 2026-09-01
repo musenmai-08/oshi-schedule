@@ -8,6 +8,8 @@ import {
 export type EnvironmentName = 'staging' | 'production';
 export type SyncPipeDesiredState = 'STOPPED' | 'RUNNING';
 export type AmplifyConnectionPhase = 'manual' | 'domain-detached' | 'detached' | 'connected';
+export type RuntimeArchitecture = 'serverless' | 'legacy-ecs';
+export type ServerlessStagingMode = 'preview' | 'cutover';
 
 export const PRODUCTION_WEB_DOMAIN = 'oshi-schedule.com';
 export const PRODUCTION_API_DOMAIN = 'api.oshi-schedule.com';
@@ -45,6 +47,8 @@ export interface DeploymentConfig {
   region: string;
   deployReady: boolean;
   bootstrapOnly: boolean;
+  runtimeArchitecture: RuntimeArchitecture;
+  serverlessStagingMode: ServerlessStagingMode;
   apiDesiredCount: number;
   syncPipeDesiredState: SyncPipeDesiredState;
   applicationActivated: boolean;
@@ -61,6 +65,9 @@ export interface DeploymentConfig {
   googleClientSecretArn?: string;
   youtubeApiKeySecretArn?: string;
   tokenEncryptionKeysSecretArn?: string;
+  databaseUrlSecretArn?: string;
+  databaseMigrationUrlSecretArn?: string;
+  backupRetentionDays: number;
   monthlyBudgetUsd: number;
   githubOwner: string;
   githubRepository: string;
@@ -135,6 +142,20 @@ export const parseAmplifyConnectionPhase = (
     );
   }
   return parsed as AmplifyConnectionPhase;
+};
+
+export const parseRuntimeArchitecture = (value: unknown): RuntimeArchitecture => {
+  const parsed = value === undefined ? 'serverless' : value;
+  if (parsed !== 'serverless' && parsed !== 'legacy-ecs')
+    throw new Error('CDK context runtimeArchitecture must be serverless or legacy-ecs');
+  return parsed;
+};
+
+export const parseServerlessStagingMode = (value: unknown): ServerlessStagingMode => {
+  const parsed = value === undefined ? 'preview' : value;
+  if (parsed !== 'preview' && parsed !== 'cutover')
+    throw new Error('CDK context serverlessStagingMode must be preview or cutover');
+  return parsed;
 };
 
 const requiredForDeploy = (config: DeploymentConfig, name: keyof DeploymentConfig): void => {
@@ -274,7 +295,7 @@ export const validateProductionIsolation = (
     throw new Error('production googleClientId is malformed');
   if (config.alertEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(config.alertEmail))
     throw new Error('production alertEmail is malformed');
-  if (!/^sha256:[0-9a-f]{64}$/.test(config.imageTag))
+  if (config.runtimeArchitecture === 'legacy-ecs' && !/^sha256:[0-9a-f]{64}$/.test(config.imageTag))
     throw new Error('production imageTag must be an immutable sha256 digest');
   if (config.account && config.certificateArn) {
     const certificatePattern = new RegExp(
@@ -303,6 +324,23 @@ const validateApplicationSecretArns = (config: DeploymentConfig): void => {
       );
     }
   }
+
+  for (const [contextKey, suffix] of [
+    ['databaseUrlSecretArn', 'app/database-runtime-url'],
+    ['databaseMigrationUrlSecretArn', 'app/database-migration-url'],
+  ] as const) {
+    const value = config[contextKey];
+    if (!value) continue;
+    const expectedSecretName = `oshi-schedule-${config.environmentName}/${suffix}`;
+    const pattern = new RegExp(
+      `^arn:(?:aws|aws-us-gov|aws-cn):secretsmanager:${escapeRegularExpression(config.region)}:` +
+        `${escapeRegularExpression(config.account)}:secret:${escapeRegularExpression(expectedSecretName)}-[A-Za-z0-9]{6}$`,
+    );
+    if (!pattern.test(value))
+      throw new Error(
+        `CDK context ${contextKey} must be the complete ARN for ${expectedSecretName}`,
+      );
+  }
 };
 
 export const loadConfig = (app: App): DeploymentConfig => {
@@ -320,6 +358,11 @@ export const loadConfig = (app: App): DeploymentConfig => {
       'bootstrapOnly',
       app.node.tryGetContext('bootstrapOnly'),
       false,
+    ),
+    runtimeArchitecture: parseRuntimeArchitecture(app.node.tryGetContext('runtimeArchitecture')),
+    serverlessStagingMode: parseServerlessStagingMode(
+      app.node.tryGetContext('serverlessStagingMode') ??
+        (environmentName === 'production' ? 'cutover' : 'preview'),
     ),
     apiDesiredCount: parseNonNegativeIntegerContext(
       'apiDesiredCount',
@@ -348,12 +391,19 @@ export const loadConfig = (app: App): DeploymentConfig => {
     googleClientSecretArn: optionalString(app, 'googleClientSecretArn'),
     youtubeApiKeySecretArn: optionalString(app, 'youtubeApiKeySecretArn'),
     tokenEncryptionKeysSecretArn: optionalString(app, 'tokenEncryptionKeysSecretArn'),
+    databaseUrlSecretArn: optionalString(app, 'databaseUrlSecretArn'),
+    databaseMigrationUrlSecretArn: optionalString(app, 'databaseMigrationUrlSecretArn'),
+    backupRetentionDays: parseNonNegativeIntegerContext(
+      'backupRetentionDays',
+      app.node.tryGetContext('backupRetentionDays'),
+      7,
+    ),
     monthlyBudgetUsd: Number(
       app.node.tryGetContext('monthlyBudgetUsd') ??
         app.node.tryGetContext(
           environmentName === 'staging' ? 'stagingMonthlyBudgetUsd' : 'productionMonthlyBudgetUsd',
         ) ??
-        (environmentName === 'staging' ? 25 : 75),
+        (environmentName === 'staging' ? 25 : 20),
     ),
     githubOwner: optionalString(app, 'githubOwner') ?? 'REQUIRED_GITHUB_OWNER',
     githubRepository: optionalString(app, 'githubRepository') ?? 'REQUIRED_GITHUB_REPOSITORY',
@@ -395,9 +445,19 @@ export const loadConfig = (app: App): DeploymentConfig => {
   ) {
     throw new Error('rdsBackupRetentionDays must be an integer between 0 and 35');
   }
-  if (environmentName === 'production' && config.rdsBackupRetentionDays !== 7) {
+  if (
+    environmentName === 'production' &&
+    config.runtimeArchitecture === 'legacy-ecs' &&
+    config.rdsBackupRetentionDays !== 7
+  ) {
     throw new Error('production requires rdsBackupRetentionDays=7');
   }
+  if (config.runtimeArchitecture === 'serverless' && config.backupRetentionDays !== 7)
+    throw new Error('serverless architecture requires backupRetentionDays=7');
+  if (environmentName === 'production' && config.runtimeArchitecture !== 'serverless')
+    throw new Error('production requires runtimeArchitecture=serverless');
+  if (environmentName === 'production' && config.serverlessStagingMode !== 'cutover')
+    throw new Error('production requires serverlessStagingMode=cutover');
   if (environmentName === 'production' && config.amplifyConnectionPhase !== 'connected') {
     throw new Error('production requires amplifyConnectionPhase=connected');
   }
@@ -433,6 +493,9 @@ export const loadConfig = (app: App): DeploymentConfig => {
       'googleClientSecretArn',
       'youtubeApiKeySecretArn',
       'tokenEncryptionKeysSecretArn',
+      ...(config.runtimeArchitecture === 'serverless'
+        ? (['databaseUrlSecretArn', 'databaseMigrationUrlSecretArn'] as const)
+        : []),
     ] as const) {
       requiredForDeploy(config, key);
     }
@@ -445,7 +508,7 @@ export const loadConfig = (app: App): DeploymentConfig => {
     ) {
       throw new Error('CDK deploy requires githubOwner and githubRepository');
     }
-    if (config.imageTag === 'bootstrap-required') {
+    if (config.runtimeArchitecture === 'legacy-ecs' && config.imageTag === 'bootstrap-required') {
       throw new Error('CDK deploy requires an existing immutable imageTag');
     }
   }

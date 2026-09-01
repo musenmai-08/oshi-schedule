@@ -2,9 +2,9 @@
 
 ## Status
 
-- Decision: **productionはSupabase Pro + AWS Lambda構成を推奨する**
-- Documented: 2026-08-31
-- Implementation: 未着手
+- Decision: **Supabase Free + AWS Lambda + S3 7日backupを正式採用する**
+- Documented: 2026-09-01
+- Implementation: 実装完了、staging cutover前
 - Safety: 現行production full deployは中止を維持する。AWS/Supabase write、DB migration、deployはこの文書の承認に含めない。
 
 この決定を実装した時点で、ADR 0002（ECS API）、0003（Fargate Worker）、0004（RDS MySQL）はproductionについて置き換える。stagingの現行構成には直ちに適用しない。
@@ -34,7 +34,7 @@ flowchart LR
 - Fargate WorkerをSQS event sourceとSchedulerから起動するLambdaへ変更する。
 - application DBをproduction Supabase Authと同一projectのPostgresへ置き、RDS、VPC、VPC Link、Cloud Map、ECS、public IPv4をproduction templateから除く。
 - Prismaは維持するが、MySQLからPostgreSQLへ一度だけ移行する。
-- productionはSupabase **Pro**を使う。Freeはbackup不在とinactivity pauseのため一般公開productionには採用しない。
+- productionはSupabase **Free**を使い、`app` schemaの日次dumpを暗号化S3へ7日保持する。Supabase Authは独自dump対象外で、Free projectのpause可能性を運用上の制約として受け入れる。
 
 ## 現行productionとの差分
 
@@ -43,7 +43,7 @@ flowchart LR
 | Web                | Amplify                   | Amplifyを維持                         | 変更なし                   |
 | API edge           | HTTP API → VPC Link       | HTTP API → Lambda proxy               | VPC Link/Cloud Mapを除去   |
 | API compute        | ECS Fargate 1 task        | Lambda、provisioned concurrency 0     | idle compute費を除去       |
-| application DB     | RDS MySQL Single-AZ       | Supabase Postgres Pro                 | AuthとDBのprojectを統合    |
+| application DB     | RDS MySQL Single-AZ       | Supabase Postgres Free                | AuthとDBのprojectを統合    |
 | manual/initial job | SQS → Pipe → Fargate task | SQS → Lambda event source             | Pipe/ECS task起動を除去    |
 | scheduled job      | Scheduler → Fargate task  | Scheduler → Worker Lambda             | 同じ1時間周期を維持        |
 | migration          | one-off ECS task          | protected GitHub Actions job          | migration専用computeを除去 |
@@ -158,23 +158,11 @@ Supabaseはserverlessにtransaction poolerを推奨し、transaction modeではp
 - SecretはLambda environmentへCloudFormationで平文展開せず、function roleにexact ARNのreadだけを与え、initialization時にSecrets Manager/SSMから取得してwarm cacheする。log sanitizerとtoken非表示testを維持する。
 - Supabase application tableは非公開`app` schemaに置く。Data APIをアプリDBアクセスに使わず、publishable keyからapp tableへ到達できないdeny testを追加する。
 
-## Supabase FreeとPro
+## Supabase Freeの採用条件
 
-| 項目       | Free                           | Pro                                    | production判断                    |
-| ---------- | ------------------------------ | -------------------------------------- | --------------------------------- |
-| 月額       | $0                             | $25、1 Micro分の$10 compute credit込み | Pro                               |
-| DB容量     | 500 MB                         | 8 GB included                          | Proに余裕あり                     |
-| inactivity | 低activityが7日続くとpause対象 | paid projectは自動pauseなし            | Freeは定期同期/ログイン停止リスク |
-| backup     | automatic backupなし           | daily backup、7日retention             | 現行保持方針に近いのはPro         |
-| log閲覧    | 1日                            | 7日                                    | app log 30日とは別に扱う          |
-| PITR       | なし                           | 別add-on、7日で約$100/月かつSmall以上  | 初期productionでは無効            |
-| support    | community                      | email support                          | Pro                               |
+正式採用はFreeである。低activity projectのpause、自動backup/PITRなし、platform logの短い保持、community supportという制約を受け入れる。その代わり、非公開`app` schemaだけを毎日PostgreSQL 17 custom-formatでdumpし、S3 lifecycleで7日保持する。最大RPOは24時間であり、Supabase Authはこのdumpに含まれない。backup jobをpause回避のkeep-aliveには使わず、pause時は運営者が復旧する。
 
-根拠は[Supabase pricing](https://supabase.com/pricing)、[project pausing](https://supabase.com/docs/guides/platform/free-project-pausing)、[database backups](https://supabase.com/docs/guides/platform/backups)である。
-
-推奨は**Pro + daily backup 7日、PITR add-onなし**。この選択には、現行Privacy/backup runbookの「RDS自動backup/PITR 7日」を「Supabase daily backupを7日保持、PITRは未契約」へ正確に変更するowner承認が必要である。RPO目標も5分から最大24時間へ変更する。RPO 5分を維持するならPITR約$100/月とSmall computeが必要になり、今回の低コスト目的に合わない。SupabaseのAPI/Database/Auth等のplatform logはProで7日閲覧できる一方、Lambda/API Gatewayのapplication logは現行方針どおりCloudWatchで30日保持する。Privacyと削除runbookでは両者を同じ保持期間として記載しない。
-
-Freeを選ぶ場合は、自動backupなし、pause可能性、restore運用をTerms/Privacyとstatus policyへ明記し、別の暗号化off-site `pg_dump`、復元演習、失敗alarmを実装する必要がある。backup jobでFreeのpauseを回避する設計にはしない。
+RPO 24時間、Authの独自backup不在、またはpauseが許容できなくなった場合は、一般公開を止めず場当たり的に回避せず、Supabase Pro/PITRまたは別の継続backupを先に設計・承認する。根拠は[Supabase pricing](https://supabase.com/pricing)、[project pausing](https://supabase.com/docs/guides/platform/free-project-pausing)、[database backups](https://supabase.com/docs/guides/platform/backups)である。
 
 ## 月額見込み
 
@@ -182,7 +170,7 @@ Freeを選ぶ場合は、自動backupなし、pause可能性、restore運用をT
 
 | Service                | Free tierを保守的に除いた月額目安 | 備考                                                      |
 | ---------------------- | --------------------------------: | --------------------------------------------------------- |
-| Supabase Pro           |                            $25.00 | Micro compute credit、daily backup 7日                    |
+| Supabase Free          |                             $0.00 | app schemaは別途S3へ日次backup                             |
 | Amplify Hosting/SSR    |                      $0.50〜$3.00 | build、storage、transfer、SSR従量                         |
 | API Gateway HTTP API   |                      $0.00〜$0.20 | 約$1/million request帯                                    |
 | Lambda API/Worker      |                      $0.00〜$1.00 | free allowance内なら0。provisioned concurrencyなし        |
@@ -191,9 +179,8 @@ Freeを選ぶ場合は、自動backupなし、pause可能性、restore運用をT
 | Route 53 + DNS query   |                      $0.50〜$0.70 | hosted zone $0.50/月                                      |
 | CloudWatch alarms/logs |                      $0.50〜$2.00 | log量とalarm数による                                      |
 | ECR                    |                      $0.00〜$0.20 | rollback期間だけ既存imageを保持                           |
-| **合計**               |                  **約$29〜35/月** | data transfer上振れを除く                                 |
-
-Supabase Freeなら約$4〜10/月まで下がるが、backupとavailabilityを失うためproductionには推奨しない。Pro + PITRなら少なくとも約$130/月となる。
+| S3 backup              |                      $0.00〜$0.10 | 7世代、低容量のapp schema                                  |
+| **合計**               |                   **約$4〜10/月** | data transfer上振れを除く                                 |
 
 AWSの根拠は[Lambda pricing](https://aws.amazon.com/lambda/pricing/)、[HTTP API pricing](https://aws.amazon.com/api-gateway/pricing/)、[SQS pricing](https://aws.amazon.com/sqs/pricing/)、[EventBridge pricing](https://aws.amazon.com/eventbridge/pricing/)、[Secrets Manager pricing](https://aws.amazon.com/secrets-manager/pricing/)、[Amplify pricing](https://aws.amazon.com/amplify/pricing/)、[Route 53 pricing](https://aws.amazon.com/route53/pricing/)を使う。
 
@@ -243,9 +230,9 @@ AWSの根拠は[Lambda pricing](https://aws.amazon.com/lambda/pricing/)、[HTTP 
 
 ## 実装ロードマップとrollback
 
-### Phase 0: owner decision
+### Phase 0: owner decision（完了）
 
-- Supabase Pro、daily backup 7日、PITRなし、RPO最大24時間を承認する。
+- Supabase Free、S3 daily backup 7日、PITRなし、RPO最大24時間を承認済み。
 - Lambda scheduled runが14分を超えた場合にfan-outへ進むことを承認する。
 - serverless production CDK diffの許容resourceを確定する。現行ECS/RDS full deployは引き続き禁止する。
 
@@ -255,7 +242,7 @@ AWSの根拠は[Lambda pricing](https://aws.amazon.com/lambda/pricing/)、[HTTP 
 - raw SQLとintegration testをPostgreSQLへ移す。
 - staging data ETL/dry-runとrollback exportを作る。
 
-Rollback: staging MySQLを変更せず新Postgresへcopyし、cutover前は現行staging imageへ戻せる。dual-writeは行わない。
+Rollback: staging MySQLを変更せず新Postgresへcopyし、previewは現行stagingのdomain/resourceを変更しない。edge cutover前は現行staging imageへ戻せる。dual-writeは行わない。
 
 ### Phase 2: Lambda runtime
 
@@ -266,7 +253,9 @@ Rollback: API Gateway integrationをversioned Lambda alias間で戻す。DB sche
 
 ### Phase 3: staging cutover
 
-- staging Supabase Postgresへmigration/ETLし、API/WorkerをLambdaで受入する。
+- 既存`oshi-schedule-staging` stackとは別の`oshi-schedule-staging-serverless` preview stackへ、Supabase Postgres migration/ETL後のAPI/Workerを出す。previewは既存Amplify、custom domain、ECR、RDS/ECS/Pipeを参照・変更しない。
+- previewのexecute-api URLでLambda API/Workerを受入し、必要なCORS originだけ既存staging Webを許可する。
+- edge cutoverは受入後の別工程とする。既存stackから旧resourceを自動deleteするCDK updateを行わず、resource importまたは明示的なownership移管diffをreviewしてから、domain/Amplify/APIを切り替える。
 - manual/initial/scheduled Sync、duplicate、scope、Calendar、deletion、DLQ、duration、connectionを確認する。
 - 旧RDS/ECSはrollback期間中sleep/disabledで保持し、受入後に別承認で削除する。
 
@@ -281,18 +270,18 @@ productionはまだ利用開始前なので、cutover前rollbackは「deployし�
 ### Phase 5: cleanup
 
 - 30日rollback window後に、未使用ECR/image、旧staging RDS/ECS/VPC、obsolete Secret/SSM/IAMをresourceごとの別承認で削除する。
-- Terms/Privacy、backup runbook、cost budgetをSupabase Proの実態へ更新する。
+- Terms/Privacy、backup runbook、cost budgetをSupabase Free + S3 backupの実態へ更新する。
 
 ## Deploy前のhard gate
 
-- Supabase Proとbackup/RPO方針のowner承認
+- Supabase Freeとbackup/RPO方針のowner承認（完了）
 - PostgreSQL concurrency integration test green
 - scheduled worker p95 < 10分、max < 14分
 - runtime/migrator DB role分離、app schema非公開deny test green
 - Lambda concurrency/connection budget検証
 - SQS retry/DLQ/idempotency contract green
 - serverless full diffでRDS/ECS/VPC/VPC Link/Cloud Map/Public IPv4 CREATE 0
-- monthly budgetを35〜40 USDへ見直し
+- monthly budgetを20 USDで監視
 - Terms/Privacyとbackup runbookのSupabase表現更新
-- PrivacyでSupabase platform log 7日とCloudWatch application log 30日を区別
+- PrivacyでSupabase platformとCloudWatch application logを区別
 - Google/Supabase production外部設定とHigh 2の残作業完了

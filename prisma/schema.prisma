@@ -1,21 +1,27 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
+  schemas  = ["app"]
 }
 
 enum SubscriptionStatus {
   ACTIVE
   PAUSED
+
+  @@schema("app")
 }
 
 enum BroadcastKind {
   LIVE
   PREMIERE
   UNKNOWN
+
+  @@schema("app")
 }
 
 enum BroadcastStatus {
@@ -25,6 +31,8 @@ enum BroadcastStatus {
   CANCELLED
   UNKNOWN
   UNAVAILABLE
+
+  @@schema("app")
 }
 
 enum ConnectionStatus {
@@ -32,12 +40,16 @@ enum ConnectionStatus {
   ACTIVE
   MISSING
   ERROR
+
+  @@schema("app")
 }
 
 enum SyncRunType {
   SCHEDULED
   INITIAL
   MANUAL
+
+  @@schema("app")
 }
 
 enum SyncStatus {
@@ -49,6 +61,8 @@ enum SyncStatus {
   DEFERRED
   FAILED
   SKIPPED
+
+  @@schema("app")
 }
 
 enum ChannelFetchStatus {
@@ -57,6 +71,8 @@ enum ChannelFetchStatus {
   SUCCESS
   DEFERRED
   FAILED
+
+  @@schema("app")
 }
 
 enum SyncPhaseStatus {
@@ -65,12 +81,16 @@ enum SyncPhaseStatus {
   DEFERRED
   FAILED
   SKIPPED
+
+  @@schema("app")
 }
 
 enum TargetType {
   CHANNEL
   USER
   SUBSCRIPTION
+
+  @@schema("app")
 }
 
 enum DeletionStatus {
@@ -81,11 +101,15 @@ enum DeletionStatus {
   AUTH_DELETED
   COMPLETED
   FAILED
+
+  @@schema("app")
 }
 
 enum YouTubeQuotaBucket {
   GENERAL
   SEARCH
+
+  @@schema("app")
 }
 
 /// Supabase Auth の主体とアプリ固有状態を保持する利用者。
@@ -93,10 +117,10 @@ model User {
   id                    String                    @id @default(cuid())
   supabaseUserId        String                    @unique @db.VarChar(64)
   email                 String                    @db.VarChar(320)
-  onboardingCompletedAt DateTime?                 @db.DateTime(3)
+  onboardingCompletedAt DateTime?                 @db.Timestamptz(3)
   reauthRequired        Boolean                   @default(false)
-  createdAt             DateTime                  @default(now()) @db.DateTime(3)
-  updatedAt             DateTime                  @updatedAt @db.DateTime(3)
+  createdAt             DateTime                  @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime                  @updatedAt @db.Timestamptz(3)
   credential            GoogleCredential?
   calendar              CalendarConnection?
   subscriptions         UserChannelSubscription[]
@@ -105,6 +129,7 @@ model User {
   deletionRequest       AccountDeletionRequest?
 
   @@index([email])
+  @@schema("app")
 }
 
 /// Google refresh token の認証付き暗号文。平文を保存しない。
@@ -114,10 +139,12 @@ model GoogleCredential {
   encryptedRefreshToken String   @db.Text
   keyId                 String   @db.VarChar(32)
   scopes                String   @db.Text
-  tokenUpdatedAt        DateTime @default(now()) @db.DateTime(3)
-  createdAt             DateTime @default(now()) @db.DateTime(3)
-  updatedAt             DateTime @updatedAt @db.DateTime(3)
+  tokenUpdatedAt        DateTime @default(now()) @db.Timestamptz(3)
+  createdAt             DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime @updatedAt @db.Timestamptz(3)
   user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@schema("app")
 }
 
 /// 利用者専用の Google Calendar と接続状態。
@@ -126,36 +153,39 @@ model CalendarConnection {
   userId           String           @unique
   googleCalendarId String?          @unique @db.VarChar(255)
   status           ConnectionStatus @default(NOT_CONNECTED)
-  lastCheckedAt    DateTime?        @db.DateTime(3)
-  createdAt        DateTime         @default(now()) @db.DateTime(3)
-  updatedAt        DateTime         @updatedAt @db.DateTime(3)
+  lastCheckedAt    DateTime?        @db.Timestamptz(3)
+  createdAt        DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime         @updatedAt @db.Timestamptz(3)
   user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@schema("app")
 }
 
 /// 利用者間で共有する YouTube チャンネル。
 model YouTubeChannel {
-  id               String                    @id @default(cuid())
-  youtubeChannelId String                    @unique @db.VarChar(64)
-  handle           String                    @db.VarChar(64)
-  title            String                    @db.VarChar(255)
-  thumbnailUrl     String                    @db.Text
-  channelUrl       String                    @db.Text
-  lastFetchedAt    DateTime?                 @db.DateTime(3)
-  fetchStartedAt   DateTime?                 @db.DateTime(3)
-  fetchCompletedAt DateTime?                 @db.DateTime(3)
-  lastFetchSucceededAt DateTime?             @db.DateTime(3)
-  snapshotVersion Int                        @default(0)
-  lastFetchStatus  ChannelFetchStatus         @default(NEVER)
-  nextFetchAt      DateTime?                  @db.DateTime(3)
-  etag             String?                   @db.VarChar(255)
-  createdAt        DateTime                  @default(now()) @db.DateTime(3)
-  updatedAt        DateTime                  @updatedAt @db.DateTime(3)
-  subscriptions    UserChannelSubscription[]
-  broadcasts       ScheduledBroadcast[]
+  id                   String                    @id @default(cuid())
+  youtubeChannelId     String                    @unique @db.VarChar(64)
+  handle               String                    @db.VarChar(64)
+  title                String                    @db.VarChar(255)
+  thumbnailUrl         String                    @db.Text
+  channelUrl           String                    @db.Text
+  lastFetchedAt        DateTime?                 @db.Timestamptz(3)
+  fetchStartedAt       DateTime?                 @db.Timestamptz(3)
+  fetchCompletedAt     DateTime?                 @db.Timestamptz(3)
+  lastFetchSucceededAt DateTime?                 @db.Timestamptz(3)
+  snapshotVersion      Int                       @default(0)
+  lastFetchStatus      ChannelFetchStatus        @default(NEVER)
+  nextFetchAt          DateTime?                 @db.Timestamptz(3)
+  etag                 String?                   @db.VarChar(255)
+  createdAt            DateTime                  @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime                  @updatedAt @db.Timestamptz(3)
+  subscriptions        UserChannelSubscription[]
+  broadcasts           ScheduledBroadcast[]
 
   @@index([handle])
   @@index([lastFetchedAt])
   @@index([lastFetchStatus, nextFetchAt])
+  @@schema("app")
 }
 
 /// 利用者ごとの登録・一時停止・表示用同期結果。
@@ -164,19 +194,20 @@ model UserChannelSubscription {
   userId             String
   channelId          String
   status             SubscriptionStatus @default(ACTIVE)
-  lastCalendarSyncAt DateTime?          @db.DateTime(3)
-  lastManualSyncAt   DateTime?          @db.DateTime(3)
+  lastCalendarSyncAt DateTime?          @db.Timestamptz(3)
+  lastManualSyncAt   DateTime?          @db.Timestamptz(3)
   lastSyncStatus     SyncStatus?
   lastErrorCode      String?            @db.VarChar(64)
   lastErrorMessage   String?            @db.VarChar(255)
-  createdAt          DateTime           @default(now()) @db.DateTime(3)
-  updatedAt          DateTime           @updatedAt @db.DateTime(3)
+  createdAt          DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime           @updatedAt @db.Timestamptz(3)
   user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   channel            YouTubeChannel     @relation(fields: [channelId], references: [id], onDelete: Restrict)
 
   @@unique([userId, channelId])
   @@index([userId, status])
   @@index([channelId, status])
+  @@schema("app")
 }
 
 /// YouTube video ID で共有・履歴保持するライブまたはプレミア予定。
@@ -189,20 +220,21 @@ model ScheduledBroadcast {
   status             BroadcastStatus        @default(UPCOMING)
   youtubeUrl         String                 @db.Text
   thumbnailUrl       String                 @db.Text
-  scheduledStartAt   DateTime               @db.DateTime(3)
-  endAt              DateTime               @db.DateTime(3)
+  scheduledStartAt   DateTime               @db.Timestamptz(3)
+  endAt              DateTime               @db.Timestamptz(3)
   endTimeProvisional Boolean                @default(true)
-  actualStartAt      DateTime?              @db.DateTime(3)
-  actualEndAt        DateTime?              @db.DateTime(3)
+  actualStartAt      DateTime?              @db.Timestamptz(3)
+  actualEndAt        DateTime?              @db.Timestamptz(3)
   missingCount       Int                    @default(0)
-  sourceUpdatedAt    DateTime?              @db.DateTime(3)
-  createdAt          DateTime               @default(now()) @db.DateTime(3)
-  updatedAt          DateTime               @updatedAt @db.DateTime(3)
+  sourceUpdatedAt    DateTime?              @db.Timestamptz(3)
+  createdAt          DateTime               @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime               @updatedAt @db.Timestamptz(3)
   channel            YouTubeChannel         @relation(fields: [channelId], references: [id], onDelete: Restrict)
   calendarMappings   CalendarEventMapping[]
 
   @@index([channelId, scheduledStartAt])
   @@index([status, scheduledStartAt])
+  @@schema("app")
 }
 
 /// 利用者・配信・Google event ID の冪等対応。
@@ -212,14 +244,15 @@ model CalendarEventMapping {
   broadcastId           String
   googleCalendarEventId String             @db.VarChar(255)
   managedFieldsHash     String             @db.VarChar(64)
-  lastSyncedAt          DateTime           @db.DateTime(3)
-  createdAt             DateTime           @default(now()) @db.DateTime(3)
-  updatedAt             DateTime           @updatedAt @db.DateTime(3)
+  lastSyncedAt          DateTime           @db.Timestamptz(3)
+  createdAt             DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime           @updatedAt @db.Timestamptz(3)
   user                  User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   broadcast             ScheduledBroadcast @relation(fields: [broadcastId], references: [id], onDelete: Restrict)
 
   @@unique([userId, broadcastId])
   @@index([googleCalendarEventId])
+  @@schema("app")
 }
 
 /// 定期・手動同期の実行全体。相関 ID と集計結果を保持する。
@@ -228,10 +261,10 @@ model SyncRun {
   type          SyncRunType
   status        SyncStatus         @default(RUNNING)
   requestedById String?
-  queuedAt      DateTime           @default(now()) @db.DateTime(3)
-  startedAt     DateTime?          @db.DateTime(3)
-  heartbeatAt   DateTime?          @db.DateTime(3)
-  completedAt   DateTime?          @db.DateTime(3)
+  queuedAt      DateTime           @default(now()) @db.Timestamptz(3)
+  startedAt     DateTime?          @db.Timestamptz(3)
+  heartbeatAt   DateTime?          @db.Timestamptz(3)
+  completedAt   DateTime?          @db.Timestamptz(3)
   channelsTotal Int                @default(0)
   usersTotal    Int                @default(0)
   apiCalls      Int                @default(0)
@@ -241,28 +274,30 @@ model SyncRun {
 
   @@index([type, status, startedAt])
   @@index([status, queuedAt])
+  @@schema("app")
 }
 
 /// 同期対象ごとの部分成功・失敗。
 model SyncTargetResult {
-  id           String     @id @default(cuid())
-  syncRunId    String
-  targetType   TargetType
-  targetId     String     @db.VarChar(64)
-  status       SyncStatus
-  errorCode    String?    @db.VarChar(64)
-  errorMessage String?    @db.VarChar(255)
-  queuedAt     DateTime   @default(now()) @db.DateTime(3)
-  startedAt    DateTime?  @db.DateTime(3)
-  completedAt  DateTime?  @db.DateTime(3)
-  youtubeFetchStatus SyncPhaseStatus @default(NOT_STARTED)
+  id                   String          @id @default(cuid())
+  syncRunId            String
+  targetType           TargetType
+  targetId             String          @db.VarChar(64)
+  status               SyncStatus
+  errorCode            String?         @db.VarChar(64)
+  errorMessage         String?         @db.VarChar(255)
+  queuedAt             DateTime        @default(now()) @db.Timestamptz(3)
+  startedAt            DateTime?       @db.Timestamptz(3)
+  completedAt          DateTime?       @db.Timestamptz(3)
+  youtubeFetchStatus   SyncPhaseStatus @default(NOT_STARTED)
   databaseUpdateStatus SyncPhaseStatus @default(NOT_STARTED)
-  calendarSyncStatus SyncPhaseStatus @default(NOT_STARTED)
-  snapshotVersion Int?
-  syncRun      SyncRun    @relation(fields: [syncRunId], references: [id], onDelete: Cascade)
+  calendarSyncStatus   SyncPhaseStatus @default(NOT_STARTED)
+  snapshotVersion      Int?
+  syncRun              SyncRun         @relation(fields: [syncRunId], references: [id], onDelete: Cascade)
 
   @@unique([syncRunId, targetType, targetId])
   @@index([targetType, targetId, startedAt])
+  @@schema("app")
 }
 
 /// 段階実行し再開できるアカウント削除要求。
@@ -274,16 +309,17 @@ model AccountDeletionRequest {
   status                DeletionStatus @default(REQUESTED)
   attempts              Int            @default(0)
   lastErrorCode         String?        @db.VarChar(64)
-  requestedAt           DateTime       @default(now()) @db.DateTime(3)
-  calendarDeletedAt     DateTime?      @db.DateTime(3)
-  googleTokenRevokedAt  DateTime?      @db.DateTime(3)
-  userDataDeletedAt     DateTime?      @db.DateTime(3)
-  supabaseUserDeletedAt DateTime?      @db.DateTime(3)
-  completedAt           DateTime?      @db.DateTime(3)
-  updatedAt             DateTime       @updatedAt @db.DateTime(3)
+  requestedAt           DateTime       @default(now()) @db.Timestamptz(3)
+  calendarDeletedAt     DateTime?      @db.Timestamptz(3)
+  googleTokenRevokedAt  DateTime?      @db.Timestamptz(3)
+  userDataDeletedAt     DateTime?      @db.Timestamptz(3)
+  supabaseUserDeletedAt DateTime?      @db.Timestamptz(3)
+  completedAt           DateTime?      @db.Timestamptz(3)
+  updatedAt             DateTime       @updatedAt @db.Timestamptz(3)
   user                  User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([status, requestedAt])
+  @@schema("app")
 }
 
 /// API/worker replicaをまたいで同期のleaseを保持する。
@@ -291,11 +327,12 @@ model SyncLease {
   key        String   @id @db.VarChar(191)
   ownerToken String   @db.VarChar(64)
   version    Int      @default(1)
-  expiresAt  DateTime @db.DateTime(3)
-  createdAt  DateTime @default(now()) @db.DateTime(3)
-  updatedAt  DateTime @updatedAt @db.DateTime(3)
+  expiresAt  DateTime @db.Timestamptz(3)
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
 
   @@index([expiresAt])
+  @@schema("app")
 }
 
 /// YouTube Data APIの日次quota予約。quotaDateは設定timezoneでの日付ラベル。
@@ -304,9 +341,10 @@ model YouTubeQuotaUsage {
   bucket        YouTubeQuotaBucket
   unitsUsed     Int                @default(0)
   unitsReserved Int                @default(0)
-  createdAt     DateTime           @default(now()) @db.DateTime(3)
-  updatedAt     DateTime           @updatedAt @db.DateTime(3)
+  createdAt     DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime           @updatedAt @db.Timestamptz(3)
 
   @@id([quotaDate, bucket])
   @@index([updatedAt])
+  @@schema("app")
 }

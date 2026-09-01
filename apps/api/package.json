@@ -12,6 +12,10 @@
       "types": "./dist/runtime.d.ts",
       "default": "./dist/runtime.js"
     },
+    "./lambda-env": {
+      "types": "./dist/infrastructure/lambda/runtime-env.d.ts",
+      "default": "./dist/infrastructure/lambda/runtime-env.js"
+    },
     "./read-only-ops": {
       "types": "./dist/operations/queued-sync-run-inspection.d.ts",
       "default": "./dist/operations/queued-sync-run-inspection.js"
@@ -30,8 +34,13 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@oshi-schedule/shared": "workspace:*",
+    "@aws-sdk/client-dynamodb": "^3.1121.0",
+    "@aws-sdk/client-secrets-manager": "^3.1121.0",
     "@aws-sdk/client-sqs": "^3.0.0",
+    "@aws-sdk/client-ssm": "^3.1121.0",
+    "@aws-sdk/lib-dynamodb": "^3.1121.0",
+    "@codegenie/serverless-express": "^4.17.1",
+    "@oshi-schedule/shared": "workspace:*",
     "@prisma/client": "6.19.3",
     "cors": "2.8.6",
     "dotenv": "17.4.2",
@@ -46,6 +55,7 @@
   "devDependencies": {
     "@oshi-schedule/eslint-config": "workspace:*",
     "@oshi-schedule/typescript-config": "workspace:*",
+    "@types/aws-lambda": "^8.10.162",
     "@types/cors": "2.8.19",
     "@types/express": "5.0.6",
     "@types/node": "22.15.21",

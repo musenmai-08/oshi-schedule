@@ -75,6 +75,24 @@ const toSubscription = (row: {
 
 export class PrismaStore implements Store {
   constructor(readonly prisma = new PrismaClient()) {}
+  private async serializable<T>(operation: (transaction: Prisma.TransactionClient) => Promise<T>) {
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        return await this.prisma.$transaction(operation, {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        });
+      } catch (error) {
+        if (
+          attempt < 3 &&
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2034'
+        )
+          continue;
+        throw error;
+      }
+    }
+    throw new Error('serializable transaction retry exhausted');
+  }
   async checkReadiness() {
     await this.prisma.$queryRaw`SELECT 1`;
   }
@@ -139,11 +157,11 @@ export class PrismaStore implements Store {
   async markAccountDeletionStep(id: string, step: DeletionStep, at: Date, lease: LeaseOwnership) {
     return this.prisma.$transaction(async (transaction) => {
       const valid = await transaction.$queryRaw<Array<{ valid: number }>>`
-        SELECT 1 AS valid FROM SyncLease
-        WHERE SyncLease.key = ${lease.key}
-          AND ownerToken = ${lease.ownerToken}
-          AND version = ${lease.version}
-          AND expiresAt > UTC_TIMESTAMP(3)
+        SELECT 1 AS valid FROM "app"."SyncLease"
+        WHERE "key" = ${lease.key}
+          AND "ownerToken" = ${lease.ownerToken}
+          AND "version" = ${lease.version}
+          AND "expiresAt" > CURRENT_TIMESTAMP
         FOR UPDATE`;
       if (!valid.length) return false;
       await transaction.accountDeletionRequest.update({
@@ -164,11 +182,11 @@ export class PrismaStore implements Store {
   async markAccountDeletionFailed(id: string, errorCode: string, _at: Date, lease: LeaseOwnership) {
     return this.prisma.$transaction(async (transaction) => {
       const valid = await transaction.$queryRaw<Array<{ valid: number }>>`
-        SELECT 1 AS valid FROM SyncLease
-        WHERE SyncLease.key = ${lease.key}
-          AND ownerToken = ${lease.ownerToken}
-          AND version = ${lease.version}
-          AND expiresAt > UTC_TIMESTAMP(3)
+        SELECT 1 AS valid FROM "app"."SyncLease"
+        WHERE "key" = ${lease.key}
+          AND "ownerToken" = ${lease.ownerToken}
+          AND "version" = ${lease.version}
+          AND "expiresAt" > CURRENT_TIMESTAMP
         FOR UPDATE`;
       if (!valid.length) return false;
       await transaction.accountDeletionRequest.update({
@@ -300,16 +318,17 @@ export class PrismaStore implements Store {
   }
   async createSubscriptionWithinLimit(userId: string, channelId: string, limit: number) {
     try {
-      return await this.prisma.$transaction(
+      return await this.serializable(
         async (transaction) => {
-          await transaction.$queryRaw`SELECT id FROM User WHERE id = ${userId} FOR UPDATE`;
+          await transaction.$queryRaw`
+            SELECT "id" FROM "app"."User" WHERE "id" = ${userId} FOR UPDATE
+          `;
           const count = await transaction.userChannelSubscription.count({ where: { userId } });
           if (count >= limit) throw new StoreConstraintError('CHANNEL_LIMIT');
           return toSubscription(
             await transaction.userChannelSubscription.create({ data: { userId, channelId } }),
           );
         },
-        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
     } catch (error) {
       if (error instanceof StoreConstraintError) throw error;
@@ -362,11 +381,11 @@ export class PrismaStore implements Store {
   async startChannelFetch(channelId: string, at: Date, lease: LeaseOwnership) {
     return this.prisma.$transaction(async (transaction) => {
       const valid = await transaction.$queryRaw<Array<{ valid: number }>>`
-        SELECT 1 AS valid FROM SyncLease
-        WHERE SyncLease.key = ${lease.key}
-          AND ownerToken = ${lease.ownerToken}
-          AND version = ${lease.version}
-          AND expiresAt > UTC_TIMESTAMP(3)
+        SELECT 1 AS valid FROM "app"."SyncLease"
+        WHERE "key" = ${lease.key}
+          AND "ownerToken" = ${lease.ownerToken}
+          AND "version" = ${lease.version}
+          AND "expiresAt" > CURRENT_TIMESTAMP
         FOR UPDATE`;
       if (!valid.length) return false;
       await transaction.youTubeChannel.update({
@@ -385,11 +404,11 @@ export class PrismaStore implements Store {
   ) {
     return this.prisma.$transaction(async (transaction) => {
       const valid = await transaction.$queryRaw<Array<{ valid: number }>>`
-        SELECT 1 AS valid FROM SyncLease
-        WHERE SyncLease.key = ${lease.key}
-          AND ownerToken = ${lease.ownerToken}
-          AND version = ${lease.version}
-          AND expiresAt > UTC_TIMESTAMP(3)
+        SELECT 1 AS valid FROM "app"."SyncLease"
+        WHERE "key" = ${lease.key}
+          AND "ownerToken" = ${lease.ownerToken}
+          AND "version" = ${lease.version}
+          AND "expiresAt" > CURRENT_TIMESTAMP
         FOR UPDATE`;
       if (!valid.length) return null;
       for (const item of items) {
@@ -462,11 +481,11 @@ export class PrismaStore implements Store {
   ) {
     return this.prisma.$transaction(async (transaction) => {
       const valid = await transaction.$queryRaw<Array<{ valid: number }>>`
-        SELECT 1 AS valid FROM SyncLease
-        WHERE SyncLease.key = ${lease.key}
-          AND ownerToken = ${lease.ownerToken}
-          AND version = ${lease.version}
-          AND expiresAt > UTC_TIMESTAMP(3)
+        SELECT 1 AS valid FROM "app"."SyncLease"
+        WHERE "key" = ${lease.key}
+          AND "ownerToken" = ${lease.ownerToken}
+          AND "version" = ${lease.version}
+          AND "expiresAt" > CURRENT_TIMESTAMP
         FOR UPDATE`;
       if (!valid.length) return false;
       await transaction.youTubeChannel.update({
@@ -621,23 +640,23 @@ export class PrismaStore implements Store {
     });
   }
   async acquireSyncLease(key: string, ownerToken: string, _now: Date, ttlMs: number) {
-    const microseconds = ttlMs * 1_000;
     const updated = await this.prisma.$executeRaw`
-      UPDATE SyncLease
-      SET ownerToken = ${ownerToken},
-          version = version + 1,
-          expiresAt = TIMESTAMPADD(MICROSECOND, ${microseconds}, UTC_TIMESTAMP(3)),
-          updatedAt = UTC_TIMESTAMP(3)
-      WHERE SyncLease.key = ${key} AND expiresAt <= UTC_TIMESTAMP(3)`;
+      UPDATE "app"."SyncLease"
+      SET "ownerToken" = ${ownerToken},
+          "version" = "version" + 1,
+          "expiresAt" = CURRENT_TIMESTAMP + ${ttlMs} * INTERVAL '1 millisecond',
+          "updatedAt" = CURRENT_TIMESTAMP
+      WHERE "key" = ${key} AND "expiresAt" <= CURRENT_TIMESTAMP`;
     let acquired = updated === 1;
     if (!acquired) {
       const inserted = await this.prisma.$executeRaw`
-        INSERT IGNORE INTO SyncLease (${Prisma.raw('`key`')}, ownerToken, version, expiresAt, createdAt, updatedAt)
+        INSERT INTO "app"."SyncLease"
+          ("key", "ownerToken", "version", "expiresAt", "createdAt", "updatedAt")
         VALUES (
           ${key}, ${ownerToken}, 1,
-          TIMESTAMPADD(MICROSECOND, ${microseconds}, UTC_TIMESTAMP(3)),
-          UTC_TIMESTAMP(3), UTC_TIMESTAMP(3)
-        )`;
+          CURRENT_TIMESTAMP + ${ttlMs} * INTERVAL '1 millisecond',
+          CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        ) ON CONFLICT ("key") DO NOTHING`;
       acquired = inserted === 1;
     }
     if (!acquired) return null;
@@ -646,13 +665,13 @@ export class PrismaStore implements Store {
   }
   async renewSyncLease(lease: LeaseOwnership, _now: Date, ttlMs: number) {
     const updated = await this.prisma.$executeRaw`
-      UPDATE SyncLease
-      SET expiresAt = TIMESTAMPADD(MICROSECOND, ${ttlMs * 1_000}, UTC_TIMESTAMP(3)),
-          updatedAt = UTC_TIMESTAMP(3)
-      WHERE SyncLease.key = ${lease.key}
-        AND ownerToken = ${lease.ownerToken}
-        AND version = ${lease.version}
-        AND expiresAt > UTC_TIMESTAMP(3)`;
+      UPDATE "app"."SyncLease"
+      SET "expiresAt" = CURRENT_TIMESTAMP + ${ttlMs} * INTERVAL '1 millisecond',
+          "updatedAt" = CURRENT_TIMESTAMP
+      WHERE "key" = ${lease.key}
+        AND "ownerToken" = ${lease.ownerToken}
+        AND "version" = ${lease.version}
+        AND "expiresAt" > CURRENT_TIMESTAMP`;
     return updated === 1;
   }
   async releaseSyncLease(lease: LeaseOwnership) {
@@ -670,15 +689,17 @@ export class PrismaStore implements Store {
     mode: YouTubeQuotaMode,
   ) {
     await this.prisma.$executeRaw`
-      INSERT IGNORE INTO YouTubeQuotaUsage
-        (quotaDate, bucket, unitsUsed, unitsReserved, createdAt, updatedAt)
-      VALUES (${quotaDate}, ${bucket}, 0, 0, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))`;
+      INSERT INTO "app"."YouTubeQuotaUsage"
+        ("quotaDate", "bucket", "unitsUsed", "unitsReserved", "createdAt", "updatedAt")
+      VALUES (${quotaDate}, ${bucket}::"app"."YouTubeQuotaBucket", 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT ("quotaDate", "bucket") DO NOTHING`;
     const effectiveBudget = mode === 'MANUAL' ? dailyBudget - scheduledReserve : dailyBudget;
     const reserved = await this.prisma.$executeRaw`
-      UPDATE YouTubeQuotaUsage
-      SET unitsReserved = unitsReserved + ${units}, updatedAt = UTC_TIMESTAMP(3)
-      WHERE quotaDate = ${quotaDate} AND bucket = ${bucket}
-        AND unitsUsed + unitsReserved + ${units} <= ${effectiveBudget}`;
+      UPDATE "app"."YouTubeQuotaUsage"
+      SET "unitsReserved" = "unitsReserved" + ${units}, "updatedAt" = CURRENT_TIMESTAMP
+      WHERE "quotaDate" = ${quotaDate}
+        AND "bucket" = ${bucket}::"app"."YouTubeQuotaBucket"
+        AND "unitsUsed" + "unitsReserved" + ${units} <= ${effectiveBudget}`;
     const usage = await this.prisma.youTubeQuotaUsage.findUniqueOrThrow({
       where: { quotaDate_bucket: { quotaDate, bucket } },
     });
@@ -691,11 +712,13 @@ export class PrismaStore implements Store {
   }
   async consumeYouTubeQuota(quotaDate: string, bucket: YouTubeQuotaBucket, units: number) {
     const consumed = await this.prisma.$executeRaw`
-      UPDATE YouTubeQuotaUsage
-      SET unitsReserved = unitsReserved - ${units},
-          unitsUsed = unitsUsed + ${units},
-          updatedAt = UTC_TIMESTAMP(3)
-      WHERE quotaDate = ${quotaDate} AND bucket = ${bucket} AND unitsReserved >= ${units}`;
+      UPDATE "app"."YouTubeQuotaUsage"
+      SET "unitsReserved" = "unitsReserved" - ${units},
+          "unitsUsed" = "unitsUsed" + ${units},
+          "updatedAt" = CURRENT_TIMESTAMP
+      WHERE "quotaDate" = ${quotaDate}
+        AND "bucket" = ${bucket}::"app"."YouTubeQuotaBucket"
+        AND "unitsReserved" >= ${units}`;
     if (consumed !== 1) throw new Error('YouTube quota reservation not found');
   }
   async startSyncRun(
@@ -761,13 +784,13 @@ export class PrismaStore implements Store {
     cooldownBefore: Date,
     trigger: 'INITIAL' | 'MANUAL',
   ) {
-    return this.prisma.$transaction(
+    return this.serializable(
       async (transaction) => {
         const owned = await transaction.$queryRaw<
           Array<{ id: string; lastManualSyncAt: Date | null }>
         >`
-          SELECT id, lastManualSyncAt FROM UserChannelSubscription
-          WHERE id = ${subscriptionId} AND userId = ${userId}
+          SELECT "id", "lastManualSyncAt" FROM "app"."UserChannelSubscription"
+          WHERE "id" = ${subscriptionId} AND "userId" = ${userId}
           FOR UPDATE`;
         if (!owned.length) throw new StoreConstraintError('SUBSCRIPTION_NOT_FOUND');
         const active = await transaction.syncTargetResult.findFirst({
@@ -821,7 +844,6 @@ export class PrismaStore implements Store {
         });
         return { run, created: true };
       },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
   }
   async getSyncRunForUser(runId: string, userId: string) {
@@ -831,19 +853,19 @@ export class PrismaStore implements Store {
   async claimSyncRun(runId: string, at: Date, staleBefore: Date) {
     return this.prisma.$transaction(async (transaction) => {
       const claimed = await transaction.$executeRaw`
-        UPDATE SyncRun
-        SET status = 'RUNNING',
-            startedAt = COALESCE(startedAt, ${at}),
-            heartbeatAt = ${at},
-            completedAt = NULL,
-            errorCode = NULL
-        WHERE id = ${runId}
-          AND type IN ('INITIAL', 'MANUAL')
+        UPDATE "app"."SyncRun"
+        SET "status" = 'RUNNING',
+            "startedAt" = COALESCE("startedAt", ${at}),
+            "heartbeatAt" = ${at},
+            "completedAt" = NULL,
+            "errorCode" = NULL
+        WHERE "id" = ${runId}
+          AND "type" IN ('INITIAL', 'MANUAL')
           AND (
-            status = 'QUEUED'
+            "status" = 'QUEUED'
             OR (
-              status = 'RUNNING'
-              AND COALESCE(heartbeatAt, startedAt, queuedAt) < ${staleBefore}
+              "status" = 'RUNNING'
+              AND COALESCE("heartbeatAt", "startedAt", "queuedAt") < ${staleBefore}
             )
           )`;
       if (claimed !== 1) return null;
@@ -977,11 +999,11 @@ export class PrismaStore implements Store {
   async deleteUserData(requestId: string, userId: string, at: Date, lease: LeaseOwnership) {
     return this.prisma.$transaction(async (transaction) => {
       const valid = await transaction.$queryRaw<Array<{ valid: number }>>`
-        SELECT 1 AS valid FROM SyncLease
-        WHERE SyncLease.key = ${lease.key}
-          AND ownerToken = ${lease.ownerToken}
-          AND version = ${lease.version}
-          AND expiresAt > UTC_TIMESTAMP(3)
+        SELECT 1 AS valid FROM "app"."SyncLease"
+        WHERE "key" = ${lease.key}
+          AND "ownerToken" = ${lease.ownerToken}
+          AND "version" = ${lease.version}
+          AND "expiresAt" > CURRENT_TIMESTAMP
         FOR UPDATE`;
       if (!valid.length) return false;
       await transaction.user.deleteMany({ where: { id: userId } });

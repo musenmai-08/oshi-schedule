@@ -55,6 +55,8 @@ const assertValueFromIamContract = (valueFromArns: unknown[], iamResources: unkn
 
 const fullStagingContext: Record<string, unknown> = {
   environment: 'staging',
+  runtimeArchitecture: 'legacy-ecs',
+  serverlessStagingMode: 'preview',
   deployReady: 'true',
   bootstrapOnly: 'false',
   apiDesiredCount: '0',
@@ -84,6 +86,9 @@ const configFor = (environmentName: EnvironmentName): DeploymentConfig => ({
   region: 'ap-northeast-1',
   deployReady: false,
   bootstrapOnly: false,
+  runtimeArchitecture: 'legacy-ecs',
+  serverlessStagingMode: 'preview',
+  backupRetentionDays: 7,
   apiDesiredCount: environmentName === 'staging' ? 0 : 1,
   syncPipeDesiredState: environmentName === 'staging' ? 'STOPPED' : 'RUNNING',
   applicationActivated: environmentName === 'production',

@@ -2,7 +2,7 @@
 
 この手順はproduction公開前の設計・受入用である。AWS、Google Cloud、Supabaseの設定変更およびverification申請は、各工程で別途承認を得てから行う。Secret値、token、OAuth code、個人情報をdeploy recordやissueへ記録しない。
 
-> 2026-08-31に現行ECS/RDS production deployを中止し、[serverless低コスト移行設計](../architecture/production-serverless-low-cost.md)を推奨案とした。このチェックリストのECR-first/RDS/ECS項目は実装履歴として残すが、新しいproduction deploy承認には使わない。次のdeploy前にはserverless設計のhard gateと、この文書のGoogle/Supabase/法務項目を併せて満たす。
+> 2026-09-01に[serverless低コスト移行設計](../architecture/production-serverless-low-cost.md)を正式採用した。ECR-first/RDS/ECSの記録は履歴であり、新しいdeploy承認には使わない。productionはSupabase Free + Lambda + S3日次backup 7日である。
 
 ## 確定した公開URLとアプリ設定
 
@@ -32,19 +32,20 @@ productionの値はstagingからコピーしない。production用Supabase proje
 
 | 種別             | AWS名                                                    | 注入先      | 値の提供元                                       |
 | ---------------- | -------------------------------------------------------- | ----------- | ------------------------------------------------ |
-| Secrets Manager  | `oshi-schedule-production/app/supabase-service-role-key` | API・Worker | production Supabase service-role key             |
+| Secrets Manager  | `oshi-schedule-production/app/supabase-service-role-key` | API         | production Supabase service-role key             |
 | Secrets Manager  | `oshi-schedule-production/app/google-client-secret`      | API・Worker | production Google OAuth client secret            |
 | Secrets Manager  | `oshi-schedule-production/app/youtube-api-key`           | API・Worker | production Google Cloud projectのYouTube API key |
 | Secrets Manager  | `oshi-schedule-production/app/token-encryption-keys`     | API・Worker | production専用のCSPRNG生成鍵                     |
+| Secrets Manager  | `oshi-schedule-production/app/database-runtime-url`       | API・Worker | Supavisor transaction URL、TLS、`connection_limit=1` |
+| Secrets Manager  | `oshi-schedule-production/app/database-migration-url`     | migration・backup | direct IPv6またはSupavisor session URL          |
 | SSM SecureString | `/oshi-schedule-production/runtime/allowed-emails`       | APIのみ     | productionで許可するメールアドレスのカンマ区切り |
 
-`TOKEN_ENCRYPTION_KEYS`は`key-id:32-byte-base64`形式とし、先頭を新規暗号化用、後続を旧ciphertext復号用にする。production初回は新しい32-byte CSPRNG鍵だけを設定する。RDS credentialはCDKが`oshi-schedule-production/rds/credentials`として生成するため、事前作成しない。
+`TOKEN_ENCRYPTION_KEYS`は`key-id:32-byte-base64`形式とし、先頭を新規暗号化用、後続を旧ciphertext復号用にする。production初回は新しい32-byte CSPRNG鍵だけを設定する。runtime DB roleは`app` schemaのDMLだけ、migration roleはDDL ownerとし、同じURLを使わない。
 
 ### CDKが生成するため事前作成しない項目
 
-- SSM String Parameter: `app-mode`、`trust-proxy-hops`、`log-level`、`web-origin`、`youtube-daily-quota-budget`、`youtube-daily-search-quota-budget`、`application-activated`、`supabase-url`、`google-client-id`
 - Amplify環境変数: `WEB_ORIGIN`、`NEXT_PUBLIC_API_URL`、`NEXT_PUBLIC_DEMO_MODE=false`、`NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
-- RDS managed secret、ECS task definition内のSecret/Parameter参照
+- Lambda、SQS/DLQ、DynamoDB rate-limit table、Scheduler、HTTP API、S3 backup bucketと最小権限role
 
 ### ECR-first bootstrap
 
@@ -56,7 +57,7 @@ production ECR repositoryはCDKの`bootstrapOnly=true` phaseが唯一の所有�
 4. CIとpromotion workflowのTrivy gateは`cache: 'false'`でfresh vulnerability DBを使い、production `.trivyignore`だけを適用してHIGH/CRITICALを0件にする。push後はECR Basic Scanも`COMPLETE`まで待ち、同じproduction policyで未承認Critical/Highが0件であることを確認する。
 5. そのdigestとfull production contextでCDK diffを確認し、full production deployは別途承認する。
 
-2026-08-31に、上記digestとproduction専用の非秘密contextでfull preflightとCDK diffを実施した。production boundary、公開domain、RDS backup/PITR 7日、production Log Group 30日、4つのcomplete Secret ARN、`allowed-emails` SecureString、`api.oshi-schedule.com` ACM `ISSUED`、ECR Basic Scan（Critical 0 / High 0）はすべて確認済みである。初回full deploy差分は、bootstrap済みECR Repositoryを維持したまま、そのほかのruntime/network/observability/web resourceを新規作成する内容であり、DELETE/REPLACEはない。full deployは実行していない。
+2026-08-31のECS/RDS full diffは失効した。serverless実装ではbootstrap済みECR Repositoryを保持するがLambdaはimageを参照しない。新しいfull diffでRDS/ECS/VPC/VPC Link/Cloud Map/Pipe/Public IPv4が0件、DB URL Secret 2件を含む境界、S3 lifecycle 7日、production Log Group 30日を再確認する。
 
 `SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`、`GOOGLE_CLIENT_ID`は秘密ではないが、production専用値をCDK contextへ渡す。`SUPABASE_SERVICE_ROLE_KEY`、`GOOGLE_CLIENT_SECRET`、`YOUTUBE_API_KEY`、`TOKEN_ENCRYPTION_KEYS`、`ALLOWED_EMAILS`の値はCDK context、Amplify、GitHub Variables、Git、shell引数へ渡さない。
 
@@ -65,7 +66,7 @@ production ECR repositoryはCDKの`bootstrapOnly=true` phaseが唯一の所有�
 1. 値はpassword managerなどから、`set +x`の対話shellで標準入力または保護された一時fileへだけ渡す。CLI引数、環境変数export、履歴、deploy recordへ書かない。
 2. Secret作成・更新後は`aws secretsmanager describe-secret`で**名前とcomplete ARNだけ**を確認し、`GetSecretValue`をpreflightに使わない。complete ARN（6文字suffix付き）はCDK contextにだけ渡す。
 3. `ALLOWED_EMAILS`はSecureStringとして作成後、`aws ssm describe-parameters`で名前と型だけを確認する。値取得や`--with-decryption`は不要である。
-4. customer managed KMS keyを選ぶ場合だけ、ECS execution roleへの最小`kms:Decrypt`権限をCDK diffで追加確認する。AWS managed keyでは追加しない。
+4. customer managed KMS keyを選ぶ場合だけ、Lambda roleへの最小`kms:Decrypt`権限をCDK diffで追加確認する。AWS managed keyでは追加しない。
 5. production contextはGit管理外の短命なローカル入力に限定し、secret値を含めない。実deploy前にIaC validation、Secret ARNのaccount/region/name/suffix検証、staging fingerprint拒否を通す。
 
 ## ユーザーが行う外部管理画面作業
@@ -105,14 +106,14 @@ production ECR repositoryはCDKの`bootstrapOnly=true` phaseが唯一の所有�
 ## production deploy前の完了条件
 
 - [ ] production CDK synth/diffでWeb=`oshi-schedule.com`、API=`api.oshi-schedule.com`、Amplify root-domain Prefix空、`WEB_ORIGIN`、`NEXT_PUBLIC_API_URL`が一致する。
-- [x] 上記のproduction contextとimmutable digestでfull CDK preflight/diffを実行し、bootstrap済みECRを維持、DELETE/REPLACEがないことを確認する（2026-08-31）。
+- [ ] serverless production contextでfull CDK preflight/diffを実行し、bootstrap済みECRを維持、RDS/ECS/VPC/Pipeが0、DELETE/REPLACEがないことを確認する。
 - [ ] mainの最新commitでGitHub Actions `validate`と`e2e`がともにgreenであり、workflow logで失敗がない。
-- [ ] production imageはfresh DBのTrivy production gateとECR Basic Scanの双方で、production `.trivyignore`外のCritical/Highが0件である。
+- [ ] Lambda ZIPにPrisma Client/engineが含まれ、API/Worker handler contractがgreenである。ECR imageはrollback資産でありruntime deploy gateではない。
 - [ ] production専用Secret/SSM/Google/Supabase値が揃い、staging由来値・localhost・placeholderがない。
 - [ ] Google ConsoleとSupabaseのURL matrixが上表どおりで、production redirect allowlistは完全一致である。
 - [ ] Google consent screen、scope justification、demo video、必要なverificationが承認済みである。
 - [ ] Terms/Privacyの専門家確認、13歳未満利用不可、日本国内向け、無料/有料化方針、運営者・問い合わせ先の最終承認がある。
-- [ ] production RDS backup/PITR 7日、manual snapshot 30日、SyncRun 90日、log 30日、完了墓石30日purgeの運用責任者と記録方法が確認済みである。
+- [ ] S3 app-schema日次backup 7日、最大RPO 24時間、Supabase Auth独自backupなし、Free pause、SyncRun 90日、log 30日、完了墓石30日purgeの責任者と復元演習が確認済みである。
 
 ## 最終受入手順
 

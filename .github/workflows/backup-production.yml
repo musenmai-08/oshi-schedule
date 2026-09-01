@@ -1,0 +1,62 @@
+name: Backup production database
+
+on:
+  schedule:
+    - cron: '15 17 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: backup-production-database
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production-backup
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_BACKUP_ROLE_ARN: ${{ vars.PRODUCTION_DATABASE_BACKUP_ROLE_ARN }}
+      DATABASE_MIGRATION_URL_SECRET_ARN: ${{ vars.PRODUCTION_DATABASE_MIGRATION_URL_SECRET_ARN }}
+      BACKUP_BUCKET: ${{ vars.PRODUCTION_DATABASE_BACKUP_BUCKET }}
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v6.2.3
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.AWS_BACKUP_ROLE_ARN }}
+          role-session-name: oshi-schedule-backup-${{ github.run_id }}
+      - name: Validate non-secret configuration
+        run: |
+          for name in AWS_REGION AWS_BACKUP_ROLE_ARN DATABASE_MIGRATION_URL_SECRET_ARN BACKUP_BUCKET; do
+            test -n "${!name}" || { echo "Missing backup configuration: $name" >&2; exit 1; }
+          done
+      - name: Dump app schema and upload encrypted backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          backup_file="$(mktemp -p "$RUNNER_TEMP" oshi-schedule-app-XXXXXX.dump)"
+          trap 'rm -f "$backup_file"' EXIT
+          DATABASE_URL="$(aws secretsmanager get-secret-value \
+            --region "$AWS_REGION" \
+            --secret-id "$DATABASE_MIGRATION_URL_SECRET_ARN" \
+            --query SecretString \
+            --output text)"
+          test -n "$DATABASE_URL" && test "$DATABASE_URL" != None || {
+            echo 'Database migration URL is unavailable' >&2
+            exit 1
+          }
+          echo "::add-mask::$DATABASE_URL"
+          export DATABASE_URL
+          docker run --rm --env DATABASE_URL \
+            --volume "$RUNNER_TEMP:/backup" postgres:17-alpine \
+            sh -c 'pg_dump --dbname "$DATABASE_URL" --schema app --format custom --no-owner --no-privileges --file /backup/app.dump && pg_restore --list /backup/app.dump >/dev/null'
+          mv "$RUNNER_TEMP/app.dump" "$backup_file"
+          object="database/$(date -u +%Y/%m/%d)/app-$(date -u +%Y%m%dT%H%M%SZ).dump"
+          aws s3 cp "$backup_file" "s3://$BACKUP_BUCKET/$object" \
+            --only-show-errors --sse AES256
+          aws s3api head-object --bucket "$BACKUP_BUCKET" --key "$object" \
+            --query '{size:ContentLength,encryption:ServerSideEncryption}' --output json

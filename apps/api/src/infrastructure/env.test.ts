@@ -10,13 +10,15 @@ const realEnv = {
   APP_MODE: 'real',
   WEB_ORIGIN: 'https://app.oshi-schedule.com',
   ALLOWED_EMAILS: 'allowed@oshi-schedule.com',
-  DATABASE_URL: 'mysql://user:password@localhost:3306/test',
+  DATABASE_URL:
+    'postgresql://user:password@pooler.supabase.test:6543/test?schema=app&sslmode=require&pgbouncer=true&connection_limit=1',
   SUPABASE_URL: 'https://example.supabase.co',
   SUPABASE_SERVICE_ROLE_KEY: 'service-role',
   YOUTUBE_API_KEY: 'youtube-key',
   GOOGLE_CLIENT_ID: 'client-id',
   GOOGLE_CLIENT_SECRET: 'client-secret',
   SYNC_JOB_QUEUE_URL: 'https://sqs.ap-northeast-1.amazonaws.com/111111111111/sync-jobs',
+  RATE_LIMIT_TABLE_NAME: 'oshi-schedule-production-rate-limits',
 };
 
 describe('loadEnv production encryption keys', () => {
@@ -41,6 +43,39 @@ describe('loadEnv production encryption keys', () => {
 
     expect(() => loadWorkerEnv(source)).not.toThrow();
     expect(() => loadEnv(source)).toThrow('Missing required environment variable: ALLOWED_EMAILS');
+  });
+
+  it('allows a worker runtime to omit all API-only identity settings', () => {
+    const source = {
+      ...realEnv,
+      TOKEN_ENCRYPTION_KEYS: `v2:${randomBytes(32).toString('base64')}`,
+    };
+    for (const key of [
+      'WEB_ORIGIN',
+      'ALLOWED_EMAILS',
+      'SUPABASE_URL',
+      'SUPABASE_SERVICE_ROLE_KEY',
+    ] as const)
+      delete (source as Partial<typeof source>)[key];
+
+    expect(() => loadWorkerEnv(source)).not.toThrow();
+  });
+
+  it.each([
+    ['schema', 'public'],
+    ['sslmode', 'disable'],
+    ['pgbouncer', 'false'],
+    ['connection_limit', '2'],
+  ] as const)('rejects unsafe production database setting %s=%s', (name, value) => {
+    const databaseUrl = new URL(realEnv.DATABASE_URL);
+    databaseUrl.searchParams.set(name, value);
+    expect(() =>
+      loadEnv({
+        ...realEnv,
+        DATABASE_URL: databaseUrl.toString(),
+        TOKEN_ENCRYPTION_KEYS: `v2:${randomBytes(32).toString('base64')}`,
+      }),
+    ).toThrow(`DATABASE_URL must set ${name}`);
   });
 
   it.each([

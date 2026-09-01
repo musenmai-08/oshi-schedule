@@ -8,7 +8,8 @@ describe('worker runtime environment contract', () => {
       NODE_ENV: 'production',
       APP_MODE: 'real',
       WEB_ORIGIN: 'https://staging.oshi-schedule.com',
-      DATABASE_URL: 'mysql://user:password@localhost:3306/test',
+      DATABASE_URL:
+        'postgresql://user:password@localhost:5432/test?schema=app&sslmode=require&pgbouncer=true&connection_limit=1',
       SUPABASE_URL: 'https://example.supabase.co',
       SUPABASE_SERVICE_ROLE_KEY: 'service-role',
       YOUTUBE_API_KEY: 'youtube-key',

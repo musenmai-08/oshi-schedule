@@ -1,1 +1,1 @@
-provider = "mysql"
+provider = "postgresql"

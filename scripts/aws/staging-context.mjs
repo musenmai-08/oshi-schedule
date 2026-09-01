@@ -13,6 +13,7 @@ export const repositoryContextKeys = Object.freeze([
   'environment',
   'deployReady',
   'bootstrapOnly',
+  'runtimeArchitecture',
   'awsAccount',
   'awsRegion',
   'hostedZoneId',
@@ -116,6 +117,8 @@ export const validateRepositoryContext = (context) => {
   requireBoolean(context, 'bootstrapOnly');
   if (!context.deployReady) fail('deployReady must be true');
   if (context.bootstrapOnly) fail('bootstrapOnly must be false');
+  if (context.runtimeArchitecture !== 'legacy-ecs')
+    fail('runtimeArchitecture must remain legacy-ecs until the separate serverless cutover');
 
   const account = requireString(context, 'awsAccount');
   const region = requireString(context, 'awsRegion');

@@ -28,23 +28,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
-      mysql:
-        image: mysql:8.4
+      postgres:
+        image: postgres:17-alpine
         env:
-          MYSQL_DATABASE: oshi_schedule_test
-          MYSQL_USER: oshi
-          MYSQL_PASSWORD: oshi_password
-          MYSQL_ROOT_PASSWORD: root_password
+          POSTGRES_DB: oshi_schedule_test
+          POSTGRES_USER: oshi
+          POSTGRES_PASSWORD: oshi_password
         ports:
-          - 3306:3306
+          - 5432:5432
         options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -u root -proot_password"
+          --health-cmd="pg_isready -U oshi -d oshi_schedule_test"
           --health-interval=5s
           --health-timeout=5s
           --health-retries=20
     env:
-      DATABASE_URL: mysql://oshi:oshi_password@127.0.0.1:3306/oshi_schedule_test
-      TEST_DATABASE_URL: mysql://oshi:oshi_password@127.0.0.1:3306/oshi_schedule_test
+      DATABASE_URL: postgresql://oshi:oshi_password@127.0.0.1:5432/oshi_schedule_test?schema=app
+      TEST_DATABASE_URL: postgresql://oshi:oshi_password@127.0.0.1:5432/oshi_schedule_test?schema=app
       APP_MODE: fake
       ALLOWED_EMAILS: developer@example.com
     steps:
@@ -73,7 +72,7 @@ jobs:
             --exit-code
       - run: pnpm typecheck
       - run: pnpm lint
-      - name: Unit and MySQL integration tests
+      - name: Unit and PostgreSQL integration tests
         run: pnpm test
       - name: Build with safe public CI configuration
         run: pnpm build
@@ -85,6 +84,7 @@ jobs:
           .github/workflows/ci.yml
           .github/workflows/deploy-staging.yml
           .github/workflows/deploy-production.yml
+          .github/workflows/backup-production.yml
       - name: CDK assertions and synth
         run: |
           pnpm --filter @oshi-schedule/infra test

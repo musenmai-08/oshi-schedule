@@ -58,7 +58,7 @@ async function clean() {
   });
 }
 
-describe.runIf(Boolean(databaseUrl))('API with Prisma/MySQL IDs and constraints', () => {
+describe.runIf(Boolean(databaseUrl))('API with Prisma/PostgreSQL IDs and constraints', () => {
   beforeEach(async () => {
     authAdmin.fail = false;
     await clean();
@@ -156,7 +156,7 @@ describe.runIf(Boolean(databaseUrl))('API with Prisma/MySQL IDs and constraints'
     expect(await prisma.userChannelSubscription.count({ where: { userId: user!.id } })).toBe(3);
   });
 
-  it('atomically claims one queued SyncRun and enforces status ownership in MySQL', async () => {
+  it('atomically claims one queued SyncRun and enforces status ownership in PostgreSQL', async () => {
     const created = await register('@prismajob');
     const runId = created.body.data.sync.id as string;
     const at = new Date('2026-08-12T00:01:00Z');
@@ -194,7 +194,7 @@ describe.runIf(Boolean(databaseUrl))('API with Prisma/MySQL IDs and constraints'
     ).toMatchObject({ status: 'COMPLETED' });
   });
 
-  it('enforces and renews a cross-process lease in MySQL', async () => {
+  it('enforces and renews a cross-process lease in PostgreSQL', async () => {
     const key = 'integration:shared-sync';
     const now = new Date('2026-07-20T10:00:00Z');
     const results = await Promise.all([
@@ -244,7 +244,7 @@ describe.runIf(Boolean(databaseUrl))('API with Prisma/MySQL IDs and constraints'
     ).toMatchObject({ unitsUsed: 10, unitsReserved: 0 });
   });
 
-  it('atomically fences account deletion step updates in MySQL', async () => {
+  it('atomically fences account deletion step updates in PostgreSQL', async () => {
     const user = await store.findUserBySubject('prisma-owner');
     const deletion = await store.beginAccountDeletion(user!);
     const key = 'integration:fenced-account-deletion';
@@ -267,7 +267,7 @@ describe.runIf(Boolean(databaseUrl))('API with Prisma/MySQL IDs and constraints'
     await store.releaseSyncLease(successor);
   });
 
-  it('shares one MySQL channel snapshot across two concurrent workers and both users', async () => {
+  it('shares one PostgreSQL channel snapshot across two concurrent workers and both users', async () => {
     const owner = await store.findUserBySubject('prisma-owner');
     const other = await store.findUserBySubject('prisma-other');
     const channel = await store.upsertChannel({
@@ -286,11 +286,11 @@ describe.runIf(Boolean(databaseUrl))('API with Prisma/MySQL IDs and constraints'
     });
     let calls = 0;
     const item: NormalizedBroadcast = {
-      youtubeVideoId: 'mysql-parallel-video',
+      youtubeVideoId: 'postgres-parallel-video',
       title: 'parallel event',
       kind: 'UNKNOWN',
       status: 'UPCOMING',
-      youtubeUrl: 'https://youtube.example/mysql-parallel-video',
+      youtubeUrl: 'https://youtube.example/postgres-parallel-video',
       thumbnailUrl: '',
       scheduledStartAt: new Date(Date.now() + 86_400_000),
       endAt: new Date(Date.now() + 90_000_000),

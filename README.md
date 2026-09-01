@@ -1,6 +1,6 @@
 # 推しスケジュール
 
-登録した YouTube チャンネルのライブ配信・プレミア公開予定を、利用者専用の Google カレンダーへ同期する招待制 Web アプリケーションです。Next.js、Express、Prisma/MySQL、Supabase Auth を pnpm/Turborepo で管理しています。
+登録した YouTube チャンネルのライブ配信・プレミア公開予定を、利用者専用の Google カレンダーへ同期する招待制 Web アプリケーションです。Next.js、Express/Lambda、Prisma/PostgreSQL、Supabase Auth を pnpm/Turborepo で管理しています。
 
 外部資格情報がなくても `APP_MODE=fake` で、ログイン済み状態からチャンネル登録、停止・再開、手動同期、解除、アカウント削除まで確認できます。
 
@@ -8,7 +8,7 @@
 
 - Node.js 22.23.1 LTS（`.nvmrc` で固定）
 - Corepack / pnpm 9.15.9
-- Docker Desktop（実 MySQL を使う場合）
+- Docker Desktop（実 PostgreSQL を使う場合）
 
 ```bash
 nvm use
@@ -39,10 +39,10 @@ NEXT_PUBLIC_DEMO_MODE=true NEXT_PUBLIC_API_URL=http://localhost:4000 pnpm --filt
 APP_MODE=fake ALLOWED_EMAILS=developer@example.com pnpm sync:scheduled
 ```
 
-## MySQL / 実サービスモード
+## PostgreSQL / 実サービスモード
 
 ```bash
-docker compose up -d mysql
+docker compose up -d postgres
 pnpm db:generate
 pnpm exec prisma migrate deploy
 pnpm db:seed
@@ -91,10 +91,10 @@ pnpm test:e2e
 
 E2Eは既定でWeb `3310`、API `4310`を専用利用し、既存serverを再利用しません。並列CIでは`E2E_WEB_PORT`と`E2E_API_PORT`をjobごとに割り当てられます。APIの`/health`は`service: oshi-schedule-api`を返し、シナリオ開始時に対象アプリを識別します。
 
-MySQLを含むAPI結合テストは、migration適用済みの分離DBを `TEST_DATABASE_URL` で指定して実行します。
+PostgreSQLを含むAPI結合テストは、migration適用済みの分離DBを `TEST_DATABASE_URL` で指定して実行します。
 
 ```bash
-TEST_DATABASE_URL=mysql://oshi:oshi_password@127.0.0.1:3306/oshi_schedule \
+TEST_DATABASE_URL=postgresql://oshi:oshi_password@127.0.0.1:5432/oshi_schedule_test?schema=app \
   pnpm --filter @oshi-schedule/api test -- src/prisma-api.integration.test.ts
 ```
 
@@ -110,7 +110,7 @@ curl -H 'Authorization: Bearer demo-token' http://localhost:4000/api/v1/channels
 
 ## production container
 
-API、worker、migrationはNode.js 22.23.1の同じmulti-stage imageを使います。runtimeは非rootで、`.env`を含めず、RDS CA bundleでTLSを検証します。
+local互換用のAPI/worker imageは残しますが、serverless環境はNode.js 22 Lambda ZIPを使います。Prisma Clientを同梱し、Supavisor transaction poolerへTLS接続します。ECRはrollback資産として保持し、Lambda runtimeからは参照しません。
 
 ```bash
 docker build -t oshi-schedule:local .
@@ -127,12 +127,11 @@ docker run --rm \
   -e ALLOWED_EMAILS=developer@example.com \
   oshi-schedule:local node worker/dist/index.js
 
-# ECS migration taskが使用するcommand（DATABASE_URLはruntime injection）
-api/node_modules/.bin/prisma migrate deploy \
-  --schema=/opt/oshi-schedule/prisma/schema.prisma
+# migrationはprotected GitHub Actions jobだけで実行する（runtime URLではなくdirect/session URL）
+pnpm exec prisma migrate deploy
 ```
 
-SIGTERM受信時、APIは新規受付停止、処理中request待機、Prisma disconnectの順で終了します。`SHUTDOWN_TIMEOUT_SECONDS`の既定は30秒です。ECS stop timeoutは45秒です。
+local serverではSIGTERM受信時、APIは新規受付停止、処理中request待機、Prisma disconnectの順で終了します。Lambdaではhandler外のPrisma clientをwarm invocation間で再利用し、invocationごとにdisconnectしません。
 
 ## AWS staging準備
 
@@ -145,16 +144,16 @@ pnpm --filter @oshi-schedule/infra synth
 pnpm validate:yaml -- docs/api/openapi.yaml amplify.yml .github/workflows/*.yml
 ```
 
-実`cdk deploy`はこのREADMEから直接開始せず、[staging構築チェックリスト](docs/operations/staging-setup.md)と[AWS bootstrap](docs/operations/aws-bootstrap.md)に従ってください。API edgeはALBではなくHTTP API + VPC Link + Cloud Mapで、同期要求はSQS/Pipes経由のone-off workerへ分離されます。RDS storage、Secrets、DNS等はsleep中も維持費が残ります。
+実`cdk deploy`はこのREADMEから直接開始せず、[production公開チェックリスト](docs/operations/production-release-checklist.md)と[serverless低コスト設計](docs/architecture/production-serverless-low-cost.md)に従ってください。API edgeはHTTP API + Lambda、同期要求はSQS + Worker Lambda、定期同期はScheduler + Worker Lambdaです。application DBはSupabase Postgresの非公開`app` schemaを使います。
 
-AWS bootstrap前にGitHubのdefault branchを`main`へ変更し、`staging`/`production` Environmentを作成して、mainのCI validate/E2Eを成功させてください。CIのproduction Web buildは`example.invalid`の非秘密公開テスト値を使用し、実Secretや外部serviceを必要としません。RDSはMySQL 8.4.10を固定し、minor更新手順と終了日は[AWS bootstrap](docs/operations/aws-bootstrap.md)を正とします。
+GitHubのdefault branchを`main`にし、`staging`/`production`/`production-backup` Environmentを作成して、mainのCI validate/E2Eを成功させてください。DB migrationはprotected deploy workflowだけ、日次backupはOIDC roleを使う専用workflowだけが実行します。runtime用Supavisor URLとmigration用direct/session URLは別Secretです。
 
 ## 構成
 
 ```text
 apps/web       Next.js App Router + MUI + Supabase PKCE
-apps/api       Express REST API、同期use case、Prisma/Google/YouTube adapter
-apps/worker    scheduled/targeted両対応の一回実行同期CLI
+apps/api       Express REST API、API Gateway Lambda adapter、Prisma/Google/YouTube adapter
+apps/worker    scheduled/targeted両対応のCLIとSQS/Scheduler Lambda handler
 packages/shared             Zod契約・型・定数
 packages/eslint-config      共通lint
 packages/typescript-config  共通TypeScript設定
@@ -162,15 +161,15 @@ prisma          schema、完全な初期migration、seed
 docs            日本語の要件・設計書
 e2e             Playwrightシナリオ
 infra           AWS CDK stack、environment validation、assertion test
-scripts         YAML検証、ECS revision更新、staging smoke test
-.github/workflows  CI、gated staging deploy、manual production deploy
+scripts         YAML検証、serverless deploy context、legacy staging運用
+.github/workflows  CI、gated serverless deploy、日次backup
 ```
 
 設計の入口は [プロダクト要件](docs/requirements/product-requirements.md)、[システム概要](docs/architecture/system-overview.md)、[同期設計](docs/architecture/synchronization.md)、[API仕様](docs/api/api-specification.md)、[セキュリティ方針](docs/security/security-policy.md) です。AWS運用は[デプロイ構成](docs/architecture/deployment-architecture.md)、[staging構築](docs/operations/staging-setup.md)、[GitHub Actions](docs/operations/github-actions.md)を参照してください。
 
 ## 本番前の注意
 
-Fake認証と既知の開発用暗号鍵は `production` で起動できません。実Google/Supabase/YouTube/Calendar接続と定期・要求時同期はstagingで受入済みですが、production用の別project/credential、OAuth公開審査、DB backup、鍵ローテーション、負荷・クォータを本番移行時に確認してください。`/terms` と `/privacy` の文面は開発・動作確認用のデモであり、一般公開前に専門家の確認を受けて正式版に差し替えてください。第三者向けYouTube Data APIだけでプレミア公開を確定できない項目は、誤推測せず「種別未確定」として扱います。
+Fake認証と既知の開発用暗号鍵は `production` で起動できません。実Google/Supabase/YouTube/Calendar接続と定期・要求時同期はlegacy stagingで受入済みですが、serverless staging previewではOAuth、同期、backup restoreを再受入します。production用の別project/credential、OAuth公開審査、Free planのpause、日次backup、鍵ローテーション、負荷・クォータを本番移行時に確認してください。`/terms` と `/privacy` は正式文面であり、制度・運用変更時には内容を更新し専門家の確認を受けます。第三者向けYouTube Data APIだけでプレミア公開を確定できない項目は、誤推測せず「種別未確定」として扱います。
 
 Webのproduction buildでは、server-side callbackの正規originとなる`WEB_ORIGIN`にWebのHTTPS originを設定し、`NEXT_PUBLIC_API_URL`、`NEXT_PUBLIC_DEMO_MODE=false`、`NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`も明示してください。`NEXT_PUBLIC_*` はブラウザーへ公開されるため、service role key、OAuth client secret、暗号鍵などの秘密値を設定してはいけません。
 

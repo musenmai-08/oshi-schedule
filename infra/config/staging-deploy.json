@@ -2,6 +2,7 @@
   "environment": "staging",
   "deployReady": true,
   "bootstrapOnly": false,
+  "runtimeArchitecture": "legacy-ecs",
   "awsAccount": "741448960817",
   "awsRegion": "ap-northeast-1",
   "hostedZoneId": "Z01914553M6ESDSPGUSOJ",

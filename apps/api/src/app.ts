@@ -8,6 +8,7 @@ import { apiNotFound, authenticate, errorHandler, requestContext } from './prese
 import { AppError } from './domain/errors.js';
 import { createApiRouter } from './presentation/routes.js';
 import { logger } from './infrastructure/logging/logger.js';
+import { DynamoDbRateLimitStore } from './infrastructure/rate-limit/dynamodb-store.js';
 
 export function createApp(env: Env, container: Container): Express {
   const app = express();
@@ -58,6 +59,9 @@ export function createApp(env: Env, container: Container): Express {
       limit: env.NODE_ENV === 'test' ? 10_000 : 100,
       standardHeaders: true,
       legacyHeaders: false,
+      ...(env.RATE_LIMIT_TABLE_NAME
+        ? { store: new DynamoDbRateLimitStore(env.RATE_LIMIT_TABLE_NAME) }
+        : {}),
       handler: (_request, _response, next) =>
         next(
           new AppError(

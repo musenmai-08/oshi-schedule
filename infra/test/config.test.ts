@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   loadConfig,
   parseAmplifyConnectionPhase,
+  parseRuntimeArchitecture,
   parseBooleanContext,
   parseNonNegativeIntegerContext,
   parseSyncPipeDesiredState,
@@ -75,11 +76,21 @@ describe('parseAmplifyConnectionPhase', () => {
   });
 });
 
+describe('parseRuntimeArchitecture', () => {
+  it.each(['serverless', 'legacy-ecs'] as const)('accepts %s', (value) => {
+    expect(parseRuntimeArchitecture(value)).toBe(value);
+  });
+  it.each(['ecs', 'lambda', '', true, null])('rejects %j', (value) => {
+    expect(() => parseRuntimeArchitecture(value)).toThrow(/runtimeArchitecture/);
+  });
+});
+
 describe('loadConfig', () => {
   const completeDeployContext = {
     environment: 'staging',
     deployReady: 'true',
     bootstrapOnly: 'false',
+    runtimeArchitecture: 'serverless',
     awsAccount: '111111111111',
     awsRegion: 'ap-northeast-1',
     hostedZoneId: 'Z00000000000000000000',
@@ -99,6 +110,10 @@ describe('loadConfig', () => {
       'arn:aws:secretsmanager:ap-northeast-1:111111111111:secret:oshi-schedule-staging/app/youtube-api-key-Ij56Kl',
     tokenEncryptionKeysSecretArn:
       'arn:aws:secretsmanager:ap-northeast-1:111111111111:secret:oshi-schedule-staging/app/token-encryption-keys-Mn78Op',
+    databaseUrlSecretArn:
+      'arn:aws:secretsmanager:ap-northeast-1:111111111111:secret:oshi-schedule-staging/app/database-runtime-url-Qr12St',
+    databaseMigrationUrlSecretArn:
+      'arn:aws:secretsmanager:ap-northeast-1:111111111111:secret:oshi-schedule-staging/app/database-migration-url-Uv34Wx',
     githubOwner: 'example-owner',
     githubRepository: 'example-repository',
     amplifyConnectionPhase: 'manual',
@@ -129,6 +144,10 @@ describe('loadConfig', () => {
       'arn:aws:secretsmanager:ap-northeast-1:111111111111:secret:oshi-schedule-production/app/youtube-api-key-Ij56Kl',
     tokenEncryptionKeysSecretArn:
       'arn:aws:secretsmanager:ap-northeast-1:111111111111:secret:oshi-schedule-production/app/token-encryption-keys-Mn78Op',
+    databaseUrlSecretArn:
+      'arn:aws:secretsmanager:ap-northeast-1:111111111111:secret:oshi-schedule-production/app/database-runtime-url-Qr12St',
+    databaseMigrationUrlSecretArn:
+      'arn:aws:secretsmanager:ap-northeast-1:111111111111:secret:oshi-schedule-production/app/database-migration-url-Uv34Wx',
   };
 
   it('synthesizes staging without a purchased domain', () => {
@@ -149,7 +168,7 @@ describe('loadConfig', () => {
       context: { environment: 'production', confirmProduction: 'DEPLOY_PRODUCTION' },
     });
     expect(loadConfig(app)).toMatchObject({
-      monthlyBudgetUsd: 75,
+      monthlyBudgetUsd: 20,
       apiDesiredCount: 1,
       syncPipeDesiredState: 'RUNNING',
       applicationActivated: true,
@@ -158,10 +177,10 @@ describe('loadConfig', () => {
     });
   });
 
-  it('requires a seven-day RDS backup retention period in production', () => {
+  it('requires seven-day S3 backup retention in serverless production', () => {
     expect(() =>
-      loadConfig(new App({ context: { ...productionDeployContext, rdsBackupRetentionDays: 1 } })),
-    ).toThrow(/production requires rdsBackupRetentionDays=7/);
+      loadConfig(new App({ context: { ...productionDeployContext, backupRetentionDays: 1 } })),
+    ).toThrow(/serverless architecture requires backupRetentionDays=7/);
   });
 
   it('supports an explicit environment budget override', () => {

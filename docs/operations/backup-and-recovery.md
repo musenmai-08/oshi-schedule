@@ -1,88 +1,47 @@
 # バックアップ・障害復旧
 
-## 暫定目標（運用方針）
+## 運用契約
 
-| 環境       | RPO    | RTO        | 自動backup           | 補足                                   |
-| ---------- | ------ | ---------- | -------------------- | -------------------------------------- |
-| staging    | 24時間 | 次の営業日 | 1日 retention        | migration検証前は必要に応じsnapshot    |
-| production | 5分    | 4時間      | 7日 retention + PITR | schema変更deploy前にon-demand snapshot |
+productionはSupabase FreeのPostgreSQLを使用する。Supabase Freeの自動バックアップやPITRを前提にせず、GitHub Actionsの`backup-production.yml`が毎日`app` schemaだけをPostgreSQL 17のcustom-format dumpとして取得し、privateなS3 bucketへ暗号化して保存する。S3 lifecycleは7日後の自動削除をIaCで強制する。
 
-RPO/RTOは小規模betaの暫定目標でありSLAではない。一般公開、売上発生、または復旧演習で4時間を超えた場合はretention、Multi-AZ、automationを見直す。
+| 対象 | RPO目標 | RTO目標 | 保持 |
+| --- | --- | --- | --- |
+| application `app` schema | 最大24時間 | 次の営業日 | S3 7日 |
+| Supabase Auth | Supabase Freeの提供条件に従う | best effort | 独自dump対象外 |
 
-### IaCで確定している実設定
+これはSLAではない。一般公開後に24時間のRPO、Free projectのpause、または復旧時間が許容できなくなった場合は、Supabase Pro/PITRまたは別の継続バックアップを先に設計する。
 
-production CDKは`rdsBackupRetentionDays=7`を必須とし、RDSの自動backup/PITRを7日保持する。`deleteAutomatedBackups=false`、deletion protection、暗号化、private subnetを使用する。stagingの既定値は1日である。productionで7日以外のcontextを指定するとsynth前に失敗する。
+## 作成と監視
 
-## RDS保護
+- workflowはGitHub Environment `production-backup`のOIDC roleだけを使用し、migration用DB URL Secretを一時的にmemoryへ取得する。値をartifact、command line、logへ残さない。
+- `postgres:17-alpine`で`pg_dump --schema app --format custom --no-owner --no-privileges`を実行し、`pg_restore --list`成功後だけuploadする。
+- bucketはBlock Public Access、TLS必須、SSE-S3、7日expiration、`RETAIN`である。stack削除をデータ削除とみなさない。
+- backup failure、24時間以上の成功空白、空または異常に小さいobjectはincidentとして扱う。成功通知だけで復元可能性を推測しない。
+- backup jobはFree projectのpause回避を目的にしない。pauseを検知した場合は運営者がSupabase Dashboardで復旧し、backupを再実行する。
 
-- production RDSはencryption at rest、deletion protection、7日間の自動backup/PITR、`deleteAutomatedBackups=false`を使用する。backup windowとworker実行時間をずらす。
-- stagingはCDK既定でdeletion protectionを有効にし、自動backup 1日を維持する。初期構築時に一時的に解除する場合もcontext reviewを必須にし、通常は長期snapshotを持たない。破壊的test/migration前だけsnapshotを取得し、30日以内に削除する。
-- productionのschema migration前にsnapshotを取り、migration ID、image digest、取得時刻、snapshot ID、削除期限（取得から30日以内）をdeploy recordへ残す。
-- automated backup/snapshotの削除、retention短縮、deletion protection解除はmanual approval対象とする。
-- 四半期ごとにproduction backupから隔離した新RDSへrestore rehearsalを行う。元RDSを上書きしない。
-- CDK stackを削除してもRDS snapshot、RDS managed secret、ECR imageがretain/snapshot policyにより残る。stack削除をdata完全削除とみなさず、残存resourceと費用を手動確認する。
+## 復元手順
 
-production stackは常にRDS`Retain`とdeletion protectionを使う。`cdk destroy`は日常の停止手段ではなく、productionでは別reviewとbackup復元確認なしに実行しない。
+詳細なコマンドと安全条件は[Supabase backup/restore runbook](supabase-backup-and-restore.md)を正とする。
 
-### 手動snapshotの30日運用guard
+1. Worker SchedulerとSQS event sourceを停止し、APIをmaintenance扱いにしてwriteを止める。
+2. 復元対象object、取得時刻、size、encryptionを確認する。元DBを上書きしない。
+3. 隔離した新しいPostgreSQL database/projectへ`pg_restore`する。
+4. migration status、主要table件数、foreign key、unique constraint、timestamp、credential ciphertext/key IDを非機密summaryで検証する。token本文を表示しない。
+5. 新runtime DB secretを切り替え、`/health`と`/ready`、read-only smokeを確認してからtrafficを切り替える。
+6. Workerをcontrolled runし、SQS/DLQ、Calendar差分、YouTube quota、deterministic event IDを確認してSchedulerを戻す。
+7. RPO内の欠損、Google Calendarとの不整合、Supabase Authとapp Userの対応を評価する。
 
-productionで手動snapshotを作成する承認には、削除期限（作成日から30日以内）と担当者を含める。deploy recordへsnapshot IDと削除期限を記録し、期限前の運用確認でsnapshot一覧とrecordを照合する。復旧・法令対応などで30日を超える保持が必要な場合は、理由、承認者、次回見直し日をrecordへ追記する。期限を過ぎたsnapshotは、承認された削除手順で削除する。CDKは手動snapshotの自動削除を行わない。
+## 障害別の判断
 
-## production復元手順
+| シナリオ | 対応 |
+| --- | --- |
+| 誤migration / app data破損 | deploy停止。forward fixできなければ新DBへ直前dumpをrestoreし、DB URLを切替 |
+| Supabase project pause | Dashboardで復旧後、`/ready`とbackup空白を確認。自動的な有料化はしない |
+| Worker重複 / 途中終了 | lease expiry後に再実行。fencing、atomic claim、deterministic Calendar IDを維持 |
+| Google credential失効 | `reauthRequired`を設定し再同意を案内。backupからtokenを手作業で抽出しない |
+| SQS/DLQ滞留 | Schedulerを停止し、error分類とSyncRunを確認してから1件ずつ回収 |
+| encryption key喪失 | token復号不能。Google再同意が必要。key materialをrepoやbackup objectへ同梱しない |
 
-1. incident時刻と最終正常時刻を確定し、worker scheduleをdisableしてwriteを止める。必要ならAPIをmaintenance modeへする。
-2. RDS event、backup、transaction logの利用可能時点を確認する。
-3. 最終正常時刻へPITRし、**新しい**RDS instanceを作る。元instanceを削除・上書きしない。
-4. isolated security groupからschema/migration status、主要table件数、外部キー、重複、credential暗号形式を検証する。token/個人情報は表示しない。
-5. 必要な未適用migrationを単一taskで適用し、read-only smokeを実施する。
-6. ECSが参照するDB secret/endpointを新instanceへ更新して新task revisionをdeployする。API readiness確認後にtrafficを切り替える。
-7. workerを一度だけcontrolled runし、Calendar差分とquotaを確認してscheduleを再開する。
-8. RPO内の欠損、外部Calendarとの不整合、影響userを評価する。元RDSはincident解決までread-onlyで保持する。
+## 復元演習
 
-## 障害シナリオ
-
-| シナリオ                    | 復旧                                                                                                                                                                        |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 誤migration/DB data破損     | deploy停止、forward-fix可能性を評価。不可なら新RDSへPITRし切替                                                                                                              |
-| RDS instance/AZ障害         | Single-AZ betaではAWS recoveryを待つかsnapshot/PITRで新instance。RTO違反が続けばMulti-AZ化                                                                                  |
-| worker重複/途中終了         | lease expiry後に再実行。fencingで旧ownerのwriteを拒否し、SyncRun結果を確認                                                                                                  |
-| Google credential失効       | `reauthRequired`を立てuserへ再同意を案内。refresh tokenをbackupからチャット等へ取り出さない                                                                                 |
-| 専用Calendar/event削除      | Connectionを検証し、Calendarが存在すればDBのBroadcast/同期状態から次回同期でmanaged eventを再作成。Calendar自体がない場合は再onboarding/reconnectで新Calendarを作り、全同期 |
-| Supabase障害/project誤設定  | projectを環境別に確認。Supabase backup/recovery手順に従い、RDS Userとのidentity mappingを検証                                                                               |
-| `TOKEN_ENCRYPTION_KEYS`紛失 | DB内refresh tokenは復号不能。Calendar dataは残るが全userにGoogle再同意が必要。keyを推測・再生成して復号しようとしない                                                       |
-| Secret漏えい                | 漏れたGoogle/Supabase/YouTube/DB credentialをprovider側でrevoke/rotateし、新ECS revisionをdeploy。log/artifact/cacheを調査                                                  |
-
-Calendar eventはYouTube由来のtitle/time/type/URLとDB上のmappingから再構築できる。ただしGoogle Calendarはbackupではなく外部派生先である。Google側だけで変更された情報や削除済み専用Calendar IDはRDS backupから完全復元できないため、read-only検証後のfull syncが必要になる。
-
-## 暗号鍵のbackupとrotation
-
-`TOKEN_ENCRYPTION_KEYS`はGoogle refresh tokenを復号できる最重要secretである。
-
-1. 環境別の専用Secrets Manager secretでversion管理する。
-2. production keyの暗号化offline recovery copyを、AWSとは別の個人用password managerまたは暗号化removable backupへ保存する。アクセス者と復元手順を記録し、平文fileを置かない。
-3. 四半期ごと、漏えい疑い時、または管理者変更時にrotateする。新しい32-byte random keyを新IDで先頭追加し、新規writeを切り替える。
-4. background taskで既存ciphertextを新keyへ再暗号化し、件数とkey IDだけを検証する。
-5. 全行の移行、backup、rollback windowを確認後に旧keyを削除する。先に旧keyを削除しない。
-6. 半年ごとにoffline copyからsandboxでrecovery手順を検証し、実tokenのGoogle API利用は行わない。
-
-DB backupと暗号鍵backupの両方がなければcredentialを復旧できない。両者を同じ場所・同じcredentialだけに依存させない。
-
-## Secret rotation一覧
-
-| Secret                           | 通常rotation                     | 緊急時                                                       |
-| -------------------------------- | -------------------------------- | ------------------------------------------------------------ |
-| DB credential                    | 90日またはRDS managed rotation   | 新credential→task deploy→旧credential失効                    |
-| Google client secret             | 年1回、provider方針変更時        | Google Cloudでrotateしstaging検証後production                |
-| Supabase service role/secret key | provider機能とincident方針に従う | 新key deploy後に旧key revoke                                 |
-| YouTube API key                  | 漏えい/制限変更時                | key restriction確認、新keyへ切替、旧key revoke               |
-| token encryption key             | 四半期またはincident             | 上記のmulti-key再暗号化。緊急でも旧keyを復号完了前に消さない |
-
-## Supabaseと設定の保全
-
-Supabase AuthはRDSとは別の復旧境界である。productionはbackupが提供されるplanを使い、Google provider、Site URL、Redirect URL、email/provider policyをInfrastructure/operations checklistに記録する。API keyやclient secretの実値を文書へ保存しない。
-
-## 関連文書
-
-- [環境戦略](environment-strategy.md)
-- [デプロイとrollback](deployment.md)
-- [監視とbackup alarm](monitoring.md)
+四半期ごとに最新dumpを隔離DBへ復元し、所要時間、対象migration、件数整合、暗号形式、欠損を記録する。元Supabase project、Google Calendar、SQSにはwriteしない。演習後のisolated DB削除は別承認とする。

@@ -36,12 +36,13 @@ describe('formal legal content', () => {
     }
   });
 
-  it('documents the implemented retention and deletion behavior without inventing a backup period', () => {
+  it('documents the implemented retention and deletion behavior', () => {
     const privacy = contentOf(privacySections);
     expect(privacy).toContain('90日');
     expect(privacy).toContain('完了から30日');
-    expect(privacy).toContain('7日間保持');
-    expect(privacy).toContain('手動snapshotは原則30日以内に削除');
+    expect(privacy).toContain('原則1日1回');
+    expect(privacy).toContain('7日後に自動削除');
+    expect(privacy).toContain('Supabase Authの認証データはこのアプリ独自バックアップの対象外');
     expect(privacy).toContain('IaC上30日保持');
     expect(privacy).toContain('法令上保持が必要な情報');
   });

@@ -32,6 +32,7 @@ const schema = z
     SUPABASE_JWT_AUDIENCE: z.string().default('authenticated'),
     SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
     SYNC_JOB_QUEUE_URL: z.string().url().optional(),
+    RATE_LIMIT_TABLE_NAME: z.string().min(1).optional(),
     YOUTUBE_API_KEY: z.string().optional(),
     GOOGLE_CLIENT_ID: z.string().optional(),
     GOOGLE_CLIENT_SECRET: z.string().optional(),
@@ -108,11 +109,11 @@ export type RuntimeKind = 'api' | 'worker';
 export function loadEnv(source: NodeJS.ProcessEnv = process.env, runtime: RuntimeKind = 'api'): Env {
   const env = schema.parse(source);
   if (env.NODE_ENV === 'production' || env.APP_MODE === 'real') {
-    if (!source.WEB_ORIGIN?.trim())
+    if (runtime === 'api' && !source.WEB_ORIGIN?.trim())
       throw new Error('Missing required environment variable: WEB_ORIGIN');
     if (runtime === 'api' && !source.ALLOWED_EMAILS?.trim())
       throw new Error('Missing required environment variable: ALLOWED_EMAILS');
-    if (env.NODE_ENV === 'production') {
+    if (env.NODE_ENV === 'production' && runtime === 'api') {
       const webOrigin = new URL(env.WEB_ORIGIN);
       if (
         webOrigin.protocol !== 'https:' ||
@@ -131,18 +132,17 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env, runtime: Runtim
       )
     )
       throw new Error('ALLOWED_EMAILS must not use the development default in production/real');
-    for (const key of [
-      'DATABASE_URL',
-      'SUPABASE_URL',
-      'SUPABASE_SERVICE_ROLE_KEY',
-      'YOUTUBE_API_KEY',
-      'GOOGLE_CLIENT_ID',
-      'GOOGLE_CLIENT_SECRET',
-    ] as const) {
+    for (const key of ['DATABASE_URL', 'YOUTUBE_API_KEY', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'] as const) {
       if (!env[key]) throw new Error(`Missing required environment variable: ${key}`);
     }
+    if (runtime === 'api')
+      for (const key of ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'] as const) {
+        if (!env[key]) throw new Error(`Missing required environment variable: ${key}`);
+      }
     if (env.NODE_ENV === 'production' && !env.SYNC_JOB_QUEUE_URL)
       throw new Error('Missing required environment variable: SYNC_JOB_QUEUE_URL');
+    if (env.NODE_ENV === 'production' && runtime === 'api' && !env.RATE_LIMIT_TABLE_NAME)
+      throw new Error('Missing required environment variable: RATE_LIMIT_TABLE_NAME');
     if (env.APP_MODE === 'fake') throw new Error('Fake mode is forbidden in production');
     for (const entry of env.TOKEN_ENCRYPTION_KEYS.split(',')) {
       const separator = entry.indexOf(':');
@@ -152,6 +152,19 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env, runtime: Runtim
         throw new Error(
           'TOKEN_ENCRYPTION_KEYS must not use a known, predictable, low-entropy, or unsafe key',
         );
+    }
+    if (env.NODE_ENV === 'production' && env.DATABASE_URL) {
+      const databaseUrl = new URL(env.DATABASE_URL);
+      if (!['postgres:', 'postgresql:'].includes(databaseUrl.protocol))
+        throw new Error('DATABASE_URL must use PostgreSQL in production');
+      for (const [name, expected] of [
+        ['schema', 'app'],
+        ['sslmode', 'require'],
+        ['pgbouncer', 'true'],
+        ['connection_limit', '1'],
+      ] as const)
+        if (databaseUrl.searchParams.get(name) !== expected)
+          throw new Error(`DATABASE_URL must set ${name}=${expected} in production`);
     }
   }
   return env;
