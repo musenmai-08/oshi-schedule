@@ -1,0 +1,30 @@
+apps/api/src/container.ts
+  s_3a50bad78ea1cd::t_e0ddc8bfddcae5 57-74,172-187,189
+  s_3a50bad78ea1cd::t_fe25ffaf54f1d3 188
+infra/test/serverless-stack.test.ts
+  s_3a50bad78ea1cd::t_8dc6fd166d8a51 194-211
+apps/api/src/runtime.ts
+  s_3a50bad78ea1cd::t_e0ddc8bfddcae5 1,6
+apps/api/src/infrastructure/env.ts
+  s_3a50bad78ea1cd::t_8dc6fd166d8a51 142-144
+apps/worker/src/lambda.test.ts
+  s_3a50bad78ea1cd::t_8dc6fd166d8a51 86-98
+apps/api/src/runtime.test.ts
+  s_3a50bad78ea1cd::t_8dc6fd166d8a51 6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "12b403bec47552f8aac1f1ed9b3a115db6588b14",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
