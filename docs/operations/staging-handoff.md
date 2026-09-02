@@ -6,6 +6,8 @@
 
 2026-09-02に、legacy API domain/resourceを変更せず、Amplify Appの`NEXT_PUBLIC_API_URL`だけをserverless preview HTTP API originへ切り替えた。CDK phase2 diffはAmplify Appの環境変数更新1件のみで、CloudFormationは`UPDATE_COMPLETE`となった。Amplify main build/deploy job `8`は1回だけ開始済みだが、監視中にAWS SSOセッションが期限切れとなり最終状態は未確認である。公開WebはHTTP 200、認証コードなしの`/auth/callback`は`https://staging.oshi-schedule.com/?error=oauth`へredirectした。SSO復旧後はjob 8の結果確認を先に行い、再buildしない。
 
+2026-09-02にSSO復旧後、Amplify main job `8`の最終状態をread-only確認し、BUILD/DEPLOY/VERIFYの`SUCCEED`を確認した。Amplify Appの`NEXT_PUBLIC_API_URL`はserverless preview HTTP API originへ反映済みで、公開WebはHTTP 200、preview APIの`/health`/`/ready`はHTTP 200、認証前APIは401（認証要求）である。previewのsync queue、sync DLQ、Scheduler DLQは全て0、API/Worker LambdaはActive、監視Alarmは全てOK、Worker Schedulerは`DISABLED`。OAuth以降の受入は、ブラウザでstaging WebからGoogleログインとCalendar権限同意を行った後に再開する。定期Backup workflowの失敗は別課題として扱い、今回の受入には広げない。
+
 2026-08-29 12:44 JSTに`oshi-schedule` profile、`ap-northeast-1`で再確認した。
 
 | 項目                   | 状態                              |
