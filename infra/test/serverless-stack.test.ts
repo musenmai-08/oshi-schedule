@@ -191,6 +191,24 @@ describe('ServerlessOshiScheduleStack', () => {
     expect(workerPolicy).not.toContain('supabase-service-role-key');
   }, 15_000);
 
+  it('keeps the SQS dispatch URL API-only while the Worker consumes deliveries', () => {
+    const functions = Object.values(
+      render().toJSON().Resources as Record<string, { Type?: string; Properties?: Record<string, unknown> }>,
+    ).filter((resource) => resource.Type === 'AWS::Lambda::Function');
+    const environmentNames = (functionName: string) => {
+      const fn = functions.find(
+        (resource) => resource.Properties?.FunctionName === functionName,
+      );
+      const variables = fn?.Properties?.Environment as
+        | { Variables?: Record<string, unknown> }
+        | undefined;
+      return Object.keys(variables?.Variables ?? {});
+    };
+
+    expect(environmentNames('oshi-schedule-production-api')).toContain('SYNC_JOB_QUEUE_URL');
+    expect(environmentNames('oshi-schedule-production-worker')).not.toContain('SYNC_JOB_QUEUE_URL');
+  }, 15_000);
+
   it('keeps the existing staging domain, Amplify app, and ECR rollback assets isolated', () => {
     const template = renderStagingPreview();
     template.resourceCountIs('AWS::Amplify::App', 0);

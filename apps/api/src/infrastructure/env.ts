@@ -139,7 +139,9 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env, runtime: Runtim
       for (const key of ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'] as const) {
         if (!env[key]) throw new Error(`Missing required environment variable: ${key}`);
       }
-    if (env.NODE_ENV === 'production' && !env.SYNC_JOB_QUEUE_URL)
+    // Only the API dispatches new jobs. The SQS-consumer Worker must not need
+    // a send-queue capability merely to initialize and process a delivery.
+    if (env.NODE_ENV === 'production' && runtime === 'api' && !env.SYNC_JOB_QUEUE_URL)
       throw new Error('Missing required environment variable: SYNC_JOB_QUEUE_URL');
     if (env.NODE_ENV === 'production' && runtime === 'api' && !env.RATE_LIMIT_TABLE_NAME)
       throw new Error('Missing required environment variable: RATE_LIMIT_TABLE_NAME');

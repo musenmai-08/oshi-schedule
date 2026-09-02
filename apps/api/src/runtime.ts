@@ -1,9 +1,9 @@
-import { createContainer } from './container.js';
+import { createWorkerContainer } from './container.js';
 import { loadWorkerEnv } from './infrastructure/env.js';
 
 export function createWorkerRuntime(source: NodeJS.ProcessEnv = process.env) {
   const env = loadWorkerEnv(source);
-  const container = createContainer(env);
+  const container = createWorkerContainer(env);
   return {
     env,
     container,

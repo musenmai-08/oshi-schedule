@@ -83,4 +83,17 @@ describe('Worker Lambda handler', () => {
     );
     write.mockRestore();
   });
+
+  it('fails the SQS invocation safely when Worker initialization is rejected', async () => {
+    const write = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const handler = createWorkerLambdaHandler(async () => {
+      throw new Error('runtime-secret-must-not-be-logged');
+    });
+
+    await expect(
+      handler(sqsEvent([JSON.stringify({ syncRunId: 'cm0wz73bk0000qzrmn831i7rn' })]), {} as never, () => undefined),
+    ).rejects.toThrow('Worker initialization failed safely');
+    expect(write).toHaveBeenCalledWith(expect.not.stringContaining('runtime-secret-must-not-be-logged'));
+    write.mockRestore();
+  });
 });

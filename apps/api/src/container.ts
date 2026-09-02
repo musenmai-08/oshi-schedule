@@ -54,6 +54,24 @@ export interface ContainerOverrides {
   resources?: RuntimeResources;
 }
 
+export interface WorkerContainer {
+  service: OshiService;
+  store: Store;
+  resources: RuntimeResources;
+}
+
+const workerOnlyAuth: AuthVerifier = {
+  async verify() {
+    throw new Error('Worker runtime does not serve authenticated HTTP requests');
+  },
+};
+
+const workerOnlyAuthAdmin: AuthAdmin = {
+  async deleteUser() {
+    throw new Error('Worker runtime does not process account deletion requests');
+  },
+};
+
 export function createContainer(env: Env, overrides: ContainerOverrides = {}): Container {
   const store =
     overrides.store ?? (env.APP_MODE === 'fake' ? new MemoryStore(true) : new PrismaStore());
@@ -149,5 +167,23 @@ export function createContainer(env: Env, overrides: ContainerOverrides = {}): C
     auth,
     invitation: new AllowedEmailInvitationPolicy(env.ALLOWED_EMAILS),
     resources,
+  };
+}
+
+// The SQS Worker only runs SyncService. Keep HTTP authentication and Supabase
+// admin capabilities out of its initialization contract and IAM environment.
+export function createWorkerContainer(
+  env: Env,
+  overrides: ContainerOverrides = {},
+): WorkerContainer {
+  const container = createContainer(env, {
+    ...overrides,
+    auth: overrides.auth ?? workerOnlyAuth,
+    authAdmin: overrides.authAdmin ?? workerOnlyAuthAdmin,
+  });
+  return {
+    service: container.service,
+    store: container.store,
+    resources: container.resources,
   };
 }
