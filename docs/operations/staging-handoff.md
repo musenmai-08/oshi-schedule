@@ -205,6 +205,10 @@ INITIAL/MANUAL SyncRunの最終状態を確認するときは`pnpm staging:inspe
 
 ## 次工程
 
+2026-09-05にserverless preview Workerのbundling不具合を修正した。原因はWorkerが`@oshi-schedule/api/runtime`と`@oshi-schedule/api/lambda-env`をworkspace package export経由でimportし、CDK/esbuildが古い`apps/api/dist`を解決していたことだった。Lambda bundlingではこの2 importを`apps/api/src`へ明示aliasし、package exportが`dist`を指す場合でもbundle入力に`dist`が含まれず、`createWorkerContainer`を含むことを回帰testで固定した。CI validate/e2eは成功し、staging serverless diffはWorker Lambda Code更新1件だけだったためdeployを実施した。CloudFormationは`UPDATE_COMPLETE`、Event Source MappingはEnabled（BatchSize 1 / MaximumConcurrency 2）、SchedulerはDISABLEDのままである。
+
+修正版を確認後、sync DLQに存在したINITIAL messageちょうど1件を元queueへredriveした。既存INITIAL SyncRunはSUCCESS（YouTube取得・DB更新・Calendar同期の各phase SUCCESS）、Workerはエラー/スロットルなし、sync queue/DLQはいずれも0となった。対象channelには同期時点でbroadcastが0件だったためCalendar mappingは0であり、Calendar権限・API失敗ではない。このためevent作成、manual/idempotent sync、削除・再登録のCalendar CRUD受入は、未来配信を持つchannelで別途実施する必要がある。Sync DLQ Alarmはメトリクス評価期間のため一時的にALARMのままで、DLQ実数0およびWorker error 0は確認済みである。legacy stagingおよびproductionへの変更はない。
+
 今回のOAuth/login、チャンネル登録、再Sync、削除、再登録、定期Scheduler同期の受入、バックエンド監査、staging sleep、リリース前最終監査は完了した。招待制stagingは技術的受入完了で`SLEEPING`を維持する。production公開設定guardとOAuth scope最小化コードは解消済みで、一般公開へ残るHighは[High 2詳細監査](../reviews/high-2-production-oauth-legal-audit.md)の限定scope実受入、法務表示、branding、production外部設定・公開審査である。次は新runtime candidateのECR固有OpenSSL 3件について、2026-09-11までの期限付き例外を明示承認するか判断する。承認後に限定deployを再開し、その完了後、Google/Supabase Data Access変更と旧grantを排除したstaging手動受入を別途承認の上で行う。
 
 2026-08-30にcurrent HEAD `d233f73`由来の検証済みruntime candidateをstaging ECRへimmutable tag `d233f73`でpushし、digest `sha256:8eab040ceaf8b53b967ca07205198d54a3c6bcb503f5dc04f74a0b7ccca1da95`を確定した。ECR Basic Scanは`COMPLETE`（CRITICAL 3 / HIGH 9）で、既存production例外または承認済みstaging限定例外だけに一致し、未承認Critical/Highは0件だった。そのdigestをPhase 2 CDK deployでAPI/Worker/Migration Task Definitionへ反映し、CloudFormation `UPDATE_COMPLETE`、deploy後CDK diff 0、全Task Definitionのdigest一致を確認した。deployに伴い一時起動したAPIは`pnpm staging:sleep`で停止し、現在はAPI 0/0/0、RDS `STOPPED`、Worker Scheduler `DISABLED`、Cloud Map登録0、status `SLEEPING`である。inspector、Worker、Sync、OAuth、Amplify buildは行っていない。
