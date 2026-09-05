@@ -216,6 +216,18 @@ describe('ServerlessOshiScheduleStack', () => {
     expect(backupPolicy).not.toContain('s3:DeleteObject');
   });
 
+  it('uses the staging repository’s immutable-ID OIDC subject only for the staging backup role', () => {
+    const roles = Object.values(renderStagingPreview().findResources('AWS::IAM::Role')) as Array<{
+      Properties?: unknown;
+    }>;
+    const backupRole = roles
+      .map((role) => JSON.stringify(role.Properties))
+      .find((role) => role.includes('staging-backup'));
+    expect(backupRole).toContain(
+      'repo:musenmai-08@165903509/oshi-schedule@1308836728:environment:staging-backup',
+    );
+  });
+
   it('destroys an empty staging-preview backup bucket on rollback but retains production backups', () => {
     const productionBucket = Object.values(render().findResources('AWS::S3::Bucket'))[0] as {
       DeletionPolicy?: string;

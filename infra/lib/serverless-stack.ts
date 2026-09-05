@@ -396,12 +396,15 @@ export class ServerlessOshiScheduleStack extends Stack {
       },
       this,
     );
+    const githubBackupSubject = isStagingPreview
+      ? 'repo:musenmai-08@165903509/oshi-schedule@1308836728:environment:staging-backup'
+      : `repo:${config.githubOwner}/${config.githubRepository}:environment:${config.environmentName}-backup`;
     const backupRole = new iam.Role(this, 'DatabaseBackupRole', {
       roleName: `${resourcePrefix}-database-backup`,
       assumedBy: new iam.WebIdentityPrincipal(githubProviderArn, {
         StringEquals: {
           'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com',
-          'token.actions.githubusercontent.com:sub': `repo:${config.githubOwner}/${config.githubRepository}:environment:${config.environmentName}-backup`,
+          'token.actions.githubusercontent.com:sub': githubBackupSubject,
         },
       }),
       maxSessionDuration: Duration.hours(1),
