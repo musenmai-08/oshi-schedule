@@ -1,0 +1,19 @@
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_d87d86534cc52e 266-269
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "e23611f8d2a034f5c07d71d3f46f7ae916b8a0f9",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
