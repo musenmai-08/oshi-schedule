@@ -1,0 +1,23 @@
+docs/operations/production-release-checklist.md
+  s_3a50bad78ea1cd::t_072411b4944436 7-8,119-124
+docs/reviews/production-serverless-final-preflight.md
+  s_3a50bad78ea1cd::t_072411b4944436 1-92
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_072411b4944436 270-273
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "11e3b4c014b8344bb41a6305777c891e516283d6",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
