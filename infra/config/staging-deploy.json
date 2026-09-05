@@ -15,7 +15,7 @@
   "googleClientSecretArn": "arn:aws:secretsmanager:ap-northeast-1:741448960817:secret:oshi-schedule-staging/app/google-client-secret-J9b2rp",
   "youtubeApiKeySecretArn": "arn:aws:secretsmanager:ap-northeast-1:741448960817:secret:oshi-schedule-staging/app/youtube-api-key-f9LP9U",
   "tokenEncryptionKeysSecretArn": "arn:aws:secretsmanager:ap-northeast-1:741448960817:secret:oshi-schedule-staging/app/token-encryption-keys-lRAujg",
-  "monthlyBudgetUsd": 25,
+  "monthlyBudgetUsd": 20,
   "githubOwner": "musenmai-08",
   "githubRepository": "oshi-schedule",
   "amplifyConnectionPhase": "connected",
