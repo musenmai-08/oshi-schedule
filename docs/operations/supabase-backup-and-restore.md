@@ -9,6 +9,12 @@
 - Secret値、DB URL、dump内容をActions log、artifact、Gitへ出さない。
 - Free projectは低activity時にpauseされ得る。backup成功をavailability保証やpause回避策として扱わない。
 
+### Staging serverless
+
+- `Backup staging serverless database` workflowはGitHub Environment `staging-backup`に限定したOIDC roleで、staging migration owner URLを一時的に使い、同じ`app` schema custom dumpを既存のstaging preview backup bucketへ保存する。production workflow、role、bucketは参照しない。
+- workflow roleはdump objectのuploadと検証読み取りだけを許可する。削除はS3 lifecycle（7日）だけが実行する。
+- stagingの実行後はobjectのサイズと`AES256`、public access block、7日Lifecycleを確認する。URL、dump本文、credentialを出力しない。
+
 ## 日次確認
 
 1. Actions jobがsuccessであることを確認する。

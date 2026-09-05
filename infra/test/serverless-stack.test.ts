@@ -203,6 +203,19 @@ describe('ServerlessOshiScheduleStack', () => {
     });
   });
 
+  it('limits the GitHub backup role to app dump upload and verification, never deletion', () => {
+    const policies = Object.values(render().findResources('AWS::IAM::Policy')) as Array<{
+      Properties?: unknown;
+    }>;
+    const backupPolicy = policies
+      .map((policy) => JSON.stringify(policy.Properties))
+      .find((policy) => policy.includes('database/*'));
+    expect(backupPolicy).toBeDefined();
+    expect(backupPolicy).toContain('s3:PutObject');
+    expect(backupPolicy).toContain('s3:GetObject');
+    expect(backupPolicy).not.toContain('s3:DeleteObject');
+  });
+
   it('destroys an empty staging-preview backup bucket on rollback but retains production backups', () => {
     const productionBucket = Object.values(render().findResources('AWS::S3::Bucket'))[0] as {
       DeletionPolicy?: string;

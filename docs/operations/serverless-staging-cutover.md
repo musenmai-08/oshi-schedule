@@ -26,6 +26,12 @@
 4. OAuth、manual sync、duplicate delivery、Calendar CRUD、account deletion、14分以内のscheduled syncを順に受入する。
 5. 日次backupを手動dispatchし、S3 object、暗号化、restore list、7日lifecycleを確認する。Supabase Authがdump対象外であることも記録する。
 
+## Serverless previewの状態確認
+
+`pnpm staging:serverless:status`を使う。このread-onlyコマンドはLambda API/Worker、preview APIの`/ready`、SQS/DLQ、event source mapping、Scheduler、CloudWatch Alarmをまとめて表示する。serverless previewはSupabase PostgresとLambdaで動作するため、wake/sleepは不要である。
+
+`pnpm staging:status`、`staging:wake`、`staging:sleep`はrollback用に残しているlegacy ECS/MySQL staging専用であり、serverless previewの可用性判断や操作に使用しない。
+
 ## rollback
 
 cutover前またはdata write前はdeployを中止する。cutover後はScheduler/event sourceを停止し、Amplify/API originを旧stagingへ戻す。PostgreSQL dataをMySQLへ自動逆変換しない。旧RDS/ECSは受入完了後30日間sleep/disabledで保持し、削除はresource別承認にする。

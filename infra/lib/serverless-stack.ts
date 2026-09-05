@@ -406,7 +406,15 @@ export class ServerlessOshiScheduleStack extends Stack {
       }),
       maxSessionDuration: Duration.hours(1),
     });
-    backupBucket.grantReadWrite(backupRole, 'database/*');
+    // Backups are immutable operational records: the workflow only uploads and
+    // verifies objects. Retention is enforced by the bucket lifecycle, so the
+    // GitHub OIDC role must never receive delete permissions.
+    backupRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ['s3:PutObject', 's3:GetObject'],
+        resources: [backupBucket.arnForObjects('database/*')],
+      }),
+    );
     backupRole.addToPolicy(
       new iam.PolicyStatement({
         actions: ['secretsmanager:GetSecretValue'],

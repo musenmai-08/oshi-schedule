@@ -85,6 +85,7 @@ jobs:
           .github/workflows/deploy-staging.yml
           .github/workflows/deploy-production.yml
           .github/workflows/backup-production.yml
+          .github/workflows/backup-staging.yml
       - name: CDK assertions and synth
         run: |
           pnpm --filter @oshi-schedule/infra test

@@ -28,6 +28,7 @@
     "aws:cdk": "bash scripts/aws/with-project-node.sh pnpm --filter @oshi-schedule/infra cdk",
     "smoke:staging": "bash scripts/smoke-staging.sh",
     "staging:status": "bash scripts/aws/with-project-node.sh node scripts/aws/staging-operations.mjs status",
+    "staging:serverless:status": "bash scripts/aws/with-project-node.sh node scripts/aws/staging-serverless-status.mjs",
     "staging:inspect-queued-sync-runs": "bash scripts/aws/with-project-node.sh node scripts/aws/staging-inspect-queued-sync-runs.mjs",
     "staging:inspect-sync-run-states": "bash scripts/aws/with-project-node.sh node scripts/aws/staging-inspect-queued-sync-runs.mjs --states",
     "staging:preflight": "bash scripts/aws/with-project-node.sh node scripts/aws/staging-preflight.mjs",
