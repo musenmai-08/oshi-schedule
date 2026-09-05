@@ -4,6 +4,8 @@
 
 > 2026-09-01に[serverless低コスト移行設計](../architecture/production-serverless-low-cost.md)を正式採用した。ECR-first/RDS/ECSの記録は履歴であり、新しいdeploy承認には使わない。productionはSupabase Free + Lambda + S3日次backup 7日である。
 
+> 2026-09-06の[production serverless最終preflight監査](../reviews/production-serverless-final-preflight.md)では、構造diffがCREATE 42、UPDATE/DELETE/REPLACE 0で、旧RDS/ECS/VPC系が0であることを確認した。ただしDB Secret/role、GitHub deploy identity、Amplify repository接続phase、backup OIDC subjectが未解消のため、production deployはまだ禁止である。
+
 ## 確定した公開URLとアプリ設定
 
 | 用途                      | 値                                                                       | source of truth                                       |
@@ -114,6 +116,12 @@ production ECR repositoryはCDKの`bootstrapOnly=true` phaseが唯一の所有�
 - [ ] Google consent screen、scope justification、demo video、必要なverificationが承認済みである。
 - [ ] Terms/Privacyの専門家確認、13歳未満利用不可、日本国内向け、無料/有料化方針、運営者・問い合わせ先の最終承認がある。
 - [ ] S3 app-schema日次backup 7日、最大RPO 24時間、Supabase Auth独自backupなし、Free pause、SyncRun 90日、log 30日、完了墓石30日purgeの責任者と復元演習が確認済みである。
+- [ ] `database-migration-url`と`database-runtime-url`をproduction専用値で作成し、`oshi_runtime`がapp schemaのDMLだけを持ちDDLを拒否する。
+- [ ] production GitHub deploy roleをrepository immutable-ID subjectで作成し、`deploy-production.yml`がOIDCでassumeできる。
+- [ ] production AmplifyをApp-only → repository接続 → Branch/Domainの順で作成し、manual Branchがrepository接続を阻害しない。
+- [ ] production backup roleのOIDC subjectをrepository immutable-ID形式へ統一し、production-backup environmentからのSTSだけを許可する。
+- [ ] baseline migrationとinfra deployを別の承認・結果記録に分け、deploy失敗時に適用済みbaselineから安全に再開できる。
+- [ ] app schema backupでPrisma migration状態を復元判定する方法を確定し、一時PostgreSQLへのrestore rehearsalで確認する。
 
 ## 最終受入手順
 

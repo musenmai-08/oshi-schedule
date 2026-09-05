@@ -267,4 +267,8 @@ productionの最初のECR作成はCDK `bootstrapOnly=true`を唯一の所有者�
 
 同日、Schedulerを一時`ENABLED`にしてscheduled message→SQS→Workerを1回実行し、SCHEDULED SyncRun `SUCCESS`を確認した。Calendar mappingは1件、同一broadcastの重複は0、queue/DLQは0、Worker error/throttleは0、serverless Alarmは全件`OK`だった。Schedulerは`DISABLED`へ復帰した。serverless状態は`pnpm staging:serverless:status`でLambda/API readiness、SQS/DLQ、ESM、Scheduler、Alarmを確認し、legacy `staging:wake/status`は使用していない。legacy ECS/MySQL/APIとproduction resourceは変更していない。
 
+2026-09-06にproduction serverlessの最終read-only preflightを実施した。既存production stackはECR bootstrapだけの`CREATE_COMPLETE`で、ACM、application Secret 4件、allowed-emails SecureString、production適格ECR digestを確認した。serverless構造diffは既存ECRを維持してCREATE 42、UPDATE/DELETE/REPLACE 0、RDS/ECS/VPC/VPC Link/Cloud Map/Pipe/Public IPv4 0で、runtimeへのstaging/legacy参照はなかった。月額は低trafficで約4〜10 USD、free allowance枯渇時は約10〜12 USDを見込む。
+
+production deployは、DB URL Secret 2件/runtime role/baseline未作成、GitHub production deploy role不在、fresh Amplify Appのrepository接続phase未実装、production backup OIDC subjectのimmutable-ID未対応により禁止を継続する。詳細、migration/rollback順序、次writeは[production serverless最終preflight監査](../reviews/production-serverless-final-preflight.md)を参照する。AWS/Supabase/Googleへのwrite・deployは行っていない。
+
 同rollbackで`oshi-schedule-staging-serverless-database-backups-741448960817`は`DELETE_SKIPPED`で残った。read-onlyでempty、SSE-S3、public access block、7日lifecycle、CDK tagを確認した。今後のstaging preview bucketはempty rollback時に`DELETE`となり孤児化を防ぐ。既存bucketは削除禁止であり、preview再作成時はfailed stack recordを削除（bucket retain）後、CloudFormation resource importで同bucketを`DatabaseBackupBucket`として再管理する別承認が必要である。legacy `oshi-schedule-staging`は`UPDATE_COMPLETE`のままで、今回の変更・失敗でUPDATE/DELETE/REPLACEはない。
