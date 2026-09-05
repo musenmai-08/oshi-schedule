@@ -31,6 +31,7 @@ import * as sns from 'aws-cdk-lib/aws-sns';
 import * as subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Construct } from 'constructs';
 import { applicationSecretArnDefinitions, type DeploymentConfig } from './config.js';
@@ -71,6 +72,31 @@ export const lambdaBundling: lambdaNodejs.BundlingOptions = {
     ],
   },
 };
+
+/**
+ * Worker Lambda imports API runtime entry points through the workspace package.
+ * Those package exports deliberately point at `apps/api/dist` for normal Node
+ * consumers, but Lambda bundling must always compile the current source tree.
+ * Pin these two runtime-only imports to source so a stale (or absent) dist
+ * directory cannot become part of the deployed Worker artifact.
+ */
+export const lambdaSourceAliases = (repositoryRoot: string): Record<string, string> => ({
+  '@oshi-schedule/api/runtime': resolve(repositoryRoot, 'apps/api/src/runtime.ts'),
+  '@oshi-schedule/api/lambda-env': resolve(
+    repositoryRoot,
+    'apps/api/src/infrastructure/lambda/runtime-env.ts',
+  ),
+});
+
+export const createLambdaBundling = (repositoryRoot: string): lambdaNodejs.BundlingOptions => ({
+  ...lambdaBundling,
+  esbuildArgs: Object.fromEntries(
+    Object.entries(lambdaSourceAliases(repositoryRoot)).map(([packageImport, sourcePath]) => [
+      `--alias:${packageImport}`,
+      sourcePath,
+    ]),
+  ),
+});
 
 export class ServerlessOshiScheduleStack extends Stack {
   constructor(scope: Construct, id: string, props: ServerlessStackProps) {
@@ -189,7 +215,7 @@ export class ServerlessOshiScheduleStack extends Stack {
         removalPolicy,
       }),
       environment: sharedEnvironment,
-      bundling: lambdaBundling,
+      bundling: createLambdaBundling(repositoryRoot),
       depsLockFilePath: `${repositoryRoot}/pnpm-lock.yaml`,
       projectRoot: repositoryRoot,
     });
@@ -224,7 +250,7 @@ export class ServerlessOshiScheduleStack extends Stack {
         SYNC_JOB_QUEUE_URL: syncQueue.queueUrl,
         RATE_LIMIT_TABLE_NAME: rateLimitTable.tableName,
       },
-      bundling: lambdaBundling,
+      bundling: createLambdaBundling(repositoryRoot),
       depsLockFilePath: `${repositoryRoot}/pnpm-lock.yaml`,
       projectRoot: repositoryRoot,
     });

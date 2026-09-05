@@ -1,8 +1,16 @@
 import { App } from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
+import { build } from 'esbuild';
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { DeploymentConfig } from '../lib/config.js';
-import { lambdaBundling, ServerlessOshiScheduleStack } from '../lib/serverless-stack.js';
+import {
+  createLambdaBundling,
+  lambdaBundling,
+  lambdaSourceAliases,
+  ServerlessOshiScheduleStack,
+} from '../lib/serverless-stack.js';
 
 const account = '111111111111';
 const secret = (suffix: string) =>
@@ -84,6 +92,45 @@ describe('ServerlessOshiScheduleStack', () => {
     expect(lambdaBundling.banner).toContain('createRequire');
     expect(lambdaBundling.banner).toContain('const require');
   });
+
+  it('bundles the Worker against API source even when package exports target dist', async () => {
+    const repositoryRoot = resolve(import.meta.dirname, '../..');
+    const aliases = lambdaSourceAliases(repositoryRoot);
+    const packageJson = await readFile(resolve(repositoryRoot, 'apps/api/package.json'), 'utf8');
+    expect(packageJson).toContain('"./dist/runtime.js"');
+    expect(packageJson).toContain('"./dist/infrastructure/lambda/runtime-env.js"');
+    expect(aliases).toEqual({
+      '@oshi-schedule/api/runtime': resolve(repositoryRoot, 'apps/api/src/runtime.ts'),
+      '@oshi-schedule/api/lambda-env': resolve(
+        repositoryRoot,
+        'apps/api/src/infrastructure/lambda/runtime-env.ts',
+      ),
+    });
+    expect(createLambdaBundling(repositoryRoot).esbuildArgs).toMatchObject({
+      '--alias:@oshi-schedule/api/runtime': aliases['@oshi-schedule/api/runtime'],
+      '--alias:@oshi-schedule/api/lambda-env': aliases['@oshi-schedule/api/lambda-env'],
+    });
+
+    const bundle = await build({
+      absWorkingDir: repositoryRoot,
+      entryPoints: ['apps/worker/src/lambda.ts'],
+      bundle: true,
+      format: 'esm',
+      platform: 'node',
+      target: 'node22',
+      alias: aliases,
+      external: ['@prisma/client', '.prisma/client'],
+      metafile: true,
+      write: false,
+    });
+    const inputs = Object.keys(bundle.metafile.inputs).map((input) => resolve(repositoryRoot, input));
+    expect(inputs).toContain(resolve(repositoryRoot, 'apps/api/src/runtime.ts'));
+    expect(inputs).toContain(
+      resolve(repositoryRoot, 'apps/api/src/infrastructure/lambda/runtime-env.ts'),
+    );
+    expect(inputs.some((input) => input.includes('/apps/api/dist/'))).toBe(false);
+    expect(bundle.outputFiles[0]?.text).toContain('createWorkerContainer');
+  }, 15_000);
 
   it('eliminates the legacy network, database, ECS and Pipe resources', () => {
     const template = render();
