@@ -108,7 +108,7 @@ production ECR repositoryはCDKの`bootstrapOnly=true` phaseが唯一の所有�
 ## production deploy前の完了条件
 
 - [ ] production CDK synth/diffでWeb=`oshi-schedule.com`、API=`api.oshi-schedule.com`、Amplify root-domain Prefix空、`WEB_ORIGIN`、`NEXT_PUBLIC_API_URL`が一致する。
-- [x] serverless production contextでfull CDK preflight/diffを実行し、bootstrap済みECRとinfra/migration OIDC roleを維持、RDS/ECS/VPC/Pipeが0、DELETE/REPLACEがないことを確認する（full detached diffはCREATE 46）。
+- [x] serverless production contextでfull CDK preflight/diffを実行し、bootstrap済みECRとinfra/migration OIDC roleを維持、RDS/ECS/VPC/Pipeが0、DELETE/REPLACEがないことを確認する（full detached diffはCREATE 42）。
 - [ ] mainの最新commitでGitHub Actions `validate`と`e2e`がともにgreenであり、workflow logで失敗がない。
 - [ ] Lambda ZIPにPrisma Client/engineが含まれ、API/Worker handler contractがgreenである。ECR imageはrollback資産でありruntime deploy gateではない。
 - [ ] production専用Secret/SSM/Google/Supabase値が揃い、staging由来値・localhost・placeholderがない。

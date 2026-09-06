@@ -18,14 +18,14 @@ CDK diffはCloudFormation change setを作らない`--method=template --no-chang
 - image rollback資産`951cc81`はECRに存在し、digest `sha256:99206b651bbcebd146c16894fb4f9f24036ec238b71959f10278d30dcd775daa`のBasic Scanは`COMPLETE`、finding 0である。Lambda runtimeはこのimageを参照しない。
 - HEAD `e23611f`のGitHub Actions run `33974058088`はvalidate/e2eともsuccessである。
 
-正式なproduction contextの`detached`構造diffは、既存ECRとbootstrap済みIAMを維持して次の46 resourceをCREATEする。UPDATE、DELETE、REPLACEは0件である。2つのDB URL Secretはいずれも実complete ARNで参照する。
+正式なproduction contextの`detached`構造diffは、既存ECRとbootstrap済みIAMを維持して次の42 resourceをCREATEする。UPDATE、DELETE、REPLACEは0件である。2つのDB URL Secretはいずれも実complete ARNで参照する。
 
 | Resource種別                                                            | CREATE |
 | ----------------------------------------------------------------------- | -----: |
 | Amplify App（Branch / Domainは0）                                       |      1 |
 | API Gateway HTTP API（API、Domain、Mapping、Integration、Route、Stage） |      6 |
 | Lambda Function / EventSourceMapping / Permission                       |      4 |
-| IAM Role / Policy                                                       |     14 |
+| IAM Role / Policy                                                       |     10 |
 | SQS Queue / QueuePolicy                                                 |      6 |
 | CloudWatch Alarm / LogGroup                                             |      7 |
 | S3 Bucket / BucketPolicy                                                |      2 |
@@ -34,7 +34,7 @@ CDK diffはCloudFormation change setを作らない`--method=template --no-chang
 | EventBridge Scheduler                                                   |      1 |
 | Route 53 RecordSet                                                      |      1 |
 | AWS Budget                                                              |      1 |
-| **合計**                                                                | **46** |
+| **合計**                                                                | **42** |
 
 templateにはRDS、ECS、VPC、subnet、NAT、VPC Link、Cloud Map、EventBridge Pipe、EIP/Public IPv4がない。runtime environment、Secret ARN、origin、domainにstaging/legacy/localhost参照もない。
 
@@ -89,4 +89,4 @@ templateにはRDS、ECS、VPC、subnet、NAT、VPC Link、Cloud Map、EventBridg
 
 ## 次に必要なwrite
 
-次のproduction writeはprotected `production-migration` workflowによるidempotentなmigration status/attestation作成である。続くfull `detached` stack deployはCREATE 46、UPDATE/DELETE/REPLACE 0の構成であり、migration run IDを入力にした別承認を必要とする。deploy後にApp-only phase、guard付きrepository接続、connected Branch/Domain、公開受入を順に行う。
+次のproduction writeはprotected `production-migration` workflowによるidempotentなmigration status/attestation作成である。続くfull `detached` stack deployはCREATE 42、UPDATE/DELETE/REPLACE 0の構成であり、migration run IDを入力にした別承認を必要とする。deploy後にApp-only phase、guard付きrepository接続、connected Branch/Domain、公開受入を順に行う。
