@@ -1,0 +1,30 @@
+scripts/aws/production-amplify-preflight.test.mjs
+  s_3a50bad78ea1cd::t_5cf73959314941 4,9-20
+  s_3a50bad78ea1cd::t_35b7894e3d1724 21
+infra/test/serverless-stack.test.ts
+  s_3a50bad78ea1cd::t_1fbc38bd7bf547 306-316
+scripts/aws/production-amplify-preflight.mjs
+  s_3a50bad78ea1cd::t_5cf73959314941 40-73,96
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_f48f86166f696b 291-292
+scripts/aws/production-workflow-contract.test.mjs
+  s_3a50bad78ea1cd::t_c930847d6ef682 29,31
+.github/workflows/deploy-production.yml
+  s_3a50bad78ea1cd::t_5cf73959314941 44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "570dc535ee00a247b7b7c11ff2722cff5b7252cd",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
