@@ -16,6 +16,9 @@ test('production migration and infrastructure deploy are separate approval bound
   assert.match(migration, /environment: production-migration/);
   assert.match(migration, /prisma migrate deploy/);
   assert.match(migration, /migration-state\.mjs create/);
+  assert.match(migration, /libpq-url\.mjs/);
+  assert.match(migration, /add-mask::\$PSQL_DATABASE_URL/);
+  assert.match(migration, /DATABASE_URL="\$PSQL_DATABASE_URL"/);
 });
 
 test('production Amplify connection is guarded before connected resources are deployed', async () => {

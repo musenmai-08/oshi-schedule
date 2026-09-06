@@ -56,7 +56,10 @@ jobs:
           export DATABASE_URL DIRECT_URL="$DATABASE_URL"
           pnpm exec prisma migrate deploy
           pnpm exec prisma migrate status
-          docker run --rm --env DATABASE_URL --volume "$work:/work" postgres:17-alpine \
+          PSQL_DATABASE_URL="$(PRISMA_DATABASE_URL="$DATABASE_URL" node scripts/database/libpq-url.mjs)"
+          test -n "$PSQL_DATABASE_URL"
+          echo "::add-mask::$PSQL_DATABASE_URL"
+          docker run --rm --env DATABASE_URL="$PSQL_DATABASE_URL" --volume "$work:/work" postgres:17-alpine \
             sh -c 'psql "$DATABASE_URL" --no-psqlrc --set ON_ERROR_STOP=1 --csv --command "SELECT migration_name, checksum FROM app._prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL ORDER BY migration_name" > /work/state.csv'
           node scripts/database/migration-state.mjs create "$work/state.csv" "$work/manifest.json" "$GITHUB_SHA"
           cp "$work/manifest.json" "$RUNNER_TEMP/production-migration-attestation.json"
