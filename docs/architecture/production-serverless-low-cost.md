@@ -141,7 +141,7 @@ Supabaseはserverlessにtransaction poolerを推奨し、transaction modeではp
 
 ### Migration
 
-- migrationはLambdaで自動実行せず、GitHub production Environmentのmanual approval付きjobで`prisma migrate deploy`を1回だけ実行する。
+- migrationはLambdaやinfra deploy内で自動実行せず、GitHub Environment `production-migration`のmanual approval付き`migrate-production.yml`で`prisma migrate deploy`を実行する。成功runはGit commitと実DBの適用済みmigration ID/checksumをattestation artifactへ固定する。`production-infra`のdeploy workflowは、同一commitの成功run IDとartifactを検証できない限り開始しない。
 - `DIRECT_URL`はDDL owner `oshi_migrator`用とし、runtime secretと分離する。direct IPv6接続を第一候補にし、CI runnerのnetworkが対応しない場合はSupavisor session mode（port 5432）を事前検証した上で使う。transaction modeでPrisma Migrateを実行しない。
 - workflowはAWS OIDCで必要なSecretだけを取得し、maskを有効にし、DB URLをartifact/logへ残さない。migration前後のmigration IDとschema statusだけをrelease recordへ残す。
 
@@ -170,7 +170,7 @@ RPO 24時間、Authの独自backup不在、またはpauseが許容できなく�
 
 | Service                | Free tierを保守的に除いた月額目安 | 備考                                                      |
 | ---------------------- | --------------------------------: | --------------------------------------------------------- |
-| Supabase Free          |                             $0.00 | app schemaは別途S3へ日次backup                             |
+| Supabase Free          |                             $0.00 | app schemaは別途S3へ日次backup                            |
 | Amplify Hosting/SSR    |                      $0.50〜$3.00 | build、storage、transfer、SSR従量                         |
 | API Gateway HTTP API   |                      $0.00〜$0.20 | 約$1/million request帯                                    |
 | Lambda API/Worker      |                      $0.00〜$1.00 | free allowance内なら0。provisioned concurrencyなし        |
@@ -179,7 +179,7 @@ RPO 24時間、Authの独自backup不在、またはpauseが許容できなく�
 | Route 53 + DNS query   |                      $0.50〜$0.70 | hosted zone $0.50/月                                      |
 | CloudWatch alarms/logs |                      $0.50〜$2.00 | log量とalarm数による                                      |
 | ECR                    |                      $0.00〜$0.20 | rollback期間だけ既存imageを保持                           |
-| S3 backup              |                      $0.00〜$0.10 | 7世代、低容量のapp schema                                  |
+| S3 backup              |                      $0.00〜$0.10 | 7世代、低容量のapp schema                                 |
 | **合計**               |                   **約$4〜10/月** | data transfer上振れを除く                                 |
 
 AWSの根拠は[Lambda pricing](https://aws.amazon.com/lambda/pricing/)、[HTTP API pricing](https://aws.amazon.com/api-gateway/pricing/)、[SQS pricing](https://aws.amazon.com/sqs/pricing/)、[EventBridge pricing](https://aws.amazon.com/eventbridge/pricing/)、[Secrets Manager pricing](https://aws.amazon.com/secrets-manager/pricing/)、[Amplify pricing](https://aws.amazon.com/amplify/pricing/)、[Route 53 pricing](https://aws.amazon.com/route53/pricing/)を使う。
@@ -261,8 +261,9 @@ Rollback: API Gateway integrationをversioned Lambda alias間で戻す。DB sche
 
 ### Phase 4: production deploy
 
-- production `app` schemaが空であることをread-only確認し、baseline migrationをprotected CIで1回適用する。
-- serverless CDK diffを再取得し、RDS/ECS/VPC CREATE 0、Lambda/SQS/API/monitoringの期待差分だけでdeployする。
+- production `app` schemaが空であることをread-only確認し、`production-migration`承認境界でbaseline migrationを適用してattestationを発行する。
+- `production-infra`承認境界でattestationを検証後、Amplify phase `detached`のserverless CDK diffを再取得し、RDS/ECS/VPC CREATE 0、Lambda/SQS/API/monitoringの期待差分だけでdeployする。このphaseはAmplify Appだけを作りBranch/Domainを作らない。
+- `production-amplify`承認境界でApp IDを維持したままrepositoryを1回だけ接続し、接続先完全一致・Branch/Domain 0を確認する。次の`connected` deployでmain Branch、次いでDomainを作る。
 - Lambda aliasを0%から切り替え、Web/API/OAuth/Sync/Calendar/backup受入を完了する。
 
 productionはまだ利用開始前なので、cutover前rollbackは「deployしない」ことで完結する。利用開始後にMySQLへ戻すrollbackはdata変換を必要とするため採用しない。PostgreSQLを維持したままLambda versionまたは一時ECS runtimeへ戻す。

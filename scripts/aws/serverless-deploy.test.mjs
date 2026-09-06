@@ -20,8 +20,8 @@ const context = {
   tokenEncryptionKeysSecretArn: 'arn:keys',
   databaseUrlSecretArn: 'arn:database',
   databaseMigrationUrlSecretArn: 'arn:migration',
-  githubOwner: 'owner',
-  githubRepository: 'repo',
+  githubOwner: 'musenmai-08',
+  githubRepository: 'oshi-schedule',
   amplifyConnectionPhase: 'connected',
 };
 

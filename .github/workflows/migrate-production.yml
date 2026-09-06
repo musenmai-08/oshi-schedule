@@ -1,0 +1,68 @@
+name: Migrate production database
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type MIGRATE_PRODUCTION_DATABASE
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: migrate-production-database
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    if: inputs.confirm == 'MIGRATE_PRODUCTION_DATABASE'
+    uses: ./.github/workflows/ci.yml
+
+  migrate:
+    if: inputs.confirm == 'MIGRATE_PRODUCTION_DATABASE'
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production-migration
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_MIGRATION_ROLE_ARN: ${{ vars.PRODUCTION_DATABASE_MIGRATION_ROLE_ARN }}
+      DATABASE_MIGRATION_URL_SECRET_ARN: ${{ vars.PRODUCTION_DATABASE_MIGRATION_URL_SECRET_ARN }}
+    steps:
+      - uses: actions/checkout@v7
+        with: { persist-credentials: false }
+      - uses: pnpm/action-setup@v6
+        with: { version: 9.15.9 }
+      - uses: actions/setup-node@v6
+        with: { node-version: 22.23.1, cache: pnpm, package-manager-cache: false }
+      - run: pnpm install --frozen-lockfile
+      - uses: aws-actions/configure-aws-credentials@v6.2.3
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.AWS_MIGRATION_ROLE_ARN }}
+          role-session-name: oshi-schedule-production-migration-${{ github.run_id }}
+      - name: Apply and attest PostgreSQL migrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d -p "$RUNNER_TEMP" migration-attestation-XXXXXX)"
+          trap 'rm -rf "$work"; unset DATABASE_URL DIRECT_URL' EXIT
+          DATABASE_URL="$(aws secretsmanager get-secret-value --region "$AWS_REGION" --secret-id "$DATABASE_MIGRATION_URL_SECRET_ARN" --query SecretString --output text)"
+          test -n "$DATABASE_URL" && test "$DATABASE_URL" != None
+          echo "::add-mask::$DATABASE_URL"
+          export DATABASE_URL DIRECT_URL="$DATABASE_URL"
+          pnpm exec prisma migrate deploy
+          pnpm exec prisma migrate status
+          docker run --rm --env DATABASE_URL --volume "$work:/work" postgres:17-alpine \
+            sh -c 'psql "$DATABASE_URL" --no-psqlrc --set ON_ERROR_STOP=1 --csv --command "SELECT migration_name, checksum FROM app._prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL ORDER BY migration_name" > /work/state.csv'
+          node scripts/database/migration-state.mjs create "$work/state.csv" "$work/manifest.json" "$GITHUB_SHA"
+          cp "$work/manifest.json" "$RUNNER_TEMP/production-migration-attestation.json"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: production-migration-attestation
+          path: ${{ runner.temp }}/production-migration-attestation.json
+          if-no-files-found: error
+          retention-days: 30

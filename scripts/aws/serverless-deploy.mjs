@@ -54,8 +54,10 @@ export const parseServerlessContext = (environment, text) => {
       throw new Error('production webDomainName must be oshi-schedule.com');
     if (parsed.apiDomainName !== 'api.oshi-schedule.com')
       throw new Error('production apiDomainName must be api.oshi-schedule.com');
-    if (parsed.amplifyConnectionPhase !== 'connected')
-      throw new Error('production Amplify must be connected');
+    if (!['detached', 'connected'].includes(parsed.amplifyConnectionPhase))
+      throw new Error('production Amplify phase must be detached or connected');
+    if (parsed.githubOwner !== 'musenmai-08' || parsed.githubRepository !== 'oshi-schedule')
+      throw new Error('production GitHub repository identity is not approved');
   }
   return parsed;
 };

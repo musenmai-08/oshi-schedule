@@ -7,6 +7,7 @@
 - Authを含むSupabase管理schemaはこのdumpの対象外である。Supabase Authの復旧はSupabase側のproject recoveryと別に扱う。
 - backup jobはdirect接続またはSupavisor session mode用のmigration URLを使う。transaction poolerは使わない。
 - Secret値、DB URL、dump内容をActions log、artifact、Gitへ出さない。
+- 各`app-<timestamp>.dump`には同じprefixの`app-<timestamp>.migrations.json`を必ず対応させる。manifestはbackup時のGit commitと、`app._prisma_migrations`で完了済み・未rollbackのmigration ID/checksumを保持する。DBの状態がそのcommitのGit migration列の正しいprefixであり、各`migration.sql`のSHA-256と一致した場合だけ作成する（mainに未適用の次migrationがあってもbackupは可能）。dump単体を復元可能backupとして扱わない。
 - Free projectは低activity時にpauseされ得る。backup成功をavailability保証やpause回避策として扱わない。
 
 ### Staging serverless
@@ -27,14 +28,14 @@
 restoreは既存production DBへ直接上書きしない。
 
 1. 復旧専用の空PostgreSQL database/projectと、一時的なmigration owner credentialを用意する。
-2. 対象objectをS3から安全な一時directoryへ取得し、`pg_restore --list`が成功することを確認する。
+2. 対応するdumpと`.migrations.json`をS3から安全な一時directoryへ取得する。`node scripts/database/migration-state.mjs verify unused.csv migrations.json <release-commit>`で、release commitとGit上のmigration ID/checksumが完全一致すること、および`pg_restore --list`が成功することを確認する。
 3. 空の`app` schemaへ次を実行する。
 
    ```bash
    pg_restore --dbname "$RECOVERY_DATABASE_URL" --schema app --no-owner --no-privileges backup.dump
    ```
 
-4. migration status、table件数、foreign key、unique index、SyncLease/quotaの整合を確認する。credential暗号文や個人情報は表示しない。
+4. 一時DBの`app._prisma_migrations`から完了済み・未rollbackの`migration_name,checksum`だけをCSV取得し、`node scripts/database/migration-state.mjs verify-restored state.csv migrations.json <release-commit>`を実行する。manifest・復元DB・release commitの3者が一致しなければ復旧先へ昇格しない。その後table件数、foreign key、unique index、SyncLease/quotaの整合を確認する。credential暗号文や個人情報は表示しない。
 5. アプリをread-only確認先へ接続して`/ready`と匿名化した主要件数を確認する。
 6. 復旧先をproductionへ昇格する場合は、OAuth/Calendar/Syncを停止したmaintenance windowと別承認を必要とする。DNSやSecretを自動的に切り替えない。
 7. rehearsal用DB、credential、local dumpは別承認で削除し、結果と実RPOだけを記録する。

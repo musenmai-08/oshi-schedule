@@ -84,6 +84,8 @@ jobs:
           .github/workflows/ci.yml
           .github/workflows/deploy-staging.yml
           .github/workflows/deploy-production.yml
+          .github/workflows/migrate-production.yml
+          .github/workflows/connect-production-amplify.yml
           .github/workflows/backup-production.yml
           .github/workflows/backup-staging.yml
       - name: CDK assertions and synth

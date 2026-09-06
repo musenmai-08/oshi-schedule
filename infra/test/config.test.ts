@@ -114,8 +114,8 @@ describe('loadConfig', () => {
       'arn:aws:secretsmanager:ap-northeast-1:111111111111:secret:oshi-schedule-staging/app/database-runtime-url-Qr12St',
     databaseMigrationUrlSecretArn:
       'arn:aws:secretsmanager:ap-northeast-1:111111111111:secret:oshi-schedule-staging/app/database-migration-url-Uv34Wx',
-    githubOwner: 'example-owner',
-    githubRepository: 'example-repository',
+    githubOwner: 'musenmai-08',
+    githubRepository: 'oshi-schedule',
     amplifyConnectionPhase: 'manual',
     imageTag: `sha256:${'a'.repeat(64)}`,
   };
@@ -172,7 +172,7 @@ describe('loadConfig', () => {
       apiDesiredCount: 1,
       syncPipeDesiredState: 'RUNNING',
       applicationActivated: true,
-      amplifyConnectionPhase: 'connected',
+      amplifyConnectionPhase: 'detached',
       rdsBackupRetentionDays: 7,
     });
   });
@@ -359,15 +359,15 @@ describe('loadConfig', () => {
     expect(() => loadConfig(app)).toThrow(/confirmProduction=DEPLOY_PRODUCTION/);
   });
 
-  it('does not allow staging Amplify transition phases in production', () => {
+  it('allows only the safe detached and connected Amplify phases in production', () => {
     const app = new App({
       context: {
         environment: 'production',
         confirmProduction: 'DEPLOY_PRODUCTION',
-        amplifyConnectionPhase: 'detached',
+        amplifyConnectionPhase: 'manual',
       },
     });
-    expect(() => loadConfig(app)).toThrow(/production requires amplifyConnectionPhase=connected/);
+    expect(() => loadConfig(app)).toThrow(/must be detached or connected/);
   });
 
   it('rejects application activation bypasses outside bootstrap-only mode', () => {

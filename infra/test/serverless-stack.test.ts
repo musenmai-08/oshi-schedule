@@ -31,8 +31,7 @@ const config: DeploymentConfig = {
   hostedZoneName: 'oshi-schedule.com',
   webDomainName: 'oshi-schedule.com',
   apiDomainName: 'api.oshi-schedule.com',
-  certificateArn:
-    `arn:aws:acm:ap-northeast-1:${account}:certificate/00000000-0000-4000-8000-000000000000`,
+  certificateArn: `arn:aws:acm:ap-northeast-1:${account}:certificate/00000000-0000-4000-8000-000000000000`,
   alertEmail: 'alerts@oshi-schedule.com',
   nextPublicSupabaseUrl: 'https://production-ref.supabase.co',
   nextPublicSupabasePublishableKey: 'sb_publishable_production_test',
@@ -67,6 +66,16 @@ const render = () => {
     new ServerlessOshiScheduleStack(app, 'serverless-production', {
       env: { account, region: 'ap-northeast-1' },
       config,
+    }),
+  );
+};
+
+const renderProductionPhase = (amplifyConnectionPhase: 'detached' | 'connected') => {
+  const app = new App();
+  return Template.fromStack(
+    new ServerlessOshiScheduleStack(app, `serverless-production-${amplifyConnectionPhase}`, {
+      env: { account, region: 'ap-northeast-1' },
+      config: { ...config, amplifyConnectionPhase },
     }),
   );
 };
@@ -123,7 +132,9 @@ describe('ServerlessOshiScheduleStack', () => {
       metafile: true,
       write: false,
     });
-    const inputs = Object.keys(bundle.metafile.inputs).map((input) => resolve(repositoryRoot, input));
+    const inputs = Object.keys(bundle.metafile.inputs).map((input) =>
+      resolve(repositoryRoot, input),
+    );
     expect(inputs).toContain(resolve(repositoryRoot, 'apps/api/src/runtime.ts'));
     expect(inputs).toContain(
       resolve(repositoryRoot, 'apps/api/src/infrastructure/lambda/runtime-env.ts'),
@@ -178,7 +189,10 @@ describe('ServerlessOshiScheduleStack', () => {
       }),
     });
     const functions = Object.values(
-      render().toJSON().Resources as Record<string, { Type?: string; Properties?: Record<string, unknown> }>,
+      render().toJSON().Resources as Record<
+        string,
+        { Type?: string; Properties?: Record<string, unknown> }
+      >,
     ).filter((resource) => resource.Type === 'AWS::Lambda::Function');
     for (const fn of functions) expect(fn.Properties?.ReservedConcurrentExecutions).toBeUndefined();
   }, 15_000);
@@ -228,6 +242,39 @@ describe('ServerlessOshiScheduleStack', () => {
     );
   });
 
+  it('pins every production GitHub role to an immutable repository-ID environment subject', () => {
+    const roleText = Object.values(render().findResources('AWS::IAM::Role'))
+      .map((role) => JSON.stringify(role))
+      .join('\n');
+    for (const environment of [
+      'production-infra',
+      'production-migration',
+      'production-amplify',
+      'production-backup',
+    ]) {
+      expect(roleText).toContain(
+        `repo:musenmai-08@165903509/oshi-schedule@1308836728:environment:${environment}`,
+      );
+    }
+    expect(roleText).not.toContain('repo:musenmai-08/oshi-schedule:environment:production');
+  });
+
+  it('creates only the Amplify App while detached and adds Branch then Domain when connected', () => {
+    const detached = renderProductionPhase('detached');
+    detached.resourceCountIs('AWS::Amplify::App', 1);
+    detached.resourceCountIs('AWS::Amplify::Branch', 0);
+    detached.resourceCountIs('AWS::Amplify::Domain', 0);
+
+    const connected = renderProductionPhase('connected');
+    connected.resourceCountIs('AWS::Amplify::App', 1);
+    connected.resourceCountIs('AWS::Amplify::Branch', 1);
+    connected.resourceCountIs('AWS::Amplify::Domain', 1);
+    const domain = Object.values(connected.findResources('AWS::Amplify::Domain'))[0] as {
+      DependsOn?: string[];
+    };
+    expect(domain.DependsOn?.some((value) => value.includes('AmplifyBranch'))).toBe(true);
+  });
+
   it('destroys an empty staging-preview backup bucket on rollback but retains production backups', () => {
     const productionBucket = Object.values(render().findResources('AWS::S3::Bucket'))[0] as {
       DeletionPolicy?: string;
@@ -252,10 +299,14 @@ describe('ServerlessOshiScheduleStack', () => {
   }, 15_000);
 
   it('does not grant the Worker the API-only Supabase service-role secret', () => {
-    const resources = render().toJSON().Resources as Record<string, { Type?: string; Properties?: unknown }>;
+    const resources = render().toJSON().Resources as Record<
+      string,
+      { Type?: string; Properties?: unknown }
+    >;
     const workerPolicy = Object.entries(resources)
-      .filter(([logicalId, resource]) =>
-        logicalId.includes('WorkerFunctionServiceRole') && resource.Type === 'AWS::IAM::Policy',
+      .filter(
+        ([logicalId, resource]) =>
+          logicalId.includes('WorkerFunctionServiceRole') && resource.Type === 'AWS::IAM::Policy',
       )
       .map(([, resource]) => JSON.stringify(resource.Properties))
       .join('\n');
@@ -265,15 +316,15 @@ describe('ServerlessOshiScheduleStack', () => {
 
   it('keeps the SQS dispatch URL API-only while the Worker consumes deliveries', () => {
     const functions = Object.values(
-      render().toJSON().Resources as Record<string, { Type?: string; Properties?: Record<string, unknown> }>,
+      render().toJSON().Resources as Record<
+        string,
+        { Type?: string; Properties?: Record<string, unknown> }
+      >,
     ).filter((resource) => resource.Type === 'AWS::Lambda::Function');
     const environmentNames = (functionName: string) => {
-      const fn = functions.find(
-        (resource) => resource.Properties?.FunctionName === functionName,
-      );
+      const fn = functions.find((resource) => resource.Properties?.FunctionName === functionName);
       const variables = fn?.Properties?.Environment as
-        | { Variables?: Record<string, unknown> }
-        | undefined;
+        { Variables?: Record<string, unknown> } | undefined;
       return Object.keys(variables?.Variables ?? {});
     };
 

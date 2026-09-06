@@ -13,6 +13,13 @@ export type ServerlessStagingMode = 'preview' | 'cutover';
 
 export const PRODUCTION_WEB_DOMAIN = 'oshi-schedule.com';
 export const PRODUCTION_API_DOMAIN = 'api.oshi-schedule.com';
+export const GITHUB_OWNER = 'musenmai-08';
+export const GITHUB_OWNER_ID = '165903509';
+export const GITHUB_REPOSITORY = 'oshi-schedule';
+export const GITHUB_REPOSITORY_ID = '1308836728';
+
+export const githubEnvironmentSubject = (environment: string): string =>
+  `repo:${GITHUB_OWNER}@${GITHUB_OWNER_ID}/${GITHUB_REPOSITORY}@${GITHUB_REPOSITORY_ID}:environment:${environment}`;
 
 export const applicationSecretArnDefinitions = [
   {
@@ -416,7 +423,7 @@ export const loadConfig = (app: App): DeploymentConfig => {
     githubRepository: optionalString(app, 'githubRepository') ?? 'REQUIRED_GITHUB_REPOSITORY',
     amplifyConnectionPhase: parseAmplifyConnectionPhase(
       app.node.tryGetContext('amplifyConnectionPhase'),
-      environmentName === 'staging' ? 'manual' : 'connected',
+      environmentName === 'staging' ? 'manual' : 'detached',
     ),
     imageTag: optionalString(app, 'imageTag') ?? 'bootstrap-required',
     apiCpu: Number(app.node.tryGetContext('apiCpu') ?? 256),
@@ -465,8 +472,11 @@ export const loadConfig = (app: App): DeploymentConfig => {
     throw new Error('production requires runtimeArchitecture=serverless');
   if (environmentName === 'production' && config.serverlessStagingMode !== 'cutover')
     throw new Error('production requires serverlessStagingMode=cutover');
-  if (environmentName === 'production' && config.amplifyConnectionPhase !== 'connected') {
-    throw new Error('production requires amplifyConnectionPhase=connected');
+  if (
+    environmentName === 'production' &&
+    !['detached', 'connected'].includes(config.amplifyConnectionPhase)
+  ) {
+    throw new Error('production amplifyConnectionPhase must be detached or connected');
   }
   if (config.webApiOrigin) {
     let parsedWebApiOrigin: URL;
@@ -539,6 +549,12 @@ export const loadConfig = (app: App): DeploymentConfig => {
       config.githubRepository.startsWith('REQUIRED_')
     ) {
       throw new Error('CDK deploy requires githubOwner and githubRepository');
+    }
+    if (
+      environmentName === 'production' &&
+      (config.githubOwner !== GITHUB_OWNER || config.githubRepository !== GITHUB_REPOSITORY)
+    ) {
+      throw new Error('production GitHub repository must match the immutable repository identity');
     }
     if (config.runtimeArchitecture === 'legacy-ecs' && config.imageTag === 'bootstrap-required') {
       throw new Error('CDK deploy requires an existing immutable imageTag');

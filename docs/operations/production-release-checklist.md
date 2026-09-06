@@ -4,7 +4,7 @@
 
 > 2026-09-01に[serverless低コスト移行設計](../architecture/production-serverless-low-cost.md)を正式採用した。ECR-first/RDS/ECSの記録は履歴であり、新しいdeploy承認には使わない。productionはSupabase Free + Lambda + S3日次backup 7日である。
 
-> 2026-09-06の[production serverless最終preflight監査](../reviews/production-serverless-final-preflight.md)では、構造diffがCREATE 42、UPDATE/DELETE/REPLACE 0で、旧RDS/ECS/VPC系が0であることを確認した。ただしDB Secret/role、GitHub deploy identity、Amplify repository接続phase、backup OIDC subjectが未解消のため、production deployはまだ禁止である。
+> 2026-09-06にGitHub deploy identity、Amplify repository接続phase、backup OIDC subject、migration/deploy分離、migration-aware backup契約をコード/IaCで解消した。これらのIAM/Appを作るAWS deployは未実施である。DB Secret/runtime role/baselineと外部公開gateが残るためproduction deployは禁止を継続する。
 
 ## 確定した公開URLとアプリ設定
 
@@ -32,15 +32,15 @@ productionの値はstagingからコピーしない。production用Supabase proje
 
 ### CDK deploy前に外部作成する項目
 
-| 種別             | AWS名                                                    | 注入先      | 値の提供元                                       |
-| ---------------- | -------------------------------------------------------- | ----------- | ------------------------------------------------ |
-| Secrets Manager  | `oshi-schedule-production/app/supabase-service-role-key` | API         | production Supabase service-role key             |
-| Secrets Manager  | `oshi-schedule-production/app/google-client-secret`      | API・Worker | production Google OAuth client secret            |
-| Secrets Manager  | `oshi-schedule-production/app/youtube-api-key`           | API・Worker | production Google Cloud projectのYouTube API key |
-| Secrets Manager  | `oshi-schedule-production/app/token-encryption-keys`     | API・Worker | production専用のCSPRNG生成鍵                     |
-| Secrets Manager  | `oshi-schedule-production/app/database-runtime-url`       | API・Worker | Supavisor transaction URL、TLS、`connection_limit=1` |
-| Secrets Manager  | `oshi-schedule-production/app/database-migration-url`     | migration・backup | direct IPv6またはSupavisor session URL          |
-| SSM SecureString | `/oshi-schedule-production/runtime/allowed-emails`       | APIのみ     | productionで許可するメールアドレスのカンマ区切り |
+| 種別             | AWS名                                                    | 注入先            | 値の提供元                                           |
+| ---------------- | -------------------------------------------------------- | ----------------- | ---------------------------------------------------- |
+| Secrets Manager  | `oshi-schedule-production/app/supabase-service-role-key` | API               | production Supabase service-role key                 |
+| Secrets Manager  | `oshi-schedule-production/app/google-client-secret`      | API・Worker       | production Google OAuth client secret                |
+| Secrets Manager  | `oshi-schedule-production/app/youtube-api-key`           | API・Worker       | production Google Cloud projectのYouTube API key     |
+| Secrets Manager  | `oshi-schedule-production/app/token-encryption-keys`     | API・Worker       | production専用のCSPRNG生成鍵                         |
+| Secrets Manager  | `oshi-schedule-production/app/database-runtime-url`      | API・Worker       | Supavisor transaction URL、TLS、`connection_limit=1` |
+| Secrets Manager  | `oshi-schedule-production/app/database-migration-url`    | migration・backup | direct IPv6またはSupavisor session URL               |
+| SSM SecureString | `/oshi-schedule-production/runtime/allowed-emails`       | APIのみ           | productionで許可するメールアドレスのカンマ区切り     |
 
 `TOKEN_ENCRYPTION_KEYS`は`key-id:32-byte-base64`形式とし、先頭を新規暗号化用、後続を旧ciphertext復号用にする。production初回は新しい32-byte CSPRNG鍵だけを設定する。runtime DB roleは`app` schemaのDMLだけ、migration roleはDDL ownerとし、同じURLを使わない。
 
@@ -117,11 +117,11 @@ production ECR repositoryはCDKの`bootstrapOnly=true` phaseが唯一の所有�
 - [ ] Terms/Privacyの専門家確認、13歳未満利用不可、日本国内向け、無料/有料化方針、運営者・問い合わせ先の最終承認がある。
 - [ ] S3 app-schema日次backup 7日、最大RPO 24時間、Supabase Auth独自backupなし、Free pause、SyncRun 90日、log 30日、完了墓石30日purgeの責任者と復元演習が確認済みである。
 - [ ] `database-migration-url`と`database-runtime-url`をproduction専用値で作成し、`oshi_runtime`がapp schemaのDMLだけを持ちDDLを拒否する。
-- [ ] production GitHub deploy roleをrepository immutable-ID subjectで作成し、`deploy-production.yml`がOIDCでassumeできる。
-- [ ] production AmplifyをApp-only → repository接続 → Branch/Domainの順で作成し、manual Branchがrepository接続を阻害しない。
-- [ ] production backup roleのOIDC subjectをrepository immutable-ID形式へ統一し、production-backup environmentからのSTSだけを許可する。
-- [ ] baseline migrationとinfra deployを別の承認・結果記録に分け、deploy失敗時に適用済みbaselineから安全に再開できる。
-- [ ] app schema backupでPrisma migration状態を復元判定する方法を確定し、一時PostgreSQLへのrestore rehearsalで確認する。
+- [x] production infra/migration/Amplify/backup roleをrepository immutable-ID subjectと別GitHub EnvironmentでIaC化した。AWSへのrole作成は次回の承認済みbootstrap remediationで行う。
+- [x] production AmplifyをApp-only (`detached`) → guarded repository接続 → Branch/Domain (`connected`)に分割し、未接続AppでBranch/Domainを作らない。
+- [x] production backup roleをimmutable repository-ID subjectの`production-backup`だけがassumeできる契約へ統一した。
+- [x] `migrate-production.yml`と`deploy-production.yml`を別承認にし、deployは同一commitの成功migration run/attestationなしでは進めない。
+- [x] backupをdump + Git commit/migration ID/checksum manifestの一組とし、restore rehearsalで復元DBを機械照合する契約を実装した。実production backup/restore rehearsalはdeploy後に実施する。
 
 ## 最終受入手順
 

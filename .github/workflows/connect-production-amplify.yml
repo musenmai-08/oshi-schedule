@@ -1,0 +1,47 @@
+name: Connect production Amplify repository
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type CONNECT_PRODUCTION_AMPLIFY
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  connect:
+    if: inputs.confirm == 'CONNECT_PRODUCTION_AMPLIFY'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production-amplify
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_AMPLIFY_ROLE_ARN: ${{ vars.PRODUCTION_AMPLIFY_CONNECTOR_ROLE_ARN }}
+      AMPLIFY_APP_ID: ${{ vars.PRODUCTION_AMPLIFY_APP_ID }}
+      AMPLIFY_GITHUB_PAT: ${{ secrets.AMPLIFY_GITHUB_PAT }}
+    steps:
+      - uses: actions/checkout@v7
+        with: { persist-credentials: false }
+      - uses: aws-actions/configure-aws-credentials@v6.2.3
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.AWS_AMPLIFY_ROLE_ARN }}
+          role-session-name: oshi-schedule-production-amplify-${{ github.run_id }}
+      - name: Guard, connect repository once, and verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          request="$(mktemp -p "$RUNNER_TEMP" amplify-update-XXXXXX.json)"
+          trap 'rm -f "$request"; unset AMPLIFY_GITHUB_PAT' EXIT
+          node scripts/aws/production-amplify-preflight.mjs before-repository-connect
+          test -n "$AMPLIFY_GITHUB_PAT"
+          export AMPLIFY_APP_ID AMPLIFY_GITHUB_PAT
+          node -e 'const fs=require("node:fs"); fs.writeFileSync(process.argv[1], JSON.stringify({appId:process.env.AMPLIFY_APP_ID,repository:"https://github.com/musenmai-08/oshi-schedule",accessToken:process.env.AMPLIFY_GITHUB_PAT}),{mode:0o600})' "$request"
+          unset AMPLIFY_GITHUB_PAT
+          aws amplify update-app --cli-input-json "file://$request" >/dev/null
+          rm -f "$request"
+          node scripts/aws/production-amplify-preflight.mjs before-connected

@@ -34,7 +34,11 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Construct } from 'constructs';
-import { applicationSecretArnDefinitions, type DeploymentConfig } from './config.js';
+import {
+  applicationSecretArnDefinitions,
+  githubEnvironmentSubject,
+  type DeploymentConfig,
+} from './config.js';
 
 interface ServerlessStackProps extends StackProps {
   config: DeploymentConfig;
@@ -58,7 +62,8 @@ export const lambdaBundling: lambdaNodejs.BundlingOptions = {
   // Prisma and serverless-express retain CommonJS dynamic requires. In an ESM
   // Lambda bundle, supply Node's scoped require rather than esbuild's throwing
   // browser fallback (for example, dynamic require of "util").
-  banner: 'import { createRequire } from "node:module";const require = createRequire(import.meta.url);',
+  banner:
+    'import { createRequire } from "node:module";const require = createRequire(import.meta.url);',
   externalModules: ['@prisma/client', '.prisma/client'],
   commandHooks: {
     beforeBundling: () => [],
@@ -118,6 +123,71 @@ export class ServerlessOshiScheduleStack extends Stack {
     Tags.of(this).add('Application', 'oshi-schedule');
     Tags.of(this).add('Environment', config.environmentName);
     Tags.of(this).add('ManagedBy', 'aws-cdk');
+
+    const githubProviderArn = Arn.format(
+      {
+        service: 'iam',
+        region: '',
+        resource: 'oidc-provider',
+        resourceName: 'token.actions.githubusercontent.com',
+        arnFormat: ArnFormat.SLASH_RESOURCE_NAME,
+      },
+      this,
+    );
+
+    // These production roles are deliberately created during bootstrap. GitHub
+    // environments are separate approval boundaries, and every trust subject is
+    // pinned to the immutable owner/repository IDs rather than renameable names.
+    if (isProduction) {
+      const githubPrincipal = (environment: string) =>
+        new iam.WebIdentityPrincipal(githubProviderArn, {
+          StringEquals: {
+            'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com',
+            'token.actions.githubusercontent.com:sub': githubEnvironmentSubject(environment),
+          },
+        });
+      const deployRole = new iam.Role(this, 'ProductionDeployRole', {
+        roleName: `${resourcePrefix}-github-infra-deploy`,
+        assumedBy: githubPrincipal('production-infra'),
+        maxSessionDuration: Duration.hours(1),
+      });
+      deployRole.addToPolicy(
+        new iam.PolicyStatement({
+          actions: ['sts:AssumeRole'],
+          resources: ['deploy', 'file-publishing', 'image-publishing', 'lookup'].map(
+            (qualifier) =>
+              `arn:aws:iam::${config.account ?? this.account}:role/cdk-hnb659fds-${qualifier}-role-${config.account ?? this.account}-${config.region}`,
+          ),
+        }),
+      );
+      deployRole.addToPolicy(
+        new iam.PolicyStatement({
+          actions: [
+            'amplify:GetApp',
+            'amplify:ListApps',
+            'amplify:ListBranches',
+            'amplify:ListDomainAssociations',
+          ],
+          resources: ['*'],
+        }),
+      );
+
+      const migrationRole = new iam.Role(this, 'ProductionMigrationRole', {
+        roleName: `${resourcePrefix}-github-database-migration`,
+        assumedBy: githubPrincipal('production-migration'),
+        maxSessionDuration: Duration.hours(1),
+      });
+      migrationRole.addToPolicy(
+        new iam.PolicyStatement({
+          actions: ['secretsmanager:GetSecretValue'],
+          resources: [
+            `arn:aws:secretsmanager:${config.region}:${config.account ?? this.account}:secret:${prefix}/app/database-migration-url-*`,
+          ],
+        }),
+      );
+      new CfnOutput(this, 'ProductionDeployRoleArn', { value: deployRole.roleArn });
+      new CfnOutput(this, 'ProductionMigrationRoleArn', { value: migrationRole.roleArn });
+    }
 
     // Retain the bootstrap repository under the same logical ID. Lambda no longer
     // consumes it, but removing it requires a separate, explicit cleanup approval.
@@ -367,7 +437,9 @@ export class ServerlessOshiScheduleStack extends Stack {
       });
 
     const backupBucket = new s3.Bucket(this, 'DatabaseBackupBucket', {
-      bucketName: config.account ? `${resourcePrefix}-database-backups-${config.account}` : undefined,
+      bucketName: config.account
+        ? `${resourcePrefix}-database-backups-${config.account}`
+        : undefined,
       encryption: s3.BucketEncryption.S3_MANAGED,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       enforceSSL: true,
@@ -386,19 +458,9 @@ export class ServerlessOshiScheduleStack extends Stack {
       autoDeleteObjects: false,
     });
 
-    const githubProviderArn = Arn.format(
-      {
-        service: 'iam',
-        region: '',
-        resource: 'oidc-provider',
-        resourceName: 'token.actions.githubusercontent.com',
-        arnFormat: ArnFormat.SLASH_RESOURCE_NAME,
-      },
-      this,
-    );
     const githubBackupSubject = isStagingPreview
       ? 'repo:musenmai-08@165903509/oshi-schedule@1308836728:environment:staging-backup'
-      : `repo:${config.githubOwner}/${config.githubRepository}:environment:${config.environmentName}-backup`;
+      : githubEnvironmentSubject(`${config.environmentName}-backup`);
     const backupRole = new iam.Role(this, 'DatabaseBackupRole', {
       roleName: `${resourcePrefix}-database-backup`,
       assumedBy: new iam.WebIdentityPrincipal(githubProviderArn, {
@@ -451,6 +513,44 @@ export class ServerlessOshiScheduleStack extends Stack {
           },
         ],
       });
+      if (isProduction) {
+        const connectorRole = new iam.Role(this, 'ProductionAmplifyConnectorRole', {
+          roleName: `${resourcePrefix}-github-amplify-connect`,
+          assumedBy: new iam.WebIdentityPrincipal(githubProviderArn, {
+            StringEquals: {
+              'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com',
+              'token.actions.githubusercontent.com:sub':
+                githubEnvironmentSubject('production-amplify'),
+            },
+          }),
+          maxSessionDuration: Duration.hours(1),
+        });
+        connectorRole.addToPolicy(
+          new iam.PolicyStatement({
+            actions: [
+              'amplify:GetApp',
+              'amplify:UpdateApp',
+              'amplify:ListBranches',
+              'amplify:ListDomainAssociations',
+            ],
+            resources: [
+              Arn.format(
+                {
+                  service: 'amplify',
+                  resource: 'apps',
+                  resourceName: amplifyApp.attrAppId,
+                  arnFormat: ArnFormat.SLASH_RESOURCE_NAME,
+                },
+                this,
+              ),
+            ],
+          }),
+        );
+        new CfnOutput(this, 'AmplifyAppId', { value: amplifyApp.attrAppId });
+        new CfnOutput(this, 'ProductionAmplifyConnectorRoleArn', {
+          value: connectorRole.roleArn,
+        });
+      }
       const createBranch = config.amplifyConnectionPhase !== 'detached';
       const createDomain = ['manual', 'connected'].includes(config.amplifyConnectionPhase);
       if (createBranch) {

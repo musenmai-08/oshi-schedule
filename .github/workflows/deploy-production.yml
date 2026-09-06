@@ -7,8 +7,18 @@ on:
         description: Type DEPLOY_PRODUCTION_SERVERLESS
         required: true
         type: string
+      migration_run_id:
+        description: Successful migrate-production workflow run ID for this exact commit
+        required: true
+        type: string
+      amplify_phase:
+        description: detached creates App only; connected is allowed only after repository connection
+        required: true
+        type: choice
+        options: [detached, connected]
 
 permissions:
+  actions: read
   contents: read
   id-token: write
 
@@ -26,11 +36,10 @@ jobs:
     needs: ci
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    environment: production
+    environment: production-infra
     env:
       AWS_REGION: ${{ vars.AWS_REGION }}
       AWS_DEPLOY_ROLE_ARN: ${{ vars.PRODUCTION_AWS_DEPLOY_ROLE_ARN }}
-      DATABASE_MIGRATION_URL_SECRET_ARN: ${{ vars.PRODUCTION_DATABASE_MIGRATION_URL_SECRET_ARN }}
       CDK_CONTEXT_JSON: ${{ vars.PRODUCTION_SERVERLESS_CDK_CONTEXT_JSON }}
     steps:
       - uses: actions/checkout@v7
@@ -40,20 +49,33 @@ jobs:
       - uses: actions/setup-node@v6
         with: { node-version: 22.23.1, cache: pnpm, package-manager-cache: false }
       - run: pnpm install --frozen-lockfile
+      - name: Verify separately approved migration attestation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MIGRATION_RUN_ID: ${{ inputs.migration_run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d -p "$RUNNER_TEMP" migration-gate-XXXXXX)"
+          trap 'rm -rf "$work"' EXIT
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$MIGRATION_RUN_ID" --jq .conclusion)" = success
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$MIGRATION_RUN_ID" --jq .head_sha)" = "$GITHUB_SHA"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$MIGRATION_RUN_ID" --jq .path)" = '.github/workflows/migrate-production.yml'
+          gh run download "$MIGRATION_RUN_ID" --repo "$GITHUB_REPOSITORY" --name production-migration-attestation --dir "$work"
+          node scripts/database/migration-state.mjs verify "$work/unused.csv" "$work/production-migration-attestation.json" "$GITHUB_SHA"
       - uses: aws-actions/configure-aws-credentials@v6.2.3
         with:
           aws-region: ${{ env.AWS_REGION }}
           role-to-assume: ${{ env.AWS_DEPLOY_ROLE_ARN }}
           role-session-name: oshi-schedule-production-serverless-${{ github.run_id }}
-      - name: Apply PostgreSQL migrations once
+      - name: Validate Amplify connection phase
         shell: bash
         run: |
           set -euo pipefail
-          DATABASE_URL="$(aws secretsmanager get-secret-value --region "$AWS_REGION" --secret-id "$DATABASE_MIGRATION_URL_SECRET_ARN" --query SecretString --output text)"
-          test -n "$DATABASE_URL" && test "$DATABASE_URL" != None
-          echo "::add-mask::$DATABASE_URL"
-          export DATABASE_URL DIRECT_URL="$DATABASE_URL"
-          pnpm exec prisma migrate deploy
-          pnpm exec prisma migrate status
+          node scripts/aws/production-amplify-preflight.mjs "before-${{ inputs.amplify_phase }}"
       - name: Deploy serverless stack
-        run: node scripts/aws/serverless-deploy.mjs deploy production "$CDK_CONTEXT_JSON"
+        env:
+          AMPLIFY_PHASE: ${{ inputs.amplify_phase }}
+        run: |
+          context="$(node -e 'const c=JSON.parse(process.env.CDK_CONTEXT_JSON); c.amplifyConnectionPhase=process.env.AMPLIFY_PHASE; process.stdout.write(JSON.stringify(c))')"
+          node scripts/aws/serverless-deploy.mjs deploy production "$context"

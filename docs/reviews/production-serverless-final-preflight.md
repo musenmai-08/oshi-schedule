@@ -4,7 +4,7 @@
 
 ## 判定
 
-低コストserverless構成のresource境界と月額目安は妥当だが、**production deployはまだ実行不可**である。実AWSにはserverless runtime用DB Secret 2件とGitHub production deploy roleがなく、Amplifyの初回repository接続とproduction backup OIDCにも未解消の契約差がある。
+低コストserverless構成のresource境界と月額目安は妥当だが、**production deployはまだ実行不可**である。blocker 2〜6はコード、IaC、workflow、runbook上で解消したが、それらのIAM/Appを作るdeployは未実施であり、serverless runtime用DB Secret 2件とDB role/baseline、外部公開gateが残る。
 
 AWS、Supabase、Googleへのwriteは行っていない。CDK diffはCloudFormation change setを作らない`--method=template --no-change-set`で取得した。DB Secret 2件が未作成のため、構造diffだけは正式名に合う非実在ARNを使用した。このdiffをdeploy入力として再利用してはならず、Secret作成後にcomplete ARNで再実行する。
 
@@ -18,23 +18,23 @@ AWS、Supabase、Googleへのwriteは行っていない。CDK diffはCloudFormat
 - image rollback資産`951cc81`はECRに存在し、digest `sha256:99206b651bbcebd146c16894fb4f9f24036ec238b71959f10278d30dcd775daa`のBasic Scanは`COMPLETE`、finding 0である。Lambda runtimeはこのimageを参照しない。
 - HEAD `e23611f`のGitHub Actions run `33974058088`はvalidate/e2eともsuccessである。
 
-構造diffは既存ECRを同じlogical IDで維持し、次の42 resourceをCREATEする。UPDATE、DELETE、REPLACEは0件である。
+blocker 2〜6修正後の`detached`構造diffは既存ECRを同じlogical IDで維持し、次の46 resourceをCREATEする。UPDATE、DELETE、REPLACEは0件である。DB Secret 2件が未作成のため、該当2 ARNには非実在suffixを使ったread-only template diffであり、deployには利用できない。
 
-| Resource種別 | CREATE |
-| --- | ---: |
-| Amplify App / Branch / Domain | 3 |
-| API Gateway HTTP API（API、Domain、Mapping、Integration、Route、Stage） | 6 |
-| Lambda Function / EventSourceMapping / Permission | 4 |
-| IAM Role / Policy | 8 |
-| SQS Queue / QueuePolicy | 6 |
-| CloudWatch Alarm / LogGroup | 7 |
-| S3 Bucket / BucketPolicy | 2 |
-| SNS Topic / Subscription | 2 |
-| DynamoDB Table | 1 |
-| EventBridge Scheduler | 1 |
-| Route 53 RecordSet | 1 |
-| AWS Budget | 1 |
-| **合計** | **42** |
+| Resource種別                                                            | CREATE |
+| ----------------------------------------------------------------------- | -----: |
+| Amplify App（Branch / Domainは0）                                       |      1 |
+| API Gateway HTTP API（API、Domain、Mapping、Integration、Route、Stage） |      6 |
+| Lambda Function / EventSourceMapping / Permission                       |      4 |
+| IAM Role / Policy                                                       |     14 |
+| SQS Queue / QueuePolicy                                                 |      6 |
+| CloudWatch Alarm / LogGroup                                             |      7 |
+| S3 Bucket / BucketPolicy                                                |      2 |
+| SNS Topic / Subscription                                                |      2 |
+| DynamoDB Table                                                          |      1 |
+| EventBridge Scheduler                                                   |      1 |
+| Route 53 RecordSet                                                      |      1 |
+| AWS Budget                                                              |      1 |
+| **合計**                                                                | **46** |
 
 templateにはRDS、ECS、VPC、subnet、NAT、VPC Link、Cloud Map、EventBridge Pipe、EIP/Public IPv4がない。runtime environment、Secret ARN、origin、domainにstaging/legacy/localhost参照もない。
 
@@ -50,11 +50,11 @@ templateにはRDS、ECS、VPC、subnet、NAT、VPC Link、Cloud Map、EventBridg
 ## deploy前blocker
 
 1. **DB境界未作成**: migration owner接続、`oshi_runtime` LOGIN role、DML-only grant、Supavisor transaction URL、migration session/direct URL、対応するSecret 2件が未作成。production `app` schemaが空であることも未確認で、baselineは未適用である。
-2. **GitHub deploy identity不在**: `deploy-production.yml`は`PRODUCTION_AWS_DEPLOY_ROLE_ARN`を要求するが、実AWSにもserverless templateにもproduction deploy roleがない。OIDC providerだけではworkflowはassumeできない。
-3. **Amplify初回接続順が不正**: templateのAmplify AppにはRepositoryがなく、`connected` phaseでBranch/Domainを同時作成する。fresh Appではmanual `main`となり、stagingで確認済みのAWS制約によりBranch存在中は後からrepository接続できない。App-only作成、repository接続、Branch/Domain作成の段階移行が必要である。
-4. **backup OIDC subject不整合**: repositoryはimmutable owner/repository ID形式のOIDC subjectを使うが、production templateは旧`repo:owner/repository:environment:production-backup`形式である。現状ではproduction backup workflowのSTS認証が失敗する。
-5. **migration/deployの原子性不足**: workflowはbaseline migration直後にfull stack deployする。後段deploy失敗時にDBだけ適用済みになるため、migrationとinfra deployを別承認・別記録に分離し、再実行時はmigration statusを確認して冪等に継続する必要がある。
-6. **backup restore契約の未確定**: staging rehearsalではapp schema 12 tableを復元できたが、Prisma migration metadataはdump内で確認できなかった。production初回backup前に、migration metadataをdumpへ含めるか、release recordとGit migration IDから復元判定する正式手順を固定する。
+2. **解消（AWS反映待ち）— GitHub identity**: infra、migration、Amplify接続、backupを`production-infra`、`production-migration`、`production-amplify`、`production-backup`の4環境へ分離した。全trustはowner/repositoryのimmutable ID完全一致で、infra roleはCDK bootstrap role、migration roleはmigration Secret、connector roleは対象Amplify App、backup roleは対象bucket/Secretだけへ限定する。
+3. **解消 — Amplify接続順**: production既定phaseを`detached`とし、fresh deployはAppだけを作る。read-only guard後、短命PATを標準出力や引数へ出さず`UpdateApp`を1回実行し、repository完全一致を確認してから`connected` phaseがmain Branch→Domainの順で作る。
+4. **解消（AWS反映待ち）— backup OIDC**: production backup trustを`repo:musenmai-08@165903509/oshi-schedule@1308836728:environment:production-backup`へ固定した。
+5. **解消 — migration/deploy境界**: migrationとinfraを別workflow・別environment approvalへ分割した。infra deployは指定runが同一repository、同一commit、migration workflow成功であり、そのartifactが現在のmigration checksumと一致しない限りfailする。
+6. **解消 — backup restore契約**: dumpと同じprefixでGit commit、migration ID、`migration.sql` checksumを記録したmanifestを保存する。backup時に実DBがGit migration列の正しいprefixであることを必須とし、未適用の次migrationがmainにあってもbackupを継続できる。restore rehearsalではmanifest、記録Git、復元DB `app._prisma_migrations`の3者を機械照合する。
 7. **外部公開gate**: production Supabase URL matrix、Google provider/限定scope、consent/verification、Terms/Privacy最終承認はAWSから確認できない。infra deployとは分離できるが、一般公開前には必須である。
 
 ## migrationとrollback順序
@@ -63,7 +63,7 @@ templateにはRDS、ECS、VPC、subnet、NAT、VPC Link、Cloud Map、EventBridg
 2. CSPRNG passwordで`oshi_runtime`を作り、`prisma/runtime-role.sql`のDML/sequence権限だけを付与する。DDL、role管理、Supabase管理schema権限がないことを負のtestで確認する。
 3. Supavisor transaction mode（6543、TLS、`pgbouncer=true`、`connection_limit=1`）のruntime URL Secretを作る。
 4. baselineをmigration ownerで1回だけ適用し、migration status、schema diff、table/index/FK、runtime DDL拒否を確認する。失敗時は自動DROPしない。productionは未公開・空DBなのでwrite経路を開かず、原因修正後にmigrationの冪等状態から再開する。
-5. blocker 2〜4をコード/IaCで解消後、実complete ARNによるpreflight/diffを再取得する。SchedulerはDISABLEDのままinfraをdeployする。
+5. blocker 2〜6のコード/IaC解消後、bootstrap-only remediationでproduction infra/migration OIDC roleだけを作成する。続いて実complete DB ARNによるpreflight/diffを再取得し、SchedulerはDISABLEDのままinfraをdeployする。
 6. infra失敗時はCloudFormation rollbackを確認する。Retainされたnamed resourceがあれば勝手に削除せず、resource importまたは個別cleanupを別承認にする。DB baselineは自動rollbackせず、未公開状態で保持する。
 7. API/backup/restore/Amplify/OAuth/Sync受入後だけSchedulerを有効化する。公開後のrollbackはPostgreSQLを維持したまま直前のLambda codeへ戻し、MySQLへの逆変換は行わない。
 
@@ -71,22 +71,22 @@ templateにはRDS、ECS、VPC、subnet、NAT、VPC Link、Cloud Map、EventBridg
 
 前提はAPI 10万request未満、manual sync 1,000件未満、Worker 1〜3分、Amplify build数回、log 5 GB未満である。
 
-| Service | 月額目安 |
-| --- | ---: |
-| Secrets Manager 6件 | 約$2.40 |
-| Route 53 hosted zone/DNS | $0.50〜$0.70 |
-| Amplify Hosting/SSR | $0.50〜$3.00 |
-| Lambda API/Worker | $0〜$3.00 |
-| HTTP API | $0〜$0.20 |
-| SQS / Scheduler / SNS / DynamoDB | $0〜$0.20 |
-| CloudWatch logs/alarm | $0.40〜$2.00 |
-| S3 backup / ECR rollback image | $0〜$0.30 |
-| Supabase Free | $0 |
-| **通常見込み** | **約$4〜$10/月** |
+| Service                                  |          月額目安 |
+| ---------------------------------------- | ----------------: |
+| Secrets Manager 6件                      |           約$2.40 |
+| Route 53 hosted zone/DNS                 |      $0.50〜$0.70 |
+| Amplify Hosting/SSR                      |      $0.50〜$3.00 |
+| Lambda API/Worker                        |         $0〜$3.00 |
+| HTTP API                                 |         $0〜$0.20 |
+| SQS / Scheduler / SNS / DynamoDB         |         $0〜$0.20 |
+| CloudWatch logs/alarm                    |      $0.40〜$2.00 |
+| S3 backup / ECR rollback image           |         $0〜$0.30 |
+| Supabase Free                            |                $0 |
+| **通常見込み**                           |  **約$4〜$10/月** |
 | **free allowance枯渇・実行時間上振れ時** | **約$10〜$12/月** |
 
 `$4〜10`は低trafficかつAWS account全体のfree allowanceを大きく消費しない限り妥当である。Workerが毎回3分近く動く、Amplify転送/build、CloudWatch logが増える場合は上限を超える。IaCの月額Budgetは20 USD、forecast 80%（16 USD）通知であり、見込み額より余裕を持たせた事故検知値である。
 
 ## 次に必要なwrite
 
-最初のwriteはproduction Supabase/AWS DB境界の作成である。migration owner URL Secret作成、`oshi_runtime`作成・grant、runtime URL Secret作成を一つの明示承認工程にする。その前にblocker 2〜4とmigration workflow分離をコード/IaCで修正し、CI greenを得る。full production stack deployは、実Secret ARNでdiffを再確認した後の別承認とする。
+次のAWS writeはbootstrap-only remediation deployであり、差分はproduction infra/migration OIDC Role各1件と各inline Policy（計4 resource）のCREATEだけで、DELETE/REPLACEは0である。その後、production Supabase/AWS DB境界（migration owner URL Secret、`oshi_runtime` DML-only role、runtime URL Secret）を別承認で作り、`production-migration` workflowでbaselineとattestationを完了する。full `detached` stack deployは、実Secret ARNでdiffを再確認した後のさらに別承認とする。
