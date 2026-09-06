@@ -73,7 +73,7 @@ export const lambdaBundling: lambdaNodejs.BundlingOptions = {
       `cp -RL ${inputDir}/node_modules/@prisma/client ${outputDir}/node_modules/@prisma/client`,
       `cp -RL ${inputDir}/node_modules/.prisma/client ${outputDir}/node_modules/.prisma/client`,
       `test -f ${outputDir}/node_modules/.prisma/client/libquery_engine-rhel-openssl-3.0.x.so.node`,
-      `rm -f ${outputDir}/node_modules/.prisma/client/libquery_engine-darwin-*.dylib.node`,
+      `find ${outputDir}/node_modules/.prisma/client -maxdepth 1 -type f -name 'libquery_engine-*' ! -name 'libquery_engine-rhel-openssl-3.0.x.so.node' -delete`,
     ],
   },
 };

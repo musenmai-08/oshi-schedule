@@ -101,6 +101,10 @@ describe('ServerlessOshiScheduleStack', () => {
     expect(lambdaBundling.format).toBeDefined();
     expect(lambdaBundling.banner).toContain('createRequire');
     expect(lambdaBundling.banner).toContain('const require');
+    const afterBundling = lambdaBundling.commandHooks?.afterBundling?.('/input', '/output');
+    expect(afterBundling).toContain(
+      "find /output/node_modules/.prisma/client -maxdepth 1 -type f -name 'libquery_engine-*' ! -name 'libquery_engine-rhel-openssl-3.0.x.so.node' -delete",
+    );
   });
 
   it('keeps workspace tests source-first instead of depending on generated dist', async () => {
