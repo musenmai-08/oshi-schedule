@@ -312,6 +312,11 @@ describe('ServerlessOshiScheduleStack', () => {
     expect(policies[0]).toContain('amplify:ListBranches');
     expect(policies[0]).toContain('amplify:ListDomainAssociations');
     expect(policies[0]).not.toContain('amplify:ListApps');
+    expect(policies[0]).toContain('apps/');
+    expect(policies[0]).toContain('"AmplifyApp","AppId"');
+    expect(policies[0]).toContain('/branches/*');
+    expect(policies[0]).toContain('/domains/*');
+    expect(policies[0]).not.toContain('"Resource":"*"');
   });
 
   it('creates only the Amplify App while detached and adds Branch then Domain when connected', () => {

@@ -528,18 +528,66 @@ export class ServerlessOshiScheduleStack extends Stack {
         });
         connectorRole.addToPolicy(
           new iam.PolicyStatement({
-            actions: [
-              'amplify:GetApp',
-              'amplify:UpdateApp',
-              'amplify:ListBranches',
-              'amplify:ListDomainAssociations',
-            ],
+            actions: ['amplify:GetApp', 'amplify:UpdateApp'],
             resources: [
               Arn.format(
                 {
                   service: 'amplify',
                   resource: 'apps',
                   resourceName: amplifyApp.attrAppId,
+                  arnFormat: ArnFormat.SLASH_RESOURCE_NAME,
+                },
+                this,
+              ),
+            ],
+          }),
+        );
+        // Amplify's authorization reference documents these list APIs against the App ARN, but
+        // the service evaluates their concrete list targets as child Branch/Domain ARNs.
+        // Keep both forms scoped to this App so the connector never gains account-wide listing.
+        connectorRole.addToPolicy(
+          new iam.PolicyStatement({
+            actions: ['amplify:ListBranches'],
+            resources: [
+              Arn.format(
+                {
+                  service: 'amplify',
+                  resource: 'apps',
+                  resourceName: amplifyApp.attrAppId,
+                  arnFormat: ArnFormat.SLASH_RESOURCE_NAME,
+                },
+                this,
+              ),
+              Arn.format(
+                {
+                  service: 'amplify',
+                  resource: 'apps',
+                  resourceName: `${amplifyApp.attrAppId}/branches/*`,
+                  arnFormat: ArnFormat.SLASH_RESOURCE_NAME,
+                },
+                this,
+              ),
+            ],
+          }),
+        );
+        connectorRole.addToPolicy(
+          new iam.PolicyStatement({
+            actions: ['amplify:ListDomainAssociations'],
+            resources: [
+              Arn.format(
+                {
+                  service: 'amplify',
+                  resource: 'apps',
+                  resourceName: amplifyApp.attrAppId,
+                  arnFormat: ArnFormat.SLASH_RESOURCE_NAME,
+                },
+                this,
+              ),
+              Arn.format(
+                {
+                  service: 'amplify',
+                  resource: 'apps',
+                  resourceName: `${amplifyApp.attrAppId}/domains/*`,
                   arnFormat: ArnFormat.SLASH_RESOURCE_NAME,
                 },
                 this,
