@@ -1,0 +1,24 @@
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_361fcc394f6662 293-294
+infra/lib/serverless-stack.ts
+  s_3a50bad78ea1cd::t_54b5121e536bb0 531-541,543-550,558-591
+infra/test/serverless-stack.test.ts
+  s_3a50bad78ea1cd::t_54b5121e536bb0 317-319
+  s_3a50bad78ea1cd::t_3d3c013772e43a 315-316
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "a95655d3782e784ebf6125fa098acf6df8802dd8",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
