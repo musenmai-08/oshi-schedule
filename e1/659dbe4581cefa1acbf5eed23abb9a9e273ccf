@@ -1,0 +1,97 @@
+infra/lib/config.ts
+  s_3a50bad78ea1cd::t_8c7970bfe71a92 16-22,426,475-479,553-557
+  s_3a50bad78ea1cd::t_881c69f46a357a 558
+scripts/aws/production-amplify-preflight.mjs
+  s_3a50bad78ea1cd::t_f24a60a8f15435 2
+  s_3a50bad78ea1cd::t_11817077fd4986 1,3-18,24-47,50-55,58-74
+  s_3a50bad78ea1cd::t_e5f56f8a9d4caf 19-21,56-57
+  s_3a50bad78ea1cd::t_4e02c78f14d532 22-23,48-49
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_37434b6f75bc07 275
+  s_3a50bad78ea1cd::t_b4c8106b0b3975 274
+.github/workflows/migrate-production.yml
+  s_3a50bad78ea1cd::t_3ba5b9c6d397d2 1-59,61-68
+  s_3a50bad78ea1cd::t_6c97645fefac2b 60
+docs/architecture/production-serverless-low-cost.md
+  s_3a50bad78ea1cd::t_37434b6f75bc07 144,264-266
+  s_3a50bad78ea1cd::t_13a3e6c635a369 173,182
+docs/operations/production-release-checklist.md
+  s_3a50bad78ea1cd::t_13a3e6c635a369 35-43
+  s_3a50bad78ea1cd::t_37434b6f75bc07 7,120-124
+scripts/aws/production-workflow-contract.test.mjs
+  s_3a50bad78ea1cd::t_920c4af8066ec4 1-3,5,8-28,30-35,37-39
+  s_3a50bad78ea1cd::t_f24a60a8f15435 4,29
+  s_3a50bad78ea1cd::t_ba024ba10f9c5a 36
+  s_3a50bad78ea1cd::t_13a3e6c635a369 6-7
+scripts/database/migration-state.mjs
+  s_3a50bad78ea1cd::t_4e02c78f14d532 45,47
+  s_3a50bad78ea1cd::t_d629f9cd5cd4a3 1,3-37,42-43,48-49,51,54-56,67-76,80-90
+  s_3a50bad78ea1cd::t_ba024ba10f9c5a 38-41,44,46,50,52-53,57-66,77-79
+  s_3a50bad78ea1cd::t_cbcd8be083a160 2
+docs/operations/supabase-backup-and-restore.md
+  s_3a50bad78ea1cd::t_37434b6f75bc07 31,38
+  s_3a50bad78ea1cd::t_ba024ba10f9c5a 10
+package.json
+  s_3a50bad78ea1cd::t_7e6a034ff7d1af 19
+  s_3a50bad78ea1cd::t_13c6d341a4dacf 22
+scripts/aws/serverless-deploy.mjs
+  s_3a50bad78ea1cd::t_8c7970bfe71a92 57-58
+  s_3a50bad78ea1cd::t_04bca2da6d409b 59-60
+scripts/aws/production-amplify-preflight.test.mjs
+  s_3a50bad78ea1cd::t_11817077fd4986 1-2,7-52
+  s_3a50bad78ea1cd::t_4e02c78f14d532 3-6
+infra/test/config.test.ts
+  s_3a50bad78ea1cd::t_64323432744812 117-118
+  s_3a50bad78ea1cd::t_6195c7aa3c8905 175,362,367,370
+.github/workflows/deploy-production.yml
+  s_3a50bad78ea1cd::t_3ba5b9c6d397d2 10-18,21,39,52-65,71,75,77-81
+docs/reviews/production-serverless-final-preflight.md
+  s_3a50bad78ea1cd::t_b4c8106b0b3975 66,92
+  s_3a50bad78ea1cd::t_ec3e35f81aca27 57
+  s_3a50bad78ea1cd::t_13a3e6c635a369 23-24,26-27,29-36,74-85
+  s_3a50bad78ea1cd::t_1a3a927ba402c7 21,25,28,37
+  s_3a50bad78ea1cd::t_37434b6f75bc07 7,53-56
+  s_3a50bad78ea1cd::t_897884e41bbe7f 22
+scripts/aws/serverless-deploy.test.mjs
+  s_3a50bad78ea1cd::t_04bca2da6d409b 23-24
+scripts/database/migration-state.test.mjs
+  s_3a50bad78ea1cd::t_d629f9cd5cd4a3 1,3-7,9-19,24-33,41-43
+  s_3a50bad78ea1cd::t_4e02c78f14d532 20-23
+  s_3a50bad78ea1cd::t_cbcd8be083a160 2
+  s_3a50bad78ea1cd::t_cebc261d46c40a 37
+  s_3a50bad78ea1cd::t_ba024ba10f9c5a 8,34-36,38-40
+infra/lib/serverless-stack.ts
+  s_3a50bad78ea1cd::t_4e02c78f14d532 65-66,165-170,440-442,522-523
+  s_3a50bad78ea1cd::t_f1ae2a3756aace 37-41,127-164,171-191,463,516-521,524-553
+.github/workflows/backup-production.yml
+  s_3a50bad78ea1cd::t_3ba5b9c6d397d2 27-28,43-44,56,59-60,62-64
+  s_3a50bad78ea1cd::t_4a9d32d715e459 66
+  s_3a50bad78ea1cd::t_6c97645fefac2b 57
+  s_3a50bad78ea1cd::t_ba024ba10f9c5a 58
+  s_3a50bad78ea1cd::t_69000da60ea63e 65
+.github/workflows/connect-production-amplify.yml
+  s_3a50bad78ea1cd::t_2c821abc40647a 45
+  s_3a50bad78ea1cd::t_11817077fd4986 1-44,46-47
+.github/workflows/ci.yml
+  s_3a50bad78ea1cd::t_13c6d341a4dacf 87-88
+infra/test/serverless-stack.test.ts
+  s_3a50bad78ea1cd::t_13c6d341a4dacf 73-82,245-276
+  s_3a50bad78ea1cd::t_4e02c78f14d532 34,135-137,192-195,302-305,307-309,319-322,325,327
+  s_3a50bad78ea1cd::t_ac4afcae951c6b 277
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "e1659dbe4581cefa1acbf5eed23abb9a9e273ccf",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
