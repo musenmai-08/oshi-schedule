@@ -2,6 +2,8 @@
 
 > 2026-09-06 post-deploy監査: release SHA `3c23218ca95ddc1cc0523ad5a87e3f9a091465b6` のdeploy runは成功し、CloudFormation/Lambda/API/Queue/Alarm/DB接続は正常。Amplifyはdetached App-only（repository/Branch/Domainなし）である。ローカル再synthではLambda Code 2件の差分が残るため、完全なpost-deploy CDK diff 0は未達であり、bundle再現性を公開前に確認する。
 
+2026-09-06更新: `a9a5cf1`のproduction detached redeployでPrisma engine差異を解消し、変更はAPI/Worker Lambda Codeのみ。CloudFormation、API疎通、Queue/DLQ、ESM、alarms、Scheduler、DB migration/runtime接続は正常。Amplify App-only detached（repository/Branch/Domainなし）で、GitHub repository接続が次工程。
+
 この手順はproduction公開前の設計・受入用である。AWS、Google Cloud、Supabaseの設定変更およびverification申請は、各工程で別途承認を得てから行う。Secret値、token、OAuth code、個人情報をdeploy recordやissueへ記録しない。
 
 > 2026-09-01に[serverless低コスト移行設計](../architecture/production-serverless-low-cost.md)を正式採用した。ECR-first/RDS/ECSの記録は履歴であり、新しいdeploy承認には使わない。productionはSupabase Free + Lambda + S3日次backup 7日である。
@@ -133,3 +135,6 @@ production ECR repositoryはCDKの`bootstrapOnly=true` phaseが唯一の所有�
 4. callback/onboarding後に、専用calendar create/reuse、event get/insert/patch/delete、手動・定期同期、再認証、subscription削除、account削除を管理されたテストデータで確認する。
 5. DB、CloudWatch、Supabase/Googleの監査でtoken、OAuth code、メールアドレス、Calendar IDが不適切に出力されず、削除・retention・DLQ/alarmが方針どおりであることを確認する。
 6. すべての証跡をrelease recordへ集約し、release approverがHigh 2をclosedにしてから一般公開する。
+### Production Amplify repository接続（detached後）
+
+既存App `oshi-schedule-production-web`（App ID `d1v67c1ruct5nd`）がrepository/Branch/Domain未接続であることを確認してから、GitHub Environment `production-amplify` に必須reviewerを設定する。Variablesは `AWS_REGION=ap-northeast-1`、`PRODUCTION_AMPLIFY_CONNECTOR_ROLE_ARN=arn:aws:iam::741448960817:role/oshi-schedule-production-github-amplify-connect`、`PRODUCTION_AMPLIFY_APP_ID=d1v67c1ruct5nd`、Secretは短命PATを `AMPLIFY_GITHUB_PAT` として登録する。PATは `musenmai-08/oshi-schedule` のみに限定し、workflow `Connect production Amplify repository` の入力 `CONNECT_PRODUCTION_AMPLIFY` を一度だけ実行する。repository接続後はPATを破棄し、connected preflightを通した別承認のCDK deployでmain Branch→Domainを作成する。

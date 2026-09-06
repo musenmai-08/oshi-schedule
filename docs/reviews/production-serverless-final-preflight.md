@@ -2,6 +2,8 @@
 
 > 2026-09-06 post-deploy追記: release SHA `3c23218ca95ddc1cc0523ad5a87e3f9a091465b6` のdeploy runは成功し、CloudFormationは`UPDATE_COMPLETE`。API/Worker・health/ready・Queue/DLQ・ESM・Alarm・DB migration/runtime接続は確認済み。AmplifyはApp-only detached。ローカルCDK再synthでLambda Code 2件の差分が検出され、post-deploy diff 0の条件は未達であるため、bundle再現性の確認が残る。
 
+2026-09-06更新: `a9a5cf1`でPrisma engineをRHEL用に限定し、production detached redeploy（migration/deploy run成功）を完了した。CloudFormation変更はAPI/Worker Lambda Codeのみで、post-deploy実状態は正常。AmplifyはApp-only detachedであり、repository接続→connected phaseが次工程。
+
 2026-09-06 post-deploy差分の原因を特定した。GitHub LinuxではPrisma `native`のDebian query engineがLambda zipへ残るが、macOS localでは生成されず、実行コードが同じでもasset hashが変わっていた。bundling後にRHEL用engineだけを残す恒久修正を実装し、同一source/lockfileでproduction synthを2回行った結果、API/Worker asset hashは一致した。修正後SHAでCIとproduction-migration attestationを再作成してから、detached deployを再実行する。
 
 監査日: 2026-09-06
