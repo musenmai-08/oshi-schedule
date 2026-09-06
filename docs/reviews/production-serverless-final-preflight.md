@@ -1,5 +1,7 @@
 # production serverless 最終preflight監査
 
+> 2026-09-06 post-deploy追記: release SHA `3c23218ca95ddc1cc0523ad5a87e3f9a091465b6` のdeploy runは成功し、CloudFormationは`UPDATE_COMPLETE`。API/Worker・health/ready・Queue/DLQ・ESM・Alarm・DB migration/runtime接続は確認済み。AmplifyはApp-only detached。ローカルCDK再synthでLambda Code 2件の差分が検出され、post-deploy diff 0の条件は未達であるため、bundle再現性の確認が残る。
+
 監査日: 2026-09-06
 
 ## 判定

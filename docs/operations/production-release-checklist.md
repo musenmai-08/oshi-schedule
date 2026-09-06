@@ -1,5 +1,7 @@
 # production公開チェックリスト
 
+> 2026-09-06 post-deploy監査: release SHA `3c23218ca95ddc1cc0523ad5a87e3f9a091465b6` のdeploy runは成功し、CloudFormation/Lambda/API/Queue/Alarm/DB接続は正常。Amplifyはdetached App-only（repository/Branch/Domainなし）である。ローカル再synthではLambda Code 2件の差分が残るため、完全なpost-deploy CDK diff 0は未達であり、bundle再現性を公開前に確認する。
+
 この手順はproduction公開前の設計・受入用である。AWS、Google Cloud、Supabaseの設定変更およびverification申請は、各工程で別途承認を得てから行う。Secret値、token、OAuth code、個人情報をdeploy recordやissueへ記録しない。
 
 > 2026-09-01に[serverless低コスト移行設計](../architecture/production-serverless-low-cost.md)を正式採用した。ECR-first/RDS/ECSの記録は履歴であり、新しいdeploy承認には使わない。productionはSupabase Free + Lambda + S3日次backup 7日である。
