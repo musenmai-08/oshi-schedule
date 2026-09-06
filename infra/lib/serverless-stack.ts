@@ -79,11 +79,11 @@ export const lambdaBundling: lambdaNodejs.BundlingOptions = {
 };
 
 /**
- * Worker Lambda imports API runtime entry points through the workspace package.
- * Those package exports deliberately point at `apps/api/dist` for normal Node
- * consumers, but Lambda bundling must always compile the current source tree.
- * Pin these two runtime-only imports to source so a stale (or absent) dist
- * directory cannot become part of the deployed Worker artifact.
+ * Workspace packages export their compiled `dist` files for ordinary Node
+ * consumers. Lambda bundling starts from source, however, and must be valid in
+ * a clean checkout before any workspace build has run. Pin every workspace
+ * import reachable from the API and Worker entries to source so stale or
+ * absent dist directories cannot affect the deployed artifact.
  */
 export const lambdaSourceAliases = (repositoryRoot: string): Record<string, string> => ({
   '@oshi-schedule/api/runtime': resolve(repositoryRoot, 'apps/api/src/runtime.ts'),
@@ -91,6 +91,7 @@ export const lambdaSourceAliases = (repositoryRoot: string): Record<string, stri
     repositoryRoot,
     'apps/api/src/infrastructure/lambda/runtime-env.ts',
   ),
+  '@oshi-schedule/shared': resolve(repositoryRoot, 'packages/shared/src/index.ts'),
 });
 
 export const createLambdaBundling = (repositoryRoot: string): lambdaNodejs.BundlingOptions => ({

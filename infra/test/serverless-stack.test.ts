@@ -1,7 +1,8 @@
 import { App } from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import { build } from 'esbuild';
-import { readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { readFile, rename } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { DeploymentConfig } from '../lib/config.js';
@@ -102,45 +103,66 @@ describe('ServerlessOshiScheduleStack', () => {
     expect(lambdaBundling.banner).toContain('const require');
   });
 
-  it('bundles the Worker against API source even when package exports target dist', async () => {
+  it('bundles API and Worker against workspace source when package exports target dist', async () => {
     const repositoryRoot = resolve(import.meta.dirname, '../..');
     const aliases = lambdaSourceAliases(repositoryRoot);
     const packageJson = await readFile(resolve(repositoryRoot, 'apps/api/package.json'), 'utf8');
+    const sharedPackageJson = await readFile(
+      resolve(repositoryRoot, 'packages/shared/package.json'),
+      'utf8',
+    );
     expect(packageJson).toContain('"./dist/runtime.js"');
     expect(packageJson).toContain('"./dist/infrastructure/lambda/runtime-env.js"');
+    expect(sharedPackageJson).toContain('"./dist/index.js"');
     expect(aliases).toEqual({
       '@oshi-schedule/api/runtime': resolve(repositoryRoot, 'apps/api/src/runtime.ts'),
       '@oshi-schedule/api/lambda-env': resolve(
         repositoryRoot,
         'apps/api/src/infrastructure/lambda/runtime-env.ts',
       ),
+      '@oshi-schedule/shared': resolve(repositoryRoot, 'packages/shared/src/index.ts'),
     });
     expect(createLambdaBundling(repositoryRoot).esbuildArgs).toMatchObject({
       '--alias:@oshi-schedule/api/runtime': aliases['@oshi-schedule/api/runtime'],
       '--alias:@oshi-schedule/api/lambda-env': aliases['@oshi-schedule/api/lambda-env'],
+      '--alias:@oshi-schedule/shared': aliases['@oshi-schedule/shared'],
     });
 
-    const bundle = await build({
-      absWorkingDir: repositoryRoot,
-      entryPoints: ['apps/worker/src/lambda.ts'],
-      bundle: true,
-      format: 'esm',
-      platform: 'node',
-      target: 'node22',
-      alias: aliases,
-      external: ['@prisma/client', '.prisma/client'],
-      metafile: true,
-      write: false,
-    });
-    const inputs = Object.keys(bundle.metafile.inputs).map((input) =>
-      resolve(repositoryRoot, input),
-    );
-    expect(inputs).toContain(resolve(repositoryRoot, 'apps/api/src/runtime.ts'));
-    expect(inputs).toContain(
-      resolve(repositoryRoot, 'apps/api/src/infrastructure/lambda/runtime-env.ts'),
-    );
-    expect(inputs.some((input) => input.includes('/apps/api/dist/'))).toBe(false);
-    expect(bundle.outputFiles[0]?.text).toContain('createWorkerContainer');
+    const sharedDist = resolve(repositoryRoot, 'packages/shared/dist');
+    const hiddenSharedDist = resolve(repositoryRoot, 'packages/shared/.dist-bundling-test');
+    const hadSharedDist = existsSync(sharedDist);
+    if (hadSharedDist) await rename(sharedDist, hiddenSharedDist);
+    const bundles = await (async () => {
+      try {
+        return await Promise.all(
+          ['apps/api/src/lambda.ts', 'apps/worker/src/lambda.ts'].map((entryPoint) =>
+            build({
+              absWorkingDir: repositoryRoot,
+              entryPoints: [entryPoint],
+              bundle: true,
+              format: 'esm',
+              platform: 'node',
+              target: 'node22',
+              alias: aliases,
+              external: ['@prisma/client', '.prisma/client'],
+              metafile: true,
+              write: false,
+            }),
+          ),
+        );
+      } finally {
+        if (hadSharedDist) await rename(hiddenSharedDist, sharedDist);
+      }
+    })();
+    for (const bundle of bundles) {
+      const inputs = Object.keys(bundle.metafile.inputs).map((input) =>
+        resolve(repositoryRoot, input),
+      );
+      expect(inputs).toContain(resolve(repositoryRoot, 'packages/shared/src/index.ts'));
+      expect(inputs.some((input) => input.includes('/packages/shared/dist/'))).toBe(false);
+      expect(inputs.some((input) => input.includes('/apps/api/dist/'))).toBe(false);
+    }
+    expect(bundles[1]?.outputFiles[0]?.text).toContain('createWorkerContainer');
   }, 15_000);
 
   it('eliminates the legacy network, database, ECS and Pipe resources', () => {
