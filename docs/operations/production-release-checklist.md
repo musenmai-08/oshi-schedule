@@ -108,7 +108,7 @@ production ECR repositoryはCDKの`bootstrapOnly=true` phaseが唯一の所有�
 ## production deploy前の完了条件
 
 - [ ] production CDK synth/diffでWeb=`oshi-schedule.com`、API=`api.oshi-schedule.com`、Amplify root-domain Prefix空、`WEB_ORIGIN`、`NEXT_PUBLIC_API_URL`が一致する。
-- [ ] serverless production contextでfull CDK preflight/diffを実行し、bootstrap済みECRを維持、RDS/ECS/VPC/Pipeが0、DELETE/REPLACEがないことを確認する。
+- [x] serverless production contextでfull CDK preflight/diffを実行し、bootstrap済みECRとinfra/migration OIDC roleを維持、RDS/ECS/VPC/Pipeが0、DELETE/REPLACEがないことを確認する（full detached diffはCREATE 46）。
 - [ ] mainの最新commitでGitHub Actions `validate`と`e2e`がともにgreenであり、workflow logで失敗がない。
 - [ ] Lambda ZIPにPrisma Client/engineが含まれ、API/Worker handler contractがgreenである。ECR imageはrollback資産でありruntime deploy gateではない。
 - [ ] production専用Secret/SSM/Google/Supabase値が揃い、staging由来値・localhost・placeholderがない。
@@ -116,8 +116,8 @@ production ECR repositoryはCDKの`bootstrapOnly=true` phaseが唯一の所有�
 - [ ] Google consent screen、scope justification、demo video、必要なverificationが承認済みである。
 - [ ] Terms/Privacyの専門家確認、13歳未満利用不可、日本国内向け、無料/有料化方針、運営者・問い合わせ先の最終承認がある。
 - [ ] S3 app-schema日次backup 7日、最大RPO 24時間、Supabase Auth独自backupなし、Free pause、SyncRun 90日、log 30日、完了墓石30日purgeの責任者と復元演習が確認済みである。
-- [ ] `database-migration-url`と`database-runtime-url`をproduction専用値で作成し、`oshi_runtime`がapp schemaのDMLだけを持ちDDLを拒否する。
-- [x] production infra/migration/Amplify/backup roleをrepository immutable-ID subjectと別GitHub EnvironmentでIaC化した。AWSへのrole作成は次回の承認済みbootstrap remediationで行う。
+- [x] `database-migration-url`と`database-runtime-url`をproduction専用値で作成した。`app._prisma_migrations`はbaseline checksum一致で、`oshi_runtime`はapp業務tableのDMLだけを持ち、schema/database CREATE、role管理、migration metadata DMLを拒否する。
+- [x] production infra/migration roleをrepository immutable-ID subjectと別GitHub EnvironmentでIaC化・AWS作成した。Amplify/backup roleはfull detached deployで作成する。
 - [x] production AmplifyをApp-only (`detached`) → guarded repository接続 → Branch/Domain (`connected`)に分割し、未接続AppでBranch/Domainを作らない。
 - [x] production backup roleをimmutable repository-ID subjectの`production-backup`だけがassumeできる契約へ統一した。
 - [x] `migrate-production.yml`と`deploy-production.yml`を別承認にし、deployは同一commitの成功migration run/attestationなしでは進めない。

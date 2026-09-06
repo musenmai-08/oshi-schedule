@@ -4,21 +4,21 @@
 
 ## 判定
 
-低コストserverless構成のresource境界と月額目安は妥当だが、**production deployはまだ実行不可**である。blocker 2〜6はコード、IaC、workflow、runbook上で解消したが、それらのIAM/Appを作るdeployは未実施であり、serverless runtime用DB Secret 2件とDB role/baseline、外部公開gateが残る。
+低コストserverless構成のresource境界と月額目安は妥当である。production DB境界とinfra/migration OIDC bootstrapは完了したが、**production本体deployはまだ実行不可**である。protected migration workflowによるrelease attestation、外部公開gate、別承認のfull detached deployが残る。
 
-AWS、Supabase、Googleへのwriteは行っていない。CDK diffはCloudFormation change setを作らない`--method=template --no-change-set`で取得した。DB Secret 2件が未作成のため、構造diffだけは正式名に合う非実在ARNを使用した。このdiffをdeploy入力として再利用してはならず、Secret作成後にcomplete ARNで再実行する。
+CDK diffはCloudFormation change setを作らない`--method=template --no-change-set`で取得した。DB URL Secretはcomplete ARNを使い、正式なproduction contextで再取得した。production本体deployは実行していない。
 
 ## 実状態とdiff
 
 - AWS accountは`741448960817`、regionは`ap-northeast-1`、Lambda Concurrent executions quotaは`10`、unreserved concurrencyも`10`である。
-- `oshi-schedule-production` stackは`CREATE_COMPLETE`で、現在の管理resourceはECR RepositoryとCDK metadataだけである。
+- `oshi-schedule-production` stackは`UPDATE_COMPLETE`で、現在の管理resourceはECR Repository、CDK metadata、production infra/migration GitHub OIDC Role 2件とinline Policy 2件である。
 - `api.oshi-schedule.com`のACM certificateは`ISSUED`。Route 53 hosted zoneは再利用し、現時点のapexにはNS/SOA以外のapplication recordはない。
-- application Secret 4件と`/oshi-schedule-production/runtime/allowed-emails` SecureStringは存在する。`database-runtime-url`と`database-migration-url`は存在しない。
+- application Secret 4件、`/oshi-schedule-production/runtime/allowed-emails` SecureString、`database-migration-url`、`database-runtime-url`は存在する。値は取得・記録しない。
 - production Amplify App、Lambda、SQS、backup bucket、production GitHub deploy/backup roleは未作成である。
 - image rollback資産`951cc81`はECRに存在し、digest `sha256:99206b651bbcebd146c16894fb4f9f24036ec238b71959f10278d30dcd775daa`のBasic Scanは`COMPLETE`、finding 0である。Lambda runtimeはこのimageを参照しない。
 - HEAD `e23611f`のGitHub Actions run `33974058088`はvalidate/e2eともsuccessである。
 
-blocker 2〜6修正後の`detached`構造diffは既存ECRを同じlogical IDで維持し、次の46 resourceをCREATEする。UPDATE、DELETE、REPLACEは0件である。DB Secret 2件が未作成のため、該当2 ARNには非実在suffixを使ったread-only template diffであり、deployには利用できない。
+正式なproduction contextの`detached`構造diffは、既存ECRとbootstrap済みIAMを維持して次の46 resourceをCREATEする。UPDATE、DELETE、REPLACEは0件である。2つのDB URL Secretはいずれも実complete ARNで参照する。
 
 | Resource種別                                                            | CREATE |
 | ----------------------------------------------------------------------- | -----: |
@@ -59,11 +59,11 @@ templateにはRDS、ECS、VPC、subnet、NAT、VPC Link、Cloud Map、EventBridg
 
 ## migrationとrollback順序
 
-1. production Supabase migration owner接続を非表示入力し、migration URL Secretを作る。`app` schemaが空でSupabase管理schemaへ変更がないことをread-only確認する。
-2. CSPRNG passwordで`oshi_runtime`を作り、`prisma/runtime-role.sql`のDML/sequence権限だけを付与する。DDL、role管理、Supabase管理schema権限がないことを負のtestで確認する。
-3. Supavisor transaction mode（6543、TLS、`pgbouncer=true`、`connection_limit=1`）のruntime URL Secretを作る。
-4. baselineをmigration ownerで1回だけ適用し、migration status、schema diff、table/index/FK、runtime DDL拒否を確認する。失敗時は自動DROPしない。productionは未公開・空DBなのでwrite経路を開かず、原因修正後にmigrationの冪等状態から再開する。
-5. blocker 2〜6のコード/IaC解消後、bootstrap-only remediationでproduction infra/migration OIDC roleだけを作成する。続いて実complete DB ARNによるpreflight/diffを再取得し、SchedulerはDISABLEDのままinfraをdeployする。
+1. migration owner URL Secretを非表示入力で作成した。既存baseline table 12件とbaseline checksum一致を確認したため、baselineを再適用せずPrisma metadataだけを`app` schemaへ非破壊移動した。
+2. `oshi_runtime`はCSPRNG passwordへ更新し、app業務tableのDML/sequence権限だけを付与した。DDL、role/database CREATE、migration metadata DMLは拒否されることを確認した。
+3. Supavisor transaction mode（6543、TLS、`schema=app`、`pgbouncer=true`、`connection_limit=1`）のruntime URL Secretを作成し、runtime connectionを確認した。
+4. Prisma migration statusとschema diffは正常である。次はprotected `production-migration` workflowを同一commitで一度実行し、正式release attestation artifactを作成する。baselineは再適用しない。
+5. 実complete DB ARNによるpreflight/diffは確認済みである。SchedulerはDISABLEDのまま、migration run IDを入力にしたfull detached infra deployを別承認で実施する。
 6. infra失敗時はCloudFormation rollbackを確認する。Retainされたnamed resourceがあれば勝手に削除せず、resource importまたは個別cleanupを別承認にする。DB baselineは自動rollbackせず、未公開状態で保持する。
 7. API/backup/restore/Amplify/OAuth/Sync受入後だけSchedulerを有効化する。公開後のrollbackはPostgreSQLを維持したまま直前のLambda codeへ戻し、MySQLへの逆変換は行わない。
 
@@ -89,4 +89,4 @@ templateにはRDS、ECS、VPC、subnet、NAT、VPC Link、Cloud Map、EventBridg
 
 ## 次に必要なwrite
 
-次のAWS writeはbootstrap-only remediation deployであり、差分はproduction infra/migration OIDC Role各1件と各inline Policy（計4 resource）のCREATEだけで、DELETE/REPLACEは0である。その後、production Supabase/AWS DB境界（migration owner URL Secret、`oshi_runtime` DML-only role、runtime URL Secret）を別承認で作り、`production-migration` workflowでbaselineとattestationを完了する。full `detached` stack deployは、実Secret ARNでdiffを再確認した後のさらに別承認とする。
+次のproduction writeはprotected `production-migration` workflowによるidempotentなmigration status/attestation作成である。続くfull `detached` stack deployはCREATE 46、UPDATE/DELETE/REPLACE 0の構成であり、migration run IDを入力にした別承認を必要とする。deploy後にApp-only phase、guard付きrepository接続、connected Branch/Domain、公開受入を順に行う。
