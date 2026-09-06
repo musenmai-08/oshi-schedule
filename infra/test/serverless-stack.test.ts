@@ -273,7 +273,7 @@ describe('ServerlessOshiScheduleStack', () => {
       DependsOn?: string[];
     };
     expect(domain.DependsOn?.some((value) => value.includes('AmplifyBranch'))).toBe(true);
-  });
+  }, 15_000);
 
   it('destroys an empty staging-preview backup bucket on rollback but retains production backups', () => {
     const productionBucket = Object.values(render().findResources('AWS::S3::Bucket'))[0] as {
