@@ -1,0 +1,27 @@
+scripts/aws/production-workflow-contract.test.mjs
+  s_3a50bad78ea1cd::t_69196be37f07de 19-21
+.github/workflows/migrate-production.yml
+  s_3a50bad78ea1cd::t_69196be37f07de 59-62
+scripts/database/libpq-url.mjs
+  s_3a50bad78ea1cd::t_c064b5c0b15fe6 2,20
+  s_3a50bad78ea1cd::t_69196be37f07de 1,3-19,21-24
+scripts/database/libpq-url.test.mjs
+  s_3a50bad78ea1cd::t_69196be37f07de 1-2,4-15
+  s_3a50bad78ea1cd::t_c064b5c0b15fe6 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "9169f54c437a176d0b689be7d778cf5cac801dfe",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
