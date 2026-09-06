@@ -1,0 +1,26 @@
+infra/lib/serverless-stack.ts
+  s_3a50bad78ea1cd::t_9d2a112ebf663f 82-86,94
+docs/reviews/production-serverless-final-preflight.md
+  s_3a50bad78ea1cd::t_2d8099dfbde132 65
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_2d8099dfbde132 279-280
+infra/test/serverless-stack.test.ts
+  s_3a50bad78ea1cd::t_703b393b5dc913 4-5,131-156
+  s_3a50bad78ea1cd::t_9d2a112ebf663f 106,110-113,116,123,128,157-165
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "cdff67b13b67a0dae7ce5a1725369fb490c7ece5",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
