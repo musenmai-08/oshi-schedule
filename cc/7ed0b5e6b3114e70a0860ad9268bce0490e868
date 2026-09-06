@@ -1,0 +1,23 @@
+docs/reviews/production-serverless-final-preflight.md
+  s_3a50bad78ea1cd::t_71891a204bb510 21,28,37,92
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_71891a204bb510 278
+docs/operations/production-release-checklist.md
+  s_3a50bad78ea1cd::t_71891a204bb510 111
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "cc7ed0b5e6b3114e70a0860ad9268bce0490e868",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
