@@ -1,9 +1,23 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  buildAmplifyReadPlan,
   PRODUCTION_REPOSITORY_URL,
   validateAmplifyState,
 } from './production-amplify-preflight.mjs';
+
+test('repository connection preflight uses only App-scoped Amplify read APIs', () => {
+  assert.deepEqual(buildAmplifyReadPlan('before-repository-connect', 'd1example'), [
+    ['amplify', 'get-app', '--app-id', 'd1example'],
+    ['amplify', 'list-branches', '--app-id', 'd1example'],
+    ['amplify', 'list-domain-associations', '--app-id', 'd1example'],
+  ]);
+  assert.throws(
+    () => buildAmplifyReadPlan('before-repository-connect', ''),
+    /AMPLIFY_APP_ID is required/,
+  );
+  assert.deepEqual(buildAmplifyReadPlan('before-detached', ''), [['amplify', 'list-apps']]);
+});
 
 test('detached phase permits only an absent or disconnected empty App', () => {
   assert.doesNotThrow(() =>

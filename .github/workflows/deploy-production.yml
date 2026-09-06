@@ -41,6 +41,7 @@ jobs:
       AWS_REGION: ${{ vars.AWS_REGION }}
       AWS_DEPLOY_ROLE_ARN: ${{ vars.PRODUCTION_AWS_DEPLOY_ROLE_ARN }}
       CDK_CONTEXT_JSON: ${{ vars.PRODUCTION_SERVERLESS_CDK_CONTEXT_JSON }}
+      AMPLIFY_APP_ID: ${{ vars.PRODUCTION_AMPLIFY_APP_ID }}
     steps:
       - uses: actions/checkout@v7
         with: { persist-credentials: false }

@@ -303,6 +303,17 @@ describe('ServerlessOshiScheduleStack', () => {
     expect(roleText).not.toContain('repo:musenmai-08/oshi-schedule:environment:production');
   });
 
+  it('limits the production Amplify connector to the target App read and update APIs', () => {
+    const policies = Object.values(render().findResources('AWS::IAM::Policy'))
+      .map((policy) => JSON.stringify(policy))
+      .filter((policy) => policy.includes('amplify:UpdateApp'));
+    expect(policies).toHaveLength(1);
+    expect(policies[0]).toContain('amplify:GetApp');
+    expect(policies[0]).toContain('amplify:ListBranches');
+    expect(policies[0]).toContain('amplify:ListDomainAssociations');
+    expect(policies[0]).not.toContain('amplify:ListApps');
+  });
+
   it('creates only the Amplify App while detached and adds Branch then Domain when connected', () => {
     const detached = renderProductionPhase('detached');
     detached.resourceCountIs('AWS::Amplify::App', 1);

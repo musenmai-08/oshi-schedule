@@ -26,7 +26,9 @@ test('production Amplify connection is guarded before connected resources are de
   const connect = await workflow('connect-production-amplify.yml');
   assert.match(deploy, /options: \[detached, connected\]/);
   assert.match(deploy, /production-amplify-preflight\.mjs/);
+  assert.match(deploy, /AMPLIFY_APP_ID: \$\{\{ vars\.PRODUCTION_AMPLIFY_APP_ID \}\}/);
   assert.match(connect, /environment: production-amplify/);
+  assert.match(connect, /AMPLIFY_APP_ID: \$\{\{ vars\.PRODUCTION_AMPLIFY_APP_ID \}\}/);
   assert.match(connect, /before-repository-connect/);
   assert.match(connect, /before-connected/);
   assert.match(connect, /trap 'rm -f "\$request"; unset AMPLIFY_GITHUB_PAT'/);
