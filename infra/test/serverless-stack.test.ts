@@ -103,6 +103,24 @@ describe('ServerlessOshiScheduleStack', () => {
     expect(lambdaBundling.banner).toContain('const require');
   });
 
+  it('keeps workspace tests source-first instead of depending on generated dist', async () => {
+    const repositoryRoot = resolve(import.meta.dirname, '../..');
+    const turbo = JSON.parse(await readFile(resolve(repositoryRoot, 'turbo.json'), 'utf8')) as {
+      tasks: { test: { dependsOn?: string[] } };
+    };
+    expect(turbo.tasks.test.dependsOn).toBeUndefined();
+
+    for (const configPath of [
+      'apps/web/vitest.config.ts',
+      'apps/api/vitest.config.ts',
+      'apps/worker/vitest.config.ts',
+    ]) {
+      const config = await readFile(resolve(repositoryRoot, configPath), 'utf8');
+      expect(config).toContain("'@oshi-schedule/shared'");
+      expect(config).toContain('packages/shared/src/index.ts');
+    }
+  });
+
   it('bundles API and Worker against workspace source when package exports target dist', async () => {
     const repositoryRoot = resolve(import.meta.dirname, '../..');
     const aliases = lambdaSourceAliases(repositoryRoot);

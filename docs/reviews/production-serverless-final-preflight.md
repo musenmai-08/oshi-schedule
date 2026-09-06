@@ -62,7 +62,7 @@ templateにはRDS、ECS、VPC、subnet、NAT、VPC Link、Cloud Map、EventBridg
 1. migration owner URL Secretを非表示入力で作成した。既存baseline table 12件とbaseline checksum一致を確認したため、baselineを再適用せずPrisma metadataだけを`app` schemaへ非破壊移動した。
 2. `oshi_runtime`はCSPRNG passwordへ更新し、app業務tableのDML/sequence権限だけを付与した。DDL、role/database CREATE、migration metadata DMLは拒否されることを確認した。
 3. Supavisor transaction mode（6543、TLS、`schema=app`、`pgbouncer=true`、`connection_limit=1`）のruntime URL Secretを作成し、runtime connectionを確認した。
-4. Prisma migration statusとschema diffは正常である。次はprotected `production-migration` workflowを**deploy対象と完全一致するcommit**で一度実行し、正式release attestation artifactを作成する。baselineは再適用しない。Lambda bundle修正などでrelease SHAが変わった場合、旧SHAのattestationは再利用しない。
+4. Prisma migration statusとschema diffは正常である。次はprotected `production-migration` workflowを**deploy対象と完全一致するcommit**で一度実行し、正式release attestation artifactを作成する。baselineは再適用しない。Lambda bundleまたはworkspace test解決の修正などでrelease SHAが変わった場合、旧SHA（`9169f54`および`cdff67b`を含む）のattestationは再利用しない。
 5. 実complete DB ARNによるpreflight/diffは確認済みである。SchedulerはDISABLEDのまま、migration run IDを入力にしたfull detached infra deployを別承認で実施する。
 6. infra失敗時はCloudFormation rollbackを確認する。Retainされたnamed resourceがあれば勝手に削除せず、resource importまたは個別cleanupを別承認にする。DB baselineは自動rollbackせず、未公開状態で保持する。
 7. API/backup/restore/Amplify/OAuth/Sync受入後だけSchedulerを有効化する。公開後のrollbackはPostgreSQLを維持したまま直前のLambda codeへ戻し、MySQLへの逆変換は行わない。
