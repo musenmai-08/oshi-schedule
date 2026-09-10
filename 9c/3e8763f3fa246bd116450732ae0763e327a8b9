@@ -1,0 +1,29 @@
+apps/api/src/infrastructure/google-calendar/google-calendar-gateway.test.ts
+  s_3a50bad78ea1cd::t_1444c90e8fa4ea 60-73
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_3b27c95006d201 297-298
+apps/api/src/infrastructure/google-calendar/google-calendar-gateway.ts
+  s_3a50bad78ea1cd::t_1444c90e8fa4ea 108-119
+docs/operations/production-release-checklist.md
+  s_3a50bad78ea1cd::t_3b27c95006d201 143-146
+apps/api/src/infrastructure/encryption/aes-token-cipher.ts
+  s_3a50bad78ea1cd::t_1444c90e8fa4ea 71-82
+apps/api/src/infrastructure/encryption/aes-token-cipher.test.ts
+  s_3a50bad78ea1cd::t_60681276ff9bde 49-54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "9c3e8763f3fa246bd116450732ae0763e327a8b9",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
