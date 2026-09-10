@@ -57,6 +57,20 @@ describe('GoogleCalendarGateway token refresh', () => {
     expect((await store.findUserById(user.id))?.reauthRequired).toBe(true);
   });
 
+  it('marks reauthentication when stored credential authentication fails before Google is called', async () => {
+    const { store, user } = await setup();
+    const wrongCipher = new AesTokenCipher(`v1:${Buffer.alloc(32, 9).toString('base64')}`);
+    const gateway = new GoogleCalendarGateway(store, wrongCipher, 'client', 'secret', 10_000);
+    const fetchMock = vi.fn<typeof fetch>();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(gateway.eventExists(user, 'calendar-id', 'event-id')).rejects.toMatchObject({
+      code: 'TOKEN_DECRYPTION_FAILED',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect((await store.findUserById(user.id))?.reauthRequired).toBe(true);
+  });
+
   it('keeps a transient token error retryable and does not require reauthentication', async () => {
     const { store, user, gateway } = await setup();
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(json({ error: 'server_error' }, 500));

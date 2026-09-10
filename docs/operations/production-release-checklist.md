@@ -140,3 +140,7 @@ production ECR repositoryはCDKの`bootstrapOnly=true` phaseが唯一の所有�
 既存App `oshi-schedule-production-web`（App ID `d1v67c1ruct5nd`）がrepository/Branch/Domain未接続であることを確認してから、GitHub Environment `production-amplify` に必須reviewerを設定する。Variablesは `AWS_REGION=ap-northeast-1`、`PRODUCTION_AMPLIFY_CONNECTOR_ROLE_ARN=arn:aws:iam::741448960817:role/oshi-schedule-production-github-amplify-connect`、`PRODUCTION_AMPLIFY_APP_ID=d1v67c1ruct5nd`、Secretは短命PATを `AMPLIFY_GITHUB_PAT` として登録する。PATは `musenmai-08/oshi-schedule` のみに限定し、workflow `Connect production Amplify repository` の入力 `CONNECT_PRODUCTION_AMPLIFY` を一度だけ実行する。repository接続後はPATを破棄し、connected preflightを通した別承認のCDK deployでmain Branch→Domainを作成する。
 
 2026-09-09に上記手順を完了した。Appは同一IDでGitHub repositoryへ接続され、`main` Branch 1件、`oshi-schedule.com` Domain Association 1件（`AVAILABLE`、main関連付け）となった。初回Amplify job `1` は BUILD/DEPLOY/VERIFY すべて `SUCCEED`、公開WebはHTTP 200である。接続に使用した短命PATはGitHub Environment SecretおよびGitHub上から直ちに削除/revokeする（リポジトリ/AWSのread-only確認では削除状態を判定できない）。
+
+### Scheduler正式稼働前の再認証確認
+
+production Schedulerを`rate(1 hour)`で有効化する前に、全ACTIVE subscriptionの最新scheduled syncがSUCCESSであることを確認する。2026-09-10の受入では、1ユーザーの既存refresh tokenが現在の暗号鍵ではAES-GCM認証に失敗し、Google Calendar APIへ到達する前に4回`PARTIAL_FAILED`となった。対象ユーザーは再同意でcredentialを更新し、`reauthRequired`が解除されたこと、INITIAL/MANUALが成功することを確認してから、Schedulerを一時的に1回受入し、最終的に`rate(1 hour)`/`ENABLED`へ設定する。credential・Calendar mapping・Calendar eventを手動削除して回避してはならない。

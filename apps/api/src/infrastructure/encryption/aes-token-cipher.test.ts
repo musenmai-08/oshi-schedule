@@ -46,7 +46,12 @@ describe('AesTokenCipher', () => {
     const key = Buffer.alloc(32, 7).toString('base64');
     const ciphertext = new AesTokenCipher(`v1:${key}`).encrypt('refresh-secret').ciphertext;
     const wrong = new AesTokenCipher(`v1:${Buffer.alloc(32, 8).toString('base64')}`);
-    expect(() => wrong.decrypt(ciphertext)).toThrow();
+    try {
+      wrong.decrypt(ciphertext);
+      throw new Error('expected authentication failure');
+    } catch (error) {
+      expect(error).toMatchObject({ code: 'TOKEN_DECRYPTION_FAILED' });
+    }
   });
 
   it('rejects malformed base64 key material', () => {

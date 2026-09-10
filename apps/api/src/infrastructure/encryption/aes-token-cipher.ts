@@ -68,11 +68,17 @@ export class AesTokenCipher implements TokenCipher {
       throw new AppError('TOKEN_DECRYPTION_FAILED', '保存済み認証情報を利用できません', 500);
     const key = this.keys.get(keyId);
     if (!key) throw new AppError('TOKEN_KEY_NOT_FOUND', '保存済み認証情報を利用できません', 500);
-    const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(ivValue, 'base64url'));
-    decipher.setAuthTag(Buffer.from(tagValue, 'base64url'));
-    return Buffer.concat([
-      decipher.update(Buffer.from(encryptedValue, 'base64url')),
-      decipher.final(),
-    ]).toString('utf8');
+    try {
+      const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(ivValue, 'base64url'));
+      decipher.setAuthTag(Buffer.from(tagValue, 'base64url'));
+      return Buffer.concat([
+        decipher.update(Buffer.from(encryptedValue, 'base64url')),
+        decipher.final(),
+      ]).toString('utf8');
+    } catch {
+      // OpenSSL authentication failures must not escape as an unclassified error.
+      // The caller can safely require a fresh OAuth consent without exposing token data.
+      throw new AppError('TOKEN_DECRYPTION_FAILED', '保存済み認証情報を利用できません', 500);
+    }
   }
 }

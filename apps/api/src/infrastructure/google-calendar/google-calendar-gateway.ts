@@ -105,7 +105,18 @@ export class GoogleCalendarGateway implements CalendarGateway {
     if (cached && cached.expiresAt > Date.now() + 30_000) return cached.token;
     const encrypted = await this.store.getEncryptedCredential(userId);
     if (!encrypted) throw new AppError('GOOGLE_REAUTH_REQUIRED', 'Googleの再連携が必要です', 401);
-    const grant = await this.exchangeRefreshToken(userId, this.cipher.decrypt(encrypted));
+    let refreshToken: string;
+    try {
+      refreshToken = this.cipher.decrypt(encrypted);
+    } catch (error) {
+      if (
+        error instanceof AppError &&
+        (error.code === 'TOKEN_DECRYPTION_FAILED' || error.code === 'TOKEN_KEY_NOT_FOUND')
+      )
+        await this.store.markReauthRequired(userId);
+      throw error;
+    }
+    const grant = await this.exchangeRefreshToken(userId, refreshToken);
     this.accessTokens.set(userId, grant);
     return grant.token;
   }
