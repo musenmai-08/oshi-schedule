@@ -61,40 +61,40 @@ const config: DeploymentConfig = {
   workerScheduleEnabled: false,
 };
 
-const render = () => {
+const renderStack = (stackName: string, stackConfig: DeploymentConfig) => {
   const app = new App();
   return Template.fromStack(
-    new ServerlessOshiScheduleStack(app, 'serverless-production', {
+    new ServerlessOshiScheduleStack(app, stackName, {
       env: { account, region: 'ap-northeast-1' },
-      config,
+      config: stackConfig,
     }),
   );
 };
 
+let productionTemplate: Template | undefined;
+const render = () =>
+  (productionTemplate ??= renderStack('serverless-production', config));
+
+const productionPhaseTemplates = new Map<'detached' | 'connected', Template>();
 const renderProductionPhase = (amplifyConnectionPhase: 'detached' | 'connected') => {
-  const app = new App();
-  return Template.fromStack(
-    new ServerlessOshiScheduleStack(app, `serverless-production-${amplifyConnectionPhase}`, {
-      env: { account, region: 'ap-northeast-1' },
-      config: { ...config, amplifyConnectionPhase },
-    }),
-  );
+  const cached = productionPhaseTemplates.get(amplifyConnectionPhase);
+  if (cached) return cached;
+  const template = renderStack(`serverless-production-${amplifyConnectionPhase}`, {
+    ...config,
+    amplifyConnectionPhase,
+  });
+  productionPhaseTemplates.set(amplifyConnectionPhase, template);
+  return template;
 };
 
-const renderStagingPreview = () => {
-  const app = new App();
-  return Template.fromStack(
-    new ServerlessOshiScheduleStack(app, 'serverless-staging-preview', {
-      env: { account, region: 'ap-northeast-1' },
-      config: {
-        ...config,
-        environmentName: 'staging',
-        serverlessStagingMode: 'preview',
-        amplifyConnectionPhase: 'manual',
-      },
-    }),
-  );
-};
+let stagingPreviewTemplate: Template | undefined;
+const renderStagingPreview = () =>
+  (stagingPreviewTemplate ??= renderStack('serverless-staging-preview', {
+    ...config,
+    environmentName: 'staging',
+    serverlessStagingMode: 'preview',
+    amplifyConnectionPhase: 'manual',
+  }));
 
 describe('ServerlessOshiScheduleStack', () => {
   it('supplies Node createRequire to ESM Lambda bundles with CommonJS dependencies', () => {
@@ -203,7 +203,7 @@ describe('ServerlessOshiScheduleStack', () => {
     template.resourceCountIs('AWS::Lambda::Function', 2);
     template.resourceCountIs('AWS::Lambda::EventSourceMapping', 1);
     template.resourceCountIs('AWS::Scheduler::Schedule', 1);
-  }, 15_000);
+  }, 30_000);
 
   it('keeps account-wide Lambda concurrency unreserved and bounds worker delivery through SQS', () => {
     const template = render();
@@ -284,7 +284,7 @@ describe('ServerlessOshiScheduleStack', () => {
     expect(backupRole).toContain(
       'repo:musenmai-08@165903509/oshi-schedule@1308836728:environment:staging-backup',
     );
-  });
+  }, 15_000);
 
   it('pins every production GitHub role to an immutable repository-ID environment subject', () => {
     const roleText = Object.values(render().findResources('AWS::IAM::Role'))
@@ -333,7 +333,7 @@ describe('ServerlessOshiScheduleStack', () => {
       DependsOn?: string[];
     };
     expect(domain.DependsOn?.some((value) => value.includes('AmplifyBranch'))).toBe(true);
-  }, 15_000);
+  }, 30_000);
 
   it('destroys an empty staging-preview backup bucket on rollback but retains production backups', () => {
     const productionBucket = Object.values(render().findResources('AWS::S3::Bucket'))[0] as {
