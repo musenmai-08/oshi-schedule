@@ -135,6 +135,12 @@ production ECR repositoryはCDKの`bootstrapOnly=true` phaseが唯一の所有�
 4. callback/onboarding後に、専用calendar create/reuse、event get/insert/patch/delete、手動・定期同期、再認証、subscription削除、account削除を管理されたテストデータで確認する。
 5. DB、CloudWatch、Supabase/Googleの監査でtoken、OAuth code、メールアドレス、Calendar IDが不適切に出力されず、削除・retention・DLQ/alarmが方針どおりであることを確認する。
 6. すべての証跡をrelease recordへ集約し、release approverがHigh 2をclosedにしてから一般公開する。
+
+### 2026-09-11 production release final audit
+
+OAuth正式公開（Audience `External` / `In production`、Branding公開、Data Access verification不要）はGoogle Cloud Consoleでユーザー確認済みとして記録した。AWS read-only監査では、Amplify App/repository、main Branch、`oshi-schedule.com`（AVAILABLE）、初回job、Web/API 200、保護API 401、Lambda Active、SQS/DLQ 0、ESM 1/2、alarms OK、DB migration up-to-date、Scheduler `rate(1 hour)`/`ENABLED`、backup run `34603673493`（SSE-S3/private/7日Lifecycle）を確認した。ACTIVE対象2件はCredential復号可能、`reauthRequired=false`、CalendarConnection ACTIVE、直近MANUAL/SCHEDULED SyncRun SUCCESSで、PAUSEDの旧duplicate Userは対象外である。
+
+CloudFormation driftは完全ゼロではない。Schedulerの`ENABLED`は正式稼働による意図的差分だが、IaC期待値が`DISABLED`のまま残っている。加えてSNS alert subscription欠落、API Gateway access-log ARNのAWS正規化差分、Amplify root prefixの空文字/null表現差分を検出した。SNS通知購読とIaC reconcileを完了するまで、リリース判定は「運用継続可・最終IaC整合待ち」とする。PAT revokeとGoogle外部コンソール状態はAWS/repositoryから独立検証できないため、ユーザー証跡を保持する。
 ### Production Amplify repository接続（detached後・完了記録）
 
 既存App `oshi-schedule-production-web`（App ID `d1v67c1ruct5nd`）がrepository/Branch/Domain未接続であることを確認してから、GitHub Environment `production-amplify` に必須reviewerを設定する。Variablesは `AWS_REGION=ap-northeast-1`、`PRODUCTION_AMPLIFY_CONNECTOR_ROLE_ARN=arn:aws:iam::741448960817:role/oshi-schedule-production-github-amplify-connect`、`PRODUCTION_AMPLIFY_APP_ID=d1v67c1ruct5nd`、Secretは短命PATを `AMPLIFY_GITHUB_PAT` として登録する。PATは `musenmai-08/oshi-schedule` のみに限定し、workflow `Connect production Amplify repository` の入力 `CONNECT_PRODUCTION_AMPLIFY` を一度だけ実行する。repository接続後はPATを破棄し、connected preflightを通した別承認のCDK deployでmain Branch→Domainを作成する。
