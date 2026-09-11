@@ -144,3 +144,7 @@ production ECR repositoryはCDKの`bootstrapOnly=true` phaseが唯一の所有�
 ### Scheduler正式稼働前の再認証確認
 
 production Schedulerを`rate(1 hour)`で有効化する前に、全ACTIVE subscriptionの最新scheduled syncがSUCCESSであることを確認する。2026-09-10の受入では、1ユーザーの既存refresh tokenが現在の暗号鍵ではAES-GCM認証に失敗し、Google Calendar APIへ到達する前に4回`PARTIAL_FAILED`となった。対象ユーザーは再同意でcredentialを更新し、`reauthRequired`が解除されたこと、INITIAL/MANUALが成功することを確認してから、Schedulerを一時的に1回受入し、最終的に`rate(1 hour)`/`ENABLED`へ設定する。credential・Calendar mapping・Calendar eventを手動削除して回避してはならない。
+
+### Scheduler正式稼働（完了記録）
+
+2026-09-11に、到達不能な旧User所有のsubscription 1件を、Calendar mapping・Calendarイベントを変更せず`PAUSED`へ限定更新した。Scheduler対象から除外されたことを確認後、残るACTIVE対象だけで一時的な1分間隔のscheduled受入を1回実施した。SCHEDULED SyncRunはSUCCESS、Calendar phaseはSUCCESS、queue/DLQ 0、mapping重複0、API/Worker Errors・Throttles 0、Alarm全件OKだった。最終設定は`rate(1 hour)`/`ENABLED`である。旧UserのPAUSED subscriptionおよびmappingのcleanupは、この受入とは別の所有者・Calendar整合確認を伴う承認工程として残す。
