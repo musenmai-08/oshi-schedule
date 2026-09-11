@@ -1,0 +1,21 @@
+docs/operations/staging-handoff.md
+  s_3a50bad78ea1cd::t_a2c3f1e52c9e67 299-302
+docs/operations/production-release-checklist.md
+  s_3a50bad78ea1cd::t_a2c3f1e52c9e67 147-150
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c0b20b99654b9323f15d5083d4c0947eb50ae306",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
