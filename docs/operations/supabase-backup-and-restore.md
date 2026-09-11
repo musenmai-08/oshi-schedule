@@ -29,9 +29,10 @@ restoreは既存production DBへ直接上書きしない。
 
 1. 復旧専用の空PostgreSQL database/projectと、一時的なmigration owner credentialを用意する。
 2. 対応するdumpと`.migrations.json`をS3から安全な一時directoryへ取得する。`node scripts/database/migration-state.mjs verify unused.csv migrations.json <release-commit>`で、release commitとGit上のmigration ID/checksumが完全一致すること、および`pg_restore --list`が成功することを確認する。
-3. 空の`app` schemaへ次を実行する。
+3. 空のrehearsal DBで`app` schemaを明示的に作成してから、次を実行する。`pg_dump --schema app`のcustom dumpにはschema自体の作成DDLが含まれないため、これを省略しない。
 
    ```bash
+   psql "$RECOVERY_DATABASE_URL" --set ON_ERROR_STOP=1 --command 'CREATE SCHEMA app'
    pg_restore --dbname "$RECOVERY_DATABASE_URL" --schema app --no-owner --no-privileges backup.dump
    ```
 

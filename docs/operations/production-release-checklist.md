@@ -119,7 +119,7 @@ production ECR repositoryはCDKの`bootstrapOnly=true` phaseが唯一の所有�
 - [ ] Google ConsoleとSupabaseのURL matrixが上表どおりで、production redirect allowlistは完全一致である。
 - [ ] Google consent screen、scope justification、demo video、必要なverificationが承認済みである。
 - [ ] Terms/Privacyの専門家確認、13歳未満利用不可、日本国内向け、無料/有料化方針、運営者・問い合わせ先の最終承認がある。
-- [ ] S3 app-schema日次backup 7日、最大RPO 24時間、Supabase Auth独自backupなし、Free pause、SyncRun 90日、log 30日、完了墓石30日purgeの責任者と復元演習が確認済みである。
+- [x] S3 app-schema日次backup 7日、最大RPO 24時間、Supabase Auth独自backupなし、Free pause、SyncRun 90日、log 30日、完了墓石30日purgeの責任者と復元演習が確認済みである。2026-09-11のproduction backup run `34603673493` は成功し、SSE-S3/private/7日Lifecycleのdump+manifest pairを隔離PostgreSQL 17へ復元して、`app` schemaとmigration stateの三者照合を完了した。
 - [x] `database-migration-url`と`database-runtime-url`をproduction専用値で作成した。`app._prisma_migrations`はbaseline checksum一致で、`oshi_runtime`はapp業務tableのDMLだけを持ち、schema/database CREATE、role管理、migration metadata DMLを拒否する。
 - [x] production infra/migration roleをrepository immutable-ID subjectと別GitHub EnvironmentでIaC化・AWS作成した。Amplify/backup roleはfull detached deployで作成する。
 - [x] production AmplifyをApp-only (`detached`) → guarded repository接続 → Branch/Domain (`connected`)に分割し、未接続AppでBranch/Domainを作らない。
@@ -148,3 +148,7 @@ production Schedulerを`rate(1 hour)`で有効化する前に、全ACTIVE subscr
 ### Scheduler正式稼働（完了記録）
 
 2026-09-11に、到達不能な旧User所有のsubscription 1件を、Calendar mapping・Calendarイベントを変更せず`PAUSED`へ限定更新した。Scheduler対象から除外されたことを確認後、残るACTIVE対象だけで一時的な1分間隔のscheduled受入を1回実施した。SCHEDULED SyncRunはSUCCESS、Calendar phaseはSUCCESS、queue/DLQ 0、mapping重複0、API/Worker Errors・Throttles 0、Alarm全件OKだった。最終設定は`rate(1 hour)`/`ENABLED`である。旧UserのPAUSED subscriptionおよびmappingのcleanupは、この受入とは別の所有者・Calendar整合確認を伴う承認工程として残す。
+
+### Production backup / restore rehearsal（完了記録）
+
+2026-09-11にproduction backup workflow run `34603673493`の同一prefix dump/manifest pairを受入した。両objectは非0 byte、SSE-S3 (`AES256`)、private ACL/public access block、7日Lifecycleを満たす。manifestのGit commitとbaseline migration ID/checksumはrepository stateと一致した。productionから隔離した一時PostgreSQL 17で空の`app` schemaを作成してcustom dumpをrestoreし、`app._prisma_migrations`・manifest・repositoryを機械照合した。Supabase Auth schemaはcustom dump/restoreの対象外である。一時container/network/downloaded filesはrehearsal終了時に破棄し、production DB、Scheduler、Calendar、S3 backup objectは変更していない。
