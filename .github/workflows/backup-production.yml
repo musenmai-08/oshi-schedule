@@ -41,7 +41,7 @@ jobs:
         run: |
           set -euo pipefail
           work="$(mktemp -d -p "$RUNNER_TEMP" oshi-schedule-backup-XXXXXX)"
-          trap 'rm -rf "$work"; unset DATABASE_URL' EXIT
+          trap 'rm -rf "$work"; unset DATABASE_URL PSQL_DATABASE_URL' EXIT
           DATABASE_URL="$(aws secretsmanager get-secret-value \
             --region "$AWS_REGION" \
             --secret-id "$DATABASE_MIGRATION_URL_SECRET_ARN" \
@@ -52,8 +52,14 @@ jobs:
             exit 1
           }
           echo "::add-mask::$DATABASE_URL"
-          export DATABASE_URL
-          docker run --rm --env DATABASE_URL --volume "$work:/backup" postgres:17-alpine \
+          PSQL_DATABASE_URL="$(PRISMA_DATABASE_URL="$DATABASE_URL" node scripts/database/libpq-url.mjs)"
+          test -n "$PSQL_DATABASE_URL" || {
+            echo 'Could not derive a libpq-compatible database URL' >&2
+            exit 1
+          }
+          echo "::add-mask::$PSQL_DATABASE_URL"
+          export PSQL_DATABASE_URL
+          docker run --rm --env DATABASE_URL="$PSQL_DATABASE_URL" --volume "$work:/backup" postgres:17-alpine \
             sh -c 'set -eu; pg_dump --dbname "$DATABASE_URL" --schema app --format custom --no-owner --no-privileges --file /backup/app.dump; pg_restore --list /backup/app.dump >/dev/null; psql "$DATABASE_URL" --no-psqlrc --set ON_ERROR_STOP=1 --csv --command "SELECT migration_name, checksum FROM app._prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL ORDER BY migration_name" > /backup/state.csv'
           node scripts/database/migration-state.mjs create-backup "$work/state.csv" "$work/migrations.json" "$GITHUB_SHA"
           prefix="database/$(date -u +%Y/%m/%d)/app-$(date -u +%Y%m%dT%H%M%SZ)"

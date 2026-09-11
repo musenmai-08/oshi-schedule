@@ -40,5 +40,8 @@ test('production backups pair every dump with an exact migration manifest', asyn
   assert.match(backup, /app\._prisma_migrations/);
   assert.match(backup, /migration-state\.mjs create-backup/);
   assert.match(backup, /\.migrations\.json/);
+  assert.match(backup, /libpq-url\.mjs/);
+  assert.match(backup, /add-mask::\$PSQL_DATABASE_URL/);
+  assert.match(backup, /DATABASE_URL="\$PSQL_DATABASE_URL"/);
   assert.doesNotMatch(backup, /s3 rm|DeleteObject/);
 });
