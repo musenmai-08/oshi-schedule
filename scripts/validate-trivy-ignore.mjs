@@ -66,17 +66,19 @@ for (const [offset, rawLine] of source.split(/\r?\n/).entries()) {
   entries.push({ id, expiration });
 }
 
-if (entries.length === 0) errors.push(`${file}: no CVE exceptions found`);
-
 if (errors.length > 0) {
   for (const error of errors) console.error(error);
   process.exit(1);
 }
 
-const earliestExpiration = entries
-  .map(({ expiration }) => expiration)
-  .sort((left, right) => left.localeCompare(right))[0];
+if (entries.length === 0) {
+  console.log(`${file}: no active CVE exceptions on ${evaluationDate}`);
+} else {
+  const earliestExpiration = entries
+    .map(({ expiration }) => expiration)
+    .sort((left, right) => left.localeCompare(right))[0];
 
-console.log(
-  `${file}: ${entries.length} expiring CVE exceptions valid on ${evaluationDate}; earliest expiration ${earliestExpiration}`,
-);
+  console.log(
+    `${file}: ${entries.length} expiring CVE exceptions valid on ${evaluationDate}; earliest expiration ${earliestExpiration}`,
+  );
+}

@@ -4,11 +4,7 @@ import process from 'node:process';
 
 const productionIgnoreFile = '.trivyignore';
 const stagingIgnoreFile = '.trivyignore.staging';
-const approvedStagingOnlyTrivyEntries = new Map([
-  ['CVE-2026-54874', '2026-09-11'],
-  ['CVE-2026-63072', '2026-09-11'],
-  ['CVE-2026-63076', '2026-09-11'],
-]);
+const approvedStagingOnlyTrivyEntries = new Map();
 
 const parseEntries = (source) =>
   new Map(
@@ -19,13 +15,12 @@ const parseEntries = (source) =>
       .map((match) => [match[1], match[2]]),
   );
 
-const [productionSource, stagingSource, ciWorkflow, productionWorkflow] =
-  await Promise.all([
-    readFile(productionIgnoreFile, 'utf8'),
-    readFile(stagingIgnoreFile, 'utf8'),
-    readFile('.github/workflows/ci.yml', 'utf8'),
-    readFile('.github/workflows/deploy-production.yml', 'utf8'),
-  ]);
+const [productionSource, stagingSource, ciWorkflow, productionWorkflow] = await Promise.all([
+  readFile(productionIgnoreFile, 'utf8'),
+  readFile(stagingIgnoreFile, 'utf8'),
+  readFile('.github/workflows/ci.yml', 'utf8'),
+  readFile('.github/workflows/deploy-production.yml', 'utf8'),
+]);
 
 const productionEntries = parseEntries(productionSource);
 const stagingEntries = parseEntries(stagingSource);
@@ -69,12 +64,16 @@ for (const [name, workflow] of [['ci.yml', ciWorkflow]]) {
     errors.push(`${name} must not reference .trivyignore.staging`);
   }
   if (!workflow.includes("cache: 'false'")) {
-    errors.push(`${name} must disable the Trivy Action cache so each production gate uses a fresh vulnerability database`);
+    errors.push(
+      `${name} must disable the Trivy Action cache so each production gate uses a fresh vulnerability database`,
+    );
   }
 }
 
 if (!productionWorkflow.includes('uses: ./.github/workflows/ci.yml')) {
-  errors.push('deploy-production.yml must use the CI workflow, including the production Trivy gate');
+  errors.push(
+    'deploy-production.yml must use the CI workflow, including the production Trivy gate',
+  );
 }
 if (!productionWorkflow.includes('needs: ci')) {
   errors.push('deploy-production.yml must wait for the CI production Trivy gate');

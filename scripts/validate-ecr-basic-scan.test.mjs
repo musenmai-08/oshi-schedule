@@ -11,7 +11,7 @@ const run = (fixture) =>
     encoding: 'utf8',
   });
 
-test('accepts a complete ECR scan with only production-approved findings', async () => {
+test('accepts a complete ECR scan with no critical or high findings', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'ecr-basic-scan-'));
   try {
     const fixture = join(directory, 'approved.json');
@@ -19,9 +19,7 @@ test('accepts a complete ECR scan with only production-approved findings', async
       fixture,
       JSON.stringify({
         imageScanStatus: { status: 'COMPLETE' },
-        imageScanFindings: {
-          findings: [{ name: 'CVE-2026-13221', severity: 'HIGH', attributes: [] }],
-        },
+        imageScanFindings: { findings: [] },
       }),
     );
     const result = run(fixture);

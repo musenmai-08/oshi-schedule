@@ -300,3 +300,9 @@ repository接続workflowは当初`amplify:ListApps`を呼んだため、対象Ap
 2026-09-11に、同じGoogleメールアドレスに異なるSupabase subjectを持つ旧Userと現行Userが共存していることを確認した。旧User所有の`@rindoumikoto` subscriptionは現行subjectのUIには表示されない一方、`ACTIVE`かつ`reauthRequired=false`のためScheduler対象だった。承認済みの限定DB更新で、このsubscription 1件だけを`PAUSED`へ変更した。Calendar mapping 1件、CalendarConnection、Credential、Userは変更していない。Schedulerのactive-target queryからこのsubscriptionが除外され、残るACTIVE対象はcredential復号・CalendarConnectionとも正常な1件だけである。
 
 同日にSchedulerを一時`rate(1 minute)`/`ENABLED`にしてSQS経路を1回受入した。新規SCHEDULED SyncRunは残るACTIVE対象1件でSUCCESS、Calendar phase SUCCESS、対象失敗と`TOKEN_DECRYPTION_FAILED`/`SYNC_TARGET_FAILED`は0件だった。mapping重複0、sync queue・sync DLQ・Scheduler DLQはすべて0、API/Worker Errors・Throttlesは0、Alarmは全件OKを確認した。検証直後に`rate(1 hour)`/`DISABLED`へ戻してから、最終状態を`rate(1 hour)`/`ENABLED`へ設定した。旧到達不能UserのPAUSED subscriptionとmappingは、Calendarイベントを削除しないまま残している。以後のcleanupは別承認で、Calendar整合を確認できる所有者限定手順として実施する。
+
+## 2026-09-11 Container CVE exception reassessment
+
+期限到達したproduction 15件、staging-only Trivy 3件、staging-only ECR Basic Scan 4件を再評価した。いずれも旧`node:22.23.1-bookworm-slim`のDebian package由来で、現行のproduction ECR candidateとCI containerはpin済み`node:22.23.1-alpine`（Alpine 3.24.1）を使う。production ECR digest `sha256:99206b651bbcebd146c16894fb4f9f24036ec238b71959f10278d30dcd775daa`とcurrent main相当のlocal `linux/amd64` buildをTrivy 0.73.0のfresh DBでscanし、両方ともCRITICAL/HIGH 0を確認した。serverless API/Workerの実行基盤はmanaged `nodejs22.x` Lambdaであり、Debian containerを実行しない。
+
+よって期限を延長せず、`.trivyignore`と`.trivyignore.staging`の全例外を削除した。CIは今後、HIGH/CRITICALを例外なしでfail-closedにする。Amazon ECR Basic Scanのproduction gateも許容リスト0件となり、新しいfindingは明示再審査までpromotion blockerである。AWS/Supabase/DB/backup workflowへのwriteは行っていない。詳細は[Container vulnerability exception registry](../security/container-vulnerability-exceptions.md)をsource of truthとする。
