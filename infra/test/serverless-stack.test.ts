@@ -267,7 +267,7 @@ describe('ServerlessOshiScheduleStack', () => {
   it('rotates only the production SNS email subscription logical ID', () => {
     const template = render();
     const subscriptions = template.findResources('AWS::SNS::Subscription');
-    expect(Object.keys(subscriptions)).toEqual(['AlertsEmailSubscriptionV2']);
+    expect(Object.keys(subscriptions)).toEqual(['AlertsEmailSubscriptionV3']);
     template.hasResourceProperties('AWS::SNS::Subscription', {
       Endpoint: 'alerts@oshi-schedule.com',
       Protocol: 'email',

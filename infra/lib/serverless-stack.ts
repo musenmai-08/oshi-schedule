@@ -216,7 +216,7 @@ export class ServerlessOshiScheduleStack extends Stack {
         // after SNS removed the unconfirmed endpoint. Deliberately rotate only
         // this production subscription resource so CloudFormation performs a
         // managed DELETE/CREATE and sends a fresh confirmation message.
-        new sns.CfnSubscription(this, 'AlertsEmailSubscriptionV2', {
+        new sns.CfnSubscription(this, 'AlertsEmailSubscriptionV3', {
           endpoint: config.alertEmail,
           protocol: 'email',
           topicArn: alerts.topicArn,
