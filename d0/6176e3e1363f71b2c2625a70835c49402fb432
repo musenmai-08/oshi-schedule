@@ -1,0 +1,30 @@
+infra/lib/config.ts
+  s_3a50bad78ea1cd::t_cff6f9aa3d0570 448,473-474
+infra/test/config.test.ts
+  s_3a50bad78ea1cd::t_cff6f9aa3d0570 177,363-373
+  s_3a50bad78ea1cd::t_fb49e9440dd3de 374-375
+scripts/aws/serverless-deploy.test.mjs
+  s_3a50bad78ea1cd::t_cff6f9aa3d0570 26,47-49,55-62
+  s_3a50bad78ea1cd::t_b42427c982b626 50-54
+  s_3a50bad78ea1cd::t_7c3c5542ae7b09 63
+infra/test/serverless-stack.test.ts
+  s_3a50bad78ea1cd::t_cff6f9aa3d0570 61,97,231-232
+scripts/aws/serverless-deploy.mjs
+  s_3a50bad78ea1cd::t_cff6f9aa3d0570 61-62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d06176e3e1363f71b2c2625a70835c49402fb432",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
