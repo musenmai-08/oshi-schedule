@@ -210,8 +210,21 @@ export class ServerlessOshiScheduleStack extends Stack {
       topicName: `${resourcePrefix}-alerts`,
       displayName: `${resourcePrefix} operational alerts`,
     });
-    if (config.alertEmail)
-      alerts.addSubscription(new subscriptions.EmailSubscription(config.alertEmail));
+    if (config.alertEmail) {
+      if (isProduction) {
+        // The previous CDK EmailSubscription logical ID was left CREATE_COMPLETE
+        // after SNS removed the unconfirmed endpoint. Deliberately rotate only
+        // this production subscription resource so CloudFormation performs a
+        // managed DELETE/CREATE and sends a fresh confirmation message.
+        new sns.CfnSubscription(this, 'AlertsEmailSubscriptionV2', {
+          endpoint: config.alertEmail,
+          protocol: 'email',
+          topicArn: alerts.topicArn,
+        });
+      } else {
+        alerts.addSubscription(new subscriptions.EmailSubscription(config.alertEmail));
+      }
+    }
 
     const syncDlq = new sqs.Queue(this, 'SyncJobDeadLetterQueue', {
       queueName: `${resourcePrefix}-sync-jobs-dlq`,

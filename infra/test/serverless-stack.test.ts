@@ -264,6 +264,17 @@ describe('ServerlessOshiScheduleStack', () => {
     });
   });
 
+  it('rotates only the production SNS email subscription logical ID', () => {
+    const template = render();
+    const subscriptions = template.findResources('AWS::SNS::Subscription');
+    expect(Object.keys(subscriptions)).toEqual(['AlertsEmailSubscriptionV2']);
+    template.hasResourceProperties('AWS::SNS::Subscription', {
+      Endpoint: 'alerts@oshi-schedule.com',
+      Protocol: 'email',
+      TopicArn: { Ref: 'Alerts91F83244' },
+    });
+  });
+
   it('limits the GitHub backup role to app dump upload and verification, never deletion', () => {
     const policies = Object.values(render().findResources('AWS::IAM::Policy')) as Array<{
       Properties?: unknown;
