@@ -1,0 +1,21 @@
+infra/test/serverless-stack.test.ts
+  s_3a50bad78ea1cd::t_5719799e71783a 270
+infra/lib/serverless-stack.ts
+  s_3a50bad78ea1cd::t_5719799e71783a 219
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "1f67258a2ac43d56be7abf222e573e6e9976df39",
+  "prompts": {},
+  "sessions": {
+    "s_3a50bad78ea1cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f7f00-59c1-7661-b2dc-162f42234483",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
