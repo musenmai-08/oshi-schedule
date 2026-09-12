@@ -23,6 +23,7 @@ const context = {
   githubOwner: 'musenmai-08',
   githubRepository: 'oshi-schedule',
   amplifyConnectionPhase: 'connected',
+  workerScheduleEnabled: true,
 };
 
 describe('serverless deploy context', () => {
@@ -41,6 +42,23 @@ describe('serverless deploy context', () => {
     assert.throws(
       () => parseServerlessContext('production', JSON.stringify({ ...context, imageTag: 'x' })),
       /unexpected/,
+    );
+  });
+
+  it('requires production Scheduler to remain enabled in the deploy context', () => {
+    assert.throws(
+      () =>
+        parseServerlessContext(
+          'production',
+          JSON.stringify({ ...context, workerScheduleEnabled: false }),
+        ),
+      /workerScheduleEnabled must be true/,
+    );
+    const withoutSchedulerState = { ...context };
+    delete withoutSchedulerState.workerScheduleEnabled;
+    assert.throws(
+      () => parseServerlessContext('production', JSON.stringify(withoutSchedulerState)),
+      /workerScheduleEnabled must be true/,
     );
   });
 });

@@ -58,7 +58,7 @@ const config: DeploymentConfig = {
   rdsBackupRetentionDays: 0,
   rdsMultiAz: false,
   rdsDeletionProtection: false,
-  workerScheduleEnabled: false,
+  workerScheduleEnabled: true,
 };
 
 const renderStack = (stackName: string, stackConfig: DeploymentConfig) => {
@@ -94,6 +94,7 @@ const renderStagingPreview = () =>
     environmentName: 'staging',
     serverlessStagingMode: 'preview',
     amplifyConnectionPhase: 'manual',
+    workerScheduleEnabled: false,
   }));
 
 describe('ServerlessOshiScheduleStack', () => {
@@ -227,6 +228,8 @@ describe('ServerlessOshiScheduleStack', () => {
       FunctionResponseTypes: ['ReportBatchItemFailures'],
     });
     template.hasResourceProperties('AWS::Scheduler::Schedule', {
+      ScheduleExpression: 'rate(1 hour)',
+      State: 'ENABLED',
       Target: Match.objectLike({
         Arn: { 'Fn::GetAtt': [Match.stringLikeRegexp('SyncJobQueue'), 'Arn'] },
         Input: '{"kind":"scheduled"}',

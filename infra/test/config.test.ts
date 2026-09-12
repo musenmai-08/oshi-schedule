@@ -174,6 +174,7 @@ describe('loadConfig', () => {
       applicationActivated: true,
       amplifyConnectionPhase: 'detached',
       rdsBackupRetentionDays: 7,
+      workerScheduleEnabled: true,
     });
   });
 
@@ -357,6 +358,19 @@ describe('loadConfig', () => {
   it('requires an explicit production acknowledgement', () => {
     const app = new App({ context: { environment: 'production' } });
     expect(() => loadConfig(app)).toThrow(/confirmProduction=DEPLOY_PRODUCTION/);
+  });
+
+  it('rejects a production context that would disable the hourly Scheduler', () => {
+    expect(() =>
+      loadConfig(
+        new App({
+          context: {
+            ...productionDeployContext,
+            workerScheduleEnabled: 'false',
+          },
+        }),
+      ),
+    ).toThrow(/workerScheduleEnabled=true/);
   });
 
   it('allows only the safe detached and connected Amplify phases in production', () => {

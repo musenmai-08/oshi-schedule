@@ -58,6 +58,8 @@ export const parseServerlessContext = (environment, text) => {
       throw new Error('production Amplify phase must be detached or connected');
     if (parsed.githubOwner !== 'musenmai-08' || parsed.githubRepository !== 'oshi-schedule')
       throw new Error('production GitHub repository identity is not approved');
+    if (parsed.workerScheduleEnabled !== true)
+      throw new Error('production workerScheduleEnabled must be true');
   }
   return parsed;
 };

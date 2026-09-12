@@ -445,7 +445,7 @@ export const loadConfig = (app: App): DeploymentConfig => {
     workerScheduleEnabled: parseBooleanContext(
       'workerScheduleEnabled',
       app.node.tryGetContext('workerScheduleEnabled'),
-      false,
+      environmentName === 'production',
     ),
   };
 
@@ -470,6 +470,8 @@ export const loadConfig = (app: App): DeploymentConfig => {
     throw new Error('serverless architecture requires backupRetentionDays=7');
   if (environmentName === 'production' && config.runtimeArchitecture !== 'serverless')
     throw new Error('production requires runtimeArchitecture=serverless');
+  if (environmentName === 'production' && !config.workerScheduleEnabled)
+    throw new Error('production requires workerScheduleEnabled=true');
   if (environmentName === 'production' && config.serverlessStagingMode !== 'cutover')
     throw new Error('production requires serverlessStagingMode=cutover');
   if (
