@@ -140,12 +140,12 @@ production ECR repositoryはCDKの`bootstrapOnly=true` phaseが唯一の所有�
 
 OAuth正式公開（Audience `External` / `In production`、Branding公開、Data Access verification不要）はGoogle Cloud Consoleでユーザー確認済みとして記録した。AWS read-only監査では、Amplify App/repository、main Branch、`oshi-schedule.com`（AVAILABLE）、初回job、Web/API 200、保護API 401、Lambda Active、SQS/DLQ 0、ESM 1/2、alarms OK、DB migration up-to-date、Scheduler `rate(1 hour)`/`ENABLED`、backup run `34603673493`（SSE-S3/private/7日Lifecycle）を確認した。ACTIVE対象2件はCredential復号可能、`reauthRequired=false`、CalendarConnection ACTIVE、直近MANUAL/SCHEDULED SyncRun SUCCESSで、PAUSEDの旧duplicate Userは対象外である。
 
-CloudFormation driftは完全ゼロではない。Schedulerの`ENABLED`は正式稼働による意図的差分だが、IaC期待値が`DISABLED`のまま残っている。加えてSNS alert subscription欠落、API Gateway access-log ARNのAWS正規化差分、Amplify root prefixの空文字/null表現差分を検出した。SNS通知購読とIaC reconcileを完了するまで、リリース判定は「運用継続可・最終IaC整合待ち」とする。PAT revokeとGoogle外部コンソール状態はAWS/repositoryから独立検証できないため、ユーザー証跡を保持する。
+CloudFormation driftは、API Gateway access-log ARN末尾とAmplify root prefixのAWS正規化差異2件のみで、release blockerではない。Schedulerは`rate(1 hour)`/`ENABLED`、SNSは`AlertsEmailSubscriptionV3`がConfirmed 1・Pending 0である。接続に使用した`AMPLIFY_GITHUB_PAT` Environment Secretおよびclassic PATは削除・revoke済みである。
 ### Production Amplify repository接続（detached後・完了記録）
 
 既存App `oshi-schedule-production-web`（App ID `d1v67c1ruct5nd`）がrepository/Branch/Domain未接続であることを確認してから、GitHub Environment `production-amplify` に必須reviewerを設定する。Variablesは `AWS_REGION=ap-northeast-1`、`PRODUCTION_AMPLIFY_CONNECTOR_ROLE_ARN=arn:aws:iam::741448960817:role/oshi-schedule-production-github-amplify-connect`、`PRODUCTION_AMPLIFY_APP_ID=d1v67c1ruct5nd`、Secretは短命PATを `AMPLIFY_GITHUB_PAT` として登録する。PATは `musenmai-08/oshi-schedule` のみに限定し、workflow `Connect production Amplify repository` の入力 `CONNECT_PRODUCTION_AMPLIFY` を一度だけ実行する。repository接続後はPATを破棄し、connected preflightを通した別承認のCDK deployでmain Branch→Domainを作成する。
 
-2026-09-09に上記手順を完了した。Appは同一IDでGitHub repositoryへ接続され、`main` Branch 1件、`oshi-schedule.com` Domain Association 1件（`AVAILABLE`、main関連付け）となった。初回Amplify job `1` は BUILD/DEPLOY/VERIFY すべて `SUCCEED`、公開WebはHTTP 200である。接続に使用した短命PATはGitHub Environment SecretおよびGitHub上から直ちに削除/revokeする（リポジトリ/AWSのread-only確認では削除状態を判定できない）。
+2026-09-09に上記手順を完了した。Appは同一IDでGitHub repositoryへ接続され、`main` Branch 1件、`oshi-schedule.com` Domain Association 1件（`AVAILABLE`、main関連付け）となった。初回Amplify job `1` は BUILD/DEPLOY/VERIFY すべて `SUCCEED`、公開WebはHTTP 200である。接続に使用した短命PATはGitHub Environment SecretおよびGitHub個人設定から削除・revoke済みである。
 
 ### Scheduler正式稼働前の再認証確認
 
@@ -158,3 +158,7 @@ production Schedulerを`rate(1 hour)`で有効化する前に、全ACTIVE subscr
 ### Production backup / restore rehearsal（完了記録）
 
 2026-09-11にproduction backup workflow run `34603673493`の同一prefix dump/manifest pairを受入した。両objectは非0 byte、SSE-S3 (`AES256`)、private ACL/public access block、7日Lifecycleを満たす。manifestのGit commitとbaseline migration ID/checksumはrepository stateと一致した。productionから隔離した一時PostgreSQL 17で空の`app` schemaを作成してcustom dumpをrestoreし、`app._prisma_migrations`・manifest・repositoryを機械照合した。Supabase Auth schemaはcustom dump/restoreの対象外である。一時container/network/downloaded filesはrehearsal終了時に破棄し、production DB、Scheduler、Calendar、S3 backup objectは変更していない。
+
+### 2026-09-12 production正式受入完了
+
+productionの技術的正式受入を完了した。CloudFormationは`UPDATE_COMPLETE`、Web/API、OAuth/Calendar、直近MANUAL/SCHEDULED sync、backup/restore、Queue/DLQ、Lambda、Alarmを確認済みである。SNSは`AlertsEmailSubscriptionV3`がConfirmed 1・Pending 0、Schedulerは`rate(1 hour)`/`ENABLED`。CloudFormation driftはAPI Gateway access-log ARNとAmplify root prefixの既知正規化差異2件のみである。production release blockerは0件。旧duplicate UserのPAUSED subscription/mapping cleanupは任意の別承認作業として残す。
