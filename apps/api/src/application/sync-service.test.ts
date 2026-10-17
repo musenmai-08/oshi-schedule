@@ -227,7 +227,7 @@ describe('SyncService', () => {
     const expected = {
       summary: '新作ゲームをプレイします',
       description:
-        'チャンネル: sync channel\n種別: プレミア公開\nURL: https://youtu.be/display-contract',
+        'Channel: sync channel\nType: YouTube Premiere\nURL: https://youtu.be/display-contract',
     };
 
     await service.syncSubscription(user.id, subscription.id, false);

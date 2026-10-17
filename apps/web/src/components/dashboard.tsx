@@ -49,33 +49,50 @@ import { publicEnv } from '@/lib/env';
 
 const formatDate = (value: string | null) =>
   value
-    ? new Intl.DateTimeFormat('ja-JP', { dateStyle: 'short', timeStyle: 'short' }).format(
+    ? new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(
         new Date(value),
       )
-    : 'まだありません';
+    : 'Not yet';
 
 const channelDialogErrorMessage = (caught: unknown, action: 'resolve' | 'register') => {
   if (caught instanceof ApiClientError) {
     switch (caught.code) {
       case 'CHANNEL_NOT_FOUND':
-        return '該当するYouTubeチャンネルが見つかりません。ハンドルを確認してください。';
+        return 'No matching YouTube channel was found. Check the handle and try again.';
       case 'DUPLICATE_CHANNEL':
-        return 'このチャンネルはすでに登録されています。';
+        return 'This channel is already registered.';
       case 'CHANNEL_LIMIT_REACHED':
-        return '登録できるチャンネルは3件までです。';
+        return 'You can register up to 3 channels.';
       case 'VALIDATION_ERROR':
-        return '@から始まる3〜30文字のハンドルを入力してください。';
+        return 'Enter a 3–30 character handle beginning with @.';
       case 'YOUTUBE_QUOTA_DEFERRED':
       case 'YOUTUBE_QUOTA_OR_FORBIDDEN':
       case 'YOUTUBE_API_TIMEOUT':
       case 'YOUTUBE_API_UNAVAILABLE':
       case 'YOUTUBE_API_ERROR':
-        return 'YouTubeからチャンネル情報を取得できませんでした。時間を置いて再試行してください。';
+        return 'Failed to retrieve channel information from YouTube. Please try again later.';
     }
   }
   return action === 'resolve'
-    ? 'チャンネルを検索できませんでした。もう一度お試しください。'
-    : 'チャンネルを登録できませんでした。もう一度お試しください。';
+    ? 'Failed to find the channel. Please try again.'
+    : 'Failed to add the channel. Please try again.';
+};
+
+const syncRequestErrorMessage = (caught: unknown) => {
+  if (caught instanceof ApiClientError) {
+    switch (caught.code) {
+      case 'SYNC_COOLDOWN':
+        return 'You can sync again 5 minutes after the previous sync.';
+      case 'SYNC_ALREADY_RUNNING':
+        return 'A sync is already in progress.';
+      case 'SUBSCRIPTION_PAUSED':
+        return 'This channel is paused. Resume it before syncing.';
+      case 'GOOGLE_REAUTH_REQUIRED':
+      case 'GOOGLE_RECONSENT_REQUIRED':
+        return 'Reconnect Google to resume Calendar sync.';
+    }
+  }
+  return 'Failed to start the sync. Please try again.';
 };
 
 export function Dashboard({
@@ -111,8 +128,8 @@ export function Dashboard({
   const load = useCallback(async () => {
     try {
       setChannels(await apiClient.channels());
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '一覧を取得できません');
+    } catch {
+      setError('Failed to load registered channels.');
     } finally {
       setLoading(false);
     }
@@ -127,13 +144,13 @@ export function Dashboard({
 
   const reconnect = async () => {
     if (publicEnv.demoMode) {
-      setError('デモモードではGoogle再連携を実行しません');
+      setError('Google reconnection is not available in demo mode.');
       return;
     }
     try {
       await startGoogleOAuth(createSupabaseBrowserClient(), window.location.origin);
     } catch {
-      setError('Google再連携を開始できませんでした。もう一度お試しください。');
+      setError('Failed to start Google reconnection. Please try again.');
     }
   };
   const connectionNotice = dashboardConnectionNotice(connection, setup);
@@ -144,8 +161,8 @@ export function Dashboard({
       await action();
       setNotice(message);
       await load();
-    } catch (caught) {
-      setError(caught instanceof ApiClientError ? caught.message : '処理に失敗しました');
+    } catch {
+      setError('The operation could not be completed. Please try again.');
     } finally {
       setBusy(null);
     }
@@ -154,7 +171,7 @@ export function Dashboard({
     setDialogError(null);
     const result = channelHandleSchema.safeParse(handle);
     if (!result.success) {
-      setDialogError(result.error.issues[0]?.message ?? '入力を確認してください');
+      setDialogError('Enter a 3–30 character handle beginning with @.');
       return;
     }
     setBusy('resolve');
@@ -177,9 +194,9 @@ export function Dashboard({
       setHandle('');
       await load();
       if (result.sync.status === 'FAILED') {
-        setError('チャンネルを登録しましたが、初回同期を開始できませんでした。再試行してください');
+        setError('The channel was added, but the initial sync could not be started. Please retry.');
       } else {
-        setNotice('チャンネルを登録しました。初回同期を待機しています');
+        setNotice('Channel added. The initial sync is queued.');
         void watchSync(
           {
             id: result.sync.id,
@@ -203,18 +220,21 @@ export function Dashboard({
           setSyncStates((current) => ({ ...current, [accepted.subscriptionId]: run.status })),
       });
       if (!completed) {
-        setNotice('同期は続行中です。しばらくしてから画面を再読み込みしてください');
+        setNotice('Sync is still in progress. Refresh the page in a few moments.');
         return;
       }
       await load();
       if (completed.status === 'SUCCESS')
-        setNotice(initial ? '初回同期が完了しました' : '同期が完了しました');
+        setNotice(
+          initial
+            ? 'Initial sync to Google Calendar completed successfully.'
+            : 'Successfully synced to Google Calendar.',
+        );
       else if (completed.status === 'DEFERRED')
-        setNotice('同期は延期されました。時間を置いて再試行できます');
-      else if (completed.status === 'FAILED')
-        setError('同期に失敗しました。「今すぐ同期」から再試行してください');
+        setNotice('Sync was deferred. You can try again later.');
+      else if (completed.status === 'FAILED') setError('Sync failed. Select Sync Again to retry.');
     } catch {
-      setError('同期状態を確認できませんでした。画面を再読み込みしてください');
+      setError('Failed to retrieve the sync status. Please refresh the page.');
     } finally {
       setSyncStates((current) => {
         const next = { ...current };
@@ -228,10 +248,10 @@ export function Dashboard({
     setError(null);
     try {
       const accepted = await apiClient.sync(subscriptionId);
-      setNotice(accepted.status === 'RUNNING' ? '同期中です' : '同期を受け付けました');
+      setNotice(accepted.status === 'RUNNING' ? 'Sync in progress.' : 'Sync request accepted.');
       void watchSync(accepted);
     } catch (caught) {
-      setError(caught instanceof ApiClientError ? caught.message : '同期を開始できませんでした');
+      setError(syncRequestErrorMessage(caught));
     } finally {
       setBusy(null);
     }
@@ -257,10 +277,10 @@ export function Dashboard({
       >
         <Box>
           <Typography variant="h3" component="h1" sx={{ fontSize: { xs: '2rem', md: '2.6rem' } }}>
-            おかえりなさい
+            Welcome back
           </Typography>
           <Typography color="text.secondary" mt={1}>
-            推しの次の予定を、いつものカレンダーへ届けます。
+            Keep your favorite creators&apos; upcoming streams in your calendar.
           </Typography>
         </Box>
         <Button
@@ -269,7 +289,7 @@ export function Dashboard({
           onClick={openDialog}
           disabled={channels.length >= MAX_CHANNELS_PER_USER}
         >
-          チャンネルを追加
+          Add Channel
         </Button>
       </Stack>
       {connectionNotice && (
@@ -285,7 +305,7 @@ export function Dashboard({
                   connectionNotice.action === 'retry' ? void loadConnection() : void reconnect()
                 }
               >
-                {connectionNotice.action === 'retry' ? '再読み込み' : 'Googleを再連携'}
+                {connectionNotice.action === 'retry' ? 'Retry' : 'Reconnect Google'}
               </Button>
             ) : undefined
           }
@@ -300,7 +320,7 @@ export function Dashboard({
         </Alert>
       )}
       <Stack direction="row" justifyContent="space-between" alignItems="center">
-        <Typography variant="h6">登録チャンネル</Typography>
+        <Typography variant="h6">Registered Channels</Typography>
         <Chip
           label={`${channels.length} / ${MAX_CHANNELS_PER_USER}`}
           color={channels.length >= MAX_CHANNELS_PER_USER ? 'warning' : 'default'}
@@ -329,12 +349,12 @@ export function Dashboard({
             >
               <AddRoundedIcon color="primary" fontSize="large" />
             </Box>
-            <Typography variant="h6">最初の推しを登録しましょう</Typography>
+            <Typography variant="h6">Add your first channel</Typography>
             <Typography color="text.secondary" mt={1} mb={3}>
-              YouTubeの @handle だけで始められます。
+              Get started with a YouTube @handle.
             </Typography>
             <Button variant="outlined" onClick={openDialog}>
-              チャンネルを追加
+              Add Channel
             </Button>
           </CardContent>
         </Card>
@@ -372,12 +392,12 @@ export function Dashboard({
                             }
                             label={
                               syncState === 'QUEUED'
-                                ? '待機中'
+                                ? 'Queued'
                                 : syncState === 'RUNNING'
-                                  ? '同期中'
+                                  ? 'Syncing'
                                   : channel.status === 'ACTIVE'
-                                    ? '有効'
-                                    : '一時停止'
+                                    ? 'Active'
+                                    : 'Paused'
                             }
                           />
                         </Stack>
@@ -391,13 +411,13 @@ export function Dashboard({
                     >
                       <Box>
                         <Typography variant="caption" color="text.secondary">
-                          最終取得
+                          Last YouTube Fetch
                         </Typography>
                         <Typography variant="body2">{formatDate(channel.lastFetchedAt)}</Typography>
                       </Box>
                       <Box>
                         <Typography variant="caption" color="text.secondary">
-                          カレンダー反映
+                          Last Synced
                         </Typography>
                         <Typography variant="body2">
                           {formatDate(channel.lastCalendarSyncAt)}
@@ -405,10 +425,10 @@ export function Dashboard({
                       </Box>
                     </Stack>
                     <Stack direction="row" justifyContent="flex-end">
-                      <Tooltip title="今すぐ同期">
+                      <Tooltip title="Sync Again">
                         <span>
                           <IconButton
-                            aria-label={`${channel.title}を今すぐ同期`}
+                            aria-label={`Sync ${channel.title} again`}
                             disabled={busy !== null || channel.status === 'PAUSED' || syncActive}
                             onClick={() => void requestSync(channel.subscriptionId)}
                           >
@@ -420,13 +440,13 @@ export function Dashboard({
                           </IconButton>
                         </span>
                       </Tooltip>
-                      <Tooltip title={channel.status === 'ACTIVE' ? '一時停止' : '再開'}>
+                      <Tooltip title={channel.status === 'ACTIVE' ? 'Pause' : 'Resume'}>
                         <span>
                           <IconButton
                             aria-label={
                               channel.status === 'ACTIVE'
-                                ? `${channel.title}を一時停止`
-                                : `${channel.title}を再開`
+                                ? `Pause ${channel.title}`
+                                : `Resume ${channel.title}`
                             }
                             disabled={busy !== null}
                             onClick={() =>
@@ -437,9 +457,7 @@ export function Dashboard({
                                     channel.subscriptionId,
                                     channel.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE',
                                   ),
-                                channel.status === 'ACTIVE'
-                                  ? '一時停止しました'
-                                  : '同期を再開しました',
+                                channel.status === 'ACTIVE' ? 'Channel paused.' : 'Sync resumed.',
                               )
                             }
                           >
@@ -451,22 +469,22 @@ export function Dashboard({
                           </IconButton>
                         </span>
                       </Tooltip>
-                      <Tooltip title="登録解除">
+                      <Tooltip title="Remove Channel">
                         <span>
                           <IconButton
-                            aria-label={`${channel.title}の登録を解除`}
+                            aria-label={`Remove ${channel.title}`}
                             color="error"
                             disabled={busy !== null}
                             onClick={() => {
                               if (
                                 window.confirm(
-                                  `${channel.title} の登録を解除しますか？未来の予定はカレンダーから削除されます。`,
+                                  `Remove ${channel.title}? Future events will be deleted from Google Calendar.`,
                                 )
                               )
                                 void act(
                                   `delete-${channel.subscriptionId}`,
                                   () => apiClient.remove(channel.subscriptionId),
-                                  '登録を解除しました',
+                                  'Channel removed.',
                                 );
                             }}
                           >
@@ -478,7 +496,7 @@ export function Dashboard({
                   </Stack>
                   {channel.lastErrorMessage && (
                     <Alert severity="warning" sx={{ mt: 2 }}>
-                      {channel.lastErrorMessage}
+                      The last sync attempt failed. Select Sync Again to retry.
                     </Alert>
                   )}
                 </CardContent>
@@ -492,10 +510,10 @@ export function Dashboard({
         onClick={() => void load()}
         sx={{ alignSelf: 'center' }}
       >
-        表示を更新
+        Refresh
       </Button>
       <Dialog open={dialogOpen} onClose={() => !busy && closeDialog()} fullWidth maxWidth="sm">
-        <DialogTitle>チャンネルを追加</DialogTitle>
+        <DialogTitle>Add Channel</DialogTitle>
         <DialogContent>
           <Stack spacing={3} pt={1}>
             {dialogError && (
@@ -512,7 +530,7 @@ export function Dashboard({
                 setHandle(event.target.value);
                 setPreview(null);
               }}
-              helperText="チャンネルURLではなく、@から始まるハンドルを入力してください"
+              helperText="Enter the channel handle beginning with @, not the channel URL."
               inputProps={{
                 'aria-label': 'YouTube @handle',
                 'aria-describedby': dialogError ? 'channel-dialog-error' : undefined,
@@ -534,7 +552,7 @@ export function Dashboard({
                         color="primary"
                         variant="body2"
                       >
-                        YouTubeで確認
+                        View on YouTube
                       </Typography>
                     </Box>
                   </Stack>
@@ -544,16 +562,16 @@ export function Dashboard({
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={closeDialog}>キャンセル</Button>
+          <Button onClick={closeDialog}>Cancel</Button>
           {preview ? (
             <Button variant="contained" onClick={() => void register()} disabled={busy !== null}>
               {busy === 'register' ? (
                 <Stack direction="row" spacing={1} alignItems="center">
                   <CircularProgress size={22} color="inherit" />
-                  <span>登録して初回同期中…</span>
+                  <span>Adding channel and starting initial sync…</span>
                 </Stack>
               ) : (
-                'このチャンネルを登録'
+                'Add This Channel'
               )}
             </Button>
           ) : (
@@ -562,7 +580,7 @@ export function Dashboard({
               onClick={() => void resolve()}
               disabled={busy !== null || !handle}
             >
-              {busy === 'resolve' ? <CircularProgress size={22} color="inherit" /> : '検索'}
+              {busy === 'resolve' ? <CircularProgress size={22} color="inherit" /> : 'Find Channel'}
             </Button>
           )}
         </DialogActions>

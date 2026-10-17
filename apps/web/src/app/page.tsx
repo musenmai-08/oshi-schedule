@@ -34,7 +34,7 @@ export default function LoginPage() {
           <Stack spacing={3} flex={1}>
             <Chip
               icon={<AutoAwesomeIcon />}
-              label="YouTube配信予定をカレンダーへ"
+              label="YouTube streams, synced to your calendar"
               color="secondary"
               variant="outlined"
               sx={{ alignSelf: 'flex-start', bgcolor: '#fff' }}
@@ -48,16 +48,17 @@ export default function LoginPage() {
                 letterSpacing: '-.05em',
               }}
             >
-              推しの予定を、
+              Never miss your
               <Box component="span" sx={{ color: 'primary.main' }}>
-                見逃さない。
+                favorite creator&apos;s stream.
               </Box>
             </Typography>
             <Typography
               color="text.secondary"
               sx={{ fontSize: { xs: '1.05rem', md: '1.2rem' }, lineHeight: 1.9, maxWidth: 570 }}
             >
-              YouTubeのライブ配信とプレミア公開を自動で見つけて、あなた専用のGoogleカレンダーにまとめます。
+              Automatically find upcoming YouTube live streams and premieres and add them to your
+              dedicated Google Calendar.
             </Typography>
             <Stack spacing={1.25}>
               <LoginButton />
@@ -69,7 +70,8 @@ export default function LoginPage() {
               </Box>
             </Stack>
             <Typography variant="caption" color="text.secondary">
-              13歳未満の方は利用できません。ログインすると、利用規約とプライバシーポリシーに同意したものとみなされます。
+              You must be at least 13 years old to use this service. By signing in, you agree to the
+              Terms of Service and Privacy Policy.
             </Typography>
           </Stack>
           <Paper
@@ -84,7 +86,7 @@ export default function LoginPage() {
           >
             <Stack spacing={3}>
               <Typography variant="h5" fontWeight={800}>
-                次の配信
+                Upcoming Stream
               </Typography>
               <Box
                 sx={{
@@ -97,18 +99,18 @@ export default function LoginPage() {
                 <Typography variant="overline" color="primary">
                   YouTube Live
                 </Typography>
-                <Typography fontWeight={800}>推しと過ごす夏の夜</Typography>
+                <Typography fontWeight={800}>A Summer Evening Live</Typography>
                 <Typography variant="body2" color="text.secondary">
-                  7月21日 20:00 — 21:00
+                  Jul 21, 8:00 PM — 9:00 PM
                 </Typography>
               </Box>
               <Stack direction="row" spacing={2}>
                 <CalendarMonthIcon color="secondary" />
-                <Typography>専用カレンダーに自動登録</Typography>
+                <Typography>Automatically added to your dedicated calendar</Typography>
               </Stack>
               <Stack direction="row" spacing={2}>
                 <SyncIcon color="secondary" />
-                <Typography>1時間ごとに最新情報へ更新</Typography>
+                <Typography>Updated hourly with the latest information</Typography>
               </Stack>
             </Stack>
           </Paper>
@@ -121,10 +123,10 @@ export default function LoginPage() {
         sx={{ position: 'absolute', bottom: 20, left: 0, right: 0, justifyContent: 'center' }}
       >
         <Link component={NextLink} href={APP_ROUTES.terms} color="text.secondary">
-          利用規約
+          Terms of Service
         </Link>
         <Link component={NextLink} href={APP_ROUTES.privacy} color="text.secondary">
-          プライバシー
+          Privacy Policy
         </Link>
       </Stack>
     </Box>

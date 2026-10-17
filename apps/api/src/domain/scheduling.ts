@@ -36,15 +36,15 @@ export function buildCalendarEvent(
 ): CalendarEventInput {
   const kindLabel =
     broadcast.kind === 'PREMIERE'
-      ? 'プレミア公開'
+      ? 'YouTube Premiere'
       : broadcast.kind === 'LIVE'
         ? 'YouTube Live'
-        : '配信（種別未確定）';
+        : 'Stream (type not confirmed)';
   return {
     summary: broadcast.title,
     description: [
-      `チャンネル: ${channelTitle}`,
-      `種別: ${kindLabel}`,
+      `Channel: ${channelTitle}`,
+      `Type: ${kindLabel}`,
       `URL: ${broadcast.youtubeUrl}`,
     ].join('\n'),
     start: broadcast.scheduledStartAt.toISOString(),

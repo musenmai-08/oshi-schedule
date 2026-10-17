@@ -71,13 +71,13 @@ describe('Google connection UI state', () => {
         }),
         null,
       )?.title,
-    ).toContain('完了していません');
+    ).toContain('incomplete');
     expect(dashboardConnectionNotice(ready(), null)).toBeNull();
   });
 
   it('does not report Settings as connected before data loads or after an API failure', () => {
-    expect(settingsConnectionView({ status: 'loading' }).chipLabel).toBe('確認中');
-    expect(settingsConnectionView({ status: 'error' }).chipLabel).toBe('取得失敗');
-    expect(settingsConnectionView(ready()).chipLabel).toBe('接続済み');
+    expect(settingsConnectionView({ status: 'loading' }).chipLabel).toBe('Checking');
+    expect(settingsConnectionView({ status: 'error' }).chipLabel).toBe('Unavailable');
+    expect(settingsConnectionView(ready()).chipLabel).toBe('Connected');
   });
 });

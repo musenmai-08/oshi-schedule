@@ -20,8 +20,8 @@ describe('scheduling', () => {
   });
   it.each([
     ['LIVE', 'UPCOMING', 'YouTube Live', 'confirmed'],
-    ['PREMIERE', 'UPCOMING', 'プレミア公開', 'confirmed'],
-    ['UNKNOWN', 'UPCOMING', '配信（種別未確定）', 'confirmed'],
+    ['PREMIERE', 'UPCOMING', 'YouTube Premiere', 'confirmed'],
+    ['UNKNOWN', 'UPCOMING', 'Stream (type not confirmed)', 'confirmed'],
     ['LIVE', 'CANCELLED', 'YouTube Live', 'cancelled'],
   ] as const)(
     'builds a title-only %s/%s managed event without the thumbnail in its description',
@@ -44,7 +44,7 @@ describe('scheduling', () => {
       );
       expect(event).toMatchObject({
         summary: '配信',
-        description: `チャンネル: 推し\n種別: ${kindLabel}\nURL: https://youtu.be/v1`,
+        description: `Channel: 推し\nType: ${kindLabel}\nURL: https://youtu.be/v1`,
         status: calendarStatus,
       });
       expect(event.description).not.toContain('サムネイル');

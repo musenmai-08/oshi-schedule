@@ -8,14 +8,12 @@ import {
 describe('Google login permission copy', () => {
   it('explains the narrow Calendar purpose before OAuth starts', () => {
     expect(GOOGLE_CALENDAR_PERMISSION_TITLE).toContain('Google Calendar');
-    expect(GOOGLE_CALENDAR_PERMISSION_NOTICE).toContain('専用');
-    expect(GOOGLE_CALENDAR_PERMISSION_NOTICE).toContain('作成・更新・削除');
-    expect(GOOGLE_CALENDAR_PERMISSION_NOTICE).toContain(
-      '既存のカレンダーを読み取る権限ではありません',
-    );
+    expect(GOOGLE_CALENDAR_PERMISSION_NOTICE).toContain('dedicated');
+    expect(GOOGLE_CALENDAR_PERMISSION_NOTICE).toContain('create, update, and delete');
+    expect(GOOGLE_CALENDAR_PERMISSION_NOTICE).toContain('do not read your existing calendars');
   });
 
   it('uses the localized Google sign-in label', () => {
-    expect(GOOGLE_LOGIN_LABEL).toBe('Google でログイン');
+    expect(GOOGLE_LOGIN_LABEL).toBe('Sign in with Google');
   });
 });

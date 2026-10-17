@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const APP_NAME = '推しスケジュール';
+export const APP_NAME = 'Oshi Schedule';
 export const MAX_CHANNELS_PER_USER = 3;
 export const SYNC_LOOKAHEAD_DAYS = 30;
 export const MANUAL_SYNC_COOLDOWN_SECONDS = 300;

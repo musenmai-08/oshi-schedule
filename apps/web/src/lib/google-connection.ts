@@ -22,43 +22,43 @@ export function dashboardConnectionNotice(
   if (setup === 'failed')
     return {
       severity: 'error',
-      title: 'Google Calendarの初回設定に失敗しました',
-      message: 'Google Calendarへの接続を完了するため、もう一度Googleの権限を許可してください。',
+      title: 'Google Calendar setup failed',
+      message: 'Allow Google access again to complete the Google Calendar connection.',
       action: 'reconnect',
     };
   if (setup === 'reauth')
     return {
       severity: 'warning',
-      title: 'Googleの再同意が必要です',
-      message: 'カレンダー同期を再開するには、Googleを再連携してください。',
+      title: 'Google authorization is required again',
+      message: 'Reconnect Google to resume Calendar sync.',
       action: 'reconnect',
     };
   if (state.status === 'loading')
     return {
       severity: 'info',
-      title: 'Google接続を確認しています',
-      message: '接続状態の確認が終わるまでお待ちください。',
+      title: 'Checking Google connection',
+      message: 'Please wait while we check the connection status.',
       action: null,
     };
   if (state.status === 'error')
     return {
       severity: 'error',
-      title: 'Google接続状態を確認できません',
-      message: '通信状態を確認して、もう一度お試しください。',
+      title: 'Could not check the Google connection',
+      message: 'Check your connection and try again.',
       action: 'retry',
     };
   if (state.me.reauthRequired)
     return {
       severity: 'warning',
-      title: 'Googleの再連携が必要です',
-      message: 'Googleの認証が無効になっています。再連携するとカレンダー同期を再開できます。',
+      title: 'Google reconnection required',
+      message: 'Your Google authorization is no longer valid. Reconnect to resume Calendar sync.',
       action: 'reconnect',
     };
   if (!state.me.onboardingCompleted || state.me.calendarStatus !== 'ACTIVE')
     return {
       severity: 'warning',
-      title: 'Google Calendarの接続が完了していません',
-      message: 'Googleを連携して、専用カレンダーの初回設定を完了してください。',
+      title: 'Google Calendar connection is incomplete',
+      message: 'Connect Google to finish setting up your dedicated calendar.',
       action: 'reconnect',
     };
   return null;
@@ -67,37 +67,39 @@ export function dashboardConnectionNotice(
 export function settingsConnectionView(state: GoogleConnectionState) {
   if (state.status === 'loading')
     return {
-      chipLabel: '確認中',
+      chipLabel: 'Checking',
       chipColor: 'default' as const,
-      calendarLabel: '確認中…',
+      calendarLabel: 'Checking…',
       notice: dashboardConnectionNotice(state, null),
     };
   if (state.status === 'error')
     return {
-      chipLabel: '取得失敗',
+      chipLabel: 'Unavailable',
       chipColor: 'error' as const,
-      calendarLabel: '確認できません',
+      calendarLabel: 'Could not be verified',
       notice: dashboardConnectionNotice(state, null),
     };
   if (state.me.reauthRequired)
     return {
-      chipLabel: '再連携が必要',
+      chipLabel: 'Reconnect required',
       chipColor: 'warning' as const,
       calendarLabel:
-        state.me.calendarStatus === 'ACTIVE' ? '接続情報あり（再認証が必要）' : '未設定',
+        state.me.calendarStatus === 'ACTIVE'
+          ? 'Connection found (reauthorization required)'
+          : 'Not set up',
       notice: dashboardConnectionNotice(state, null),
     };
   if (!state.me.onboardingCompleted || state.me.calendarStatus !== 'ACTIVE')
     return {
-      chipLabel: '接続未完了',
+      chipLabel: 'Connection incomplete',
       chipColor: 'warning' as const,
-      calendarLabel: '未設定',
+      calendarLabel: 'Not set up',
       notice: dashboardConnectionNotice(state, null),
     };
   return {
-    chipLabel: '接続済み',
+    chipLabel: 'Connected',
     chipColor: 'success' as const,
-    calendarLabel: '推しスケジュール（有効）',
+    calendarLabel: 'Oshi Schedule (active)',
     notice: null,
   };
 }

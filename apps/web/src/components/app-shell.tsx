@@ -42,7 +42,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       router.replace(APP_ROUTES.root);
       router.refresh();
     } catch {
-      setLogoutError('ログアウトできませんでした。もう一度お試しください。');
+      setLogoutError('Failed to sign out. Please try again.');
     } finally {
       logoutInFlight.current = false;
       setLoggingOut(false);
@@ -65,7 +65,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Link href={APP_ROUTES.dashboard}>
               <Stack direction="row" alignItems="center" spacing={1}>
                 <FavoriteRoundedIcon color="primary" />
-                <Typography fontWeight={900}>推しスケジュール</Typography>
+                <Typography fontWeight={900}>Oshi Schedule</Typography>
               </Stack>
             </Link>
             <Box flex={1} />
@@ -75,7 +75,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               color="inherit"
               startIcon={<SettingsOutlinedIcon />}
             >
-              設定
+              Settings
             </Button>
             <Button
               color="inherit"
@@ -83,7 +83,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               disabled={loggingOut}
               onClick={() => void logout()}
             >
-              {loggingOut ? 'ログアウト中…' : 'ログアウト'}
+              {loggingOut ? 'Signing out…' : 'Sign Out'}
             </Button>
           </Container>
         </Toolbar>

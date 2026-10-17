@@ -10,8 +10,6 @@ describe('signOutSession', () => {
 
   it('replaces provider details with a safe message', async () => {
     const signOut = vi.fn(async () => ({ error: new Error('provider response details') }));
-    await expect(signOutSession(signOut)).rejects.toThrow(
-      'ログアウトできませんでした。もう一度お試しください。',
-    );
+    await expect(signOutSession(signOut)).rejects.toThrow('Failed to sign out. Please try again.');
   });
 });
