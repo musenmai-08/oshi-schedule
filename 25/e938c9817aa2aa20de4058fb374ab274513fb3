@@ -1,0 +1,21 @@
+package.json
+  s_76c578e1a41b62::t_296c8c3dcbc2e6 11-12
+pnpm-lock.yaml
+  s_76c578e1a41b62::t_a2253c54c33ef6 9,2619-2620,4952,5395
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "25e938c9817aa2aa20de4058fb374ab274513fb3",
+  "prompts": {},
+  "sessions": {
+    "s_76c578e1a41b62": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a147ff-c279-7d23-9517-71d7c37256ed",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
