@@ -1,0 +1,27 @@
+apps/api/package.json
+  s_76c578e1a41b62::t_17e26113b8143f 53
+apps/web/package.json
+  s_76c578e1a41b62::t_17e26113b8143f 26
+packages/shared/package.json
+  s_76c578e1a41b62::t_17e26113b8143f 22
+package.json
+  s_76c578e1a41b62::t_17e26113b8143f 11
+pnpm-lock.yaml
+  s_76c578e1a41b62::t_c957734f004b26 8,107-108,186-187,288-289,1820-1821,1933-1936,2639-2642,3045-3046,4575,4578,4583,4688-4689,4945,5420-5424,5968
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8b49082f9a47f2871137f88e7d7e0e26503050db",
+  "prompts": {},
+  "sessions": {
+    "s_76c578e1a41b62": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a147ff-c279-7d23-9517-71d7c37256ed",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
