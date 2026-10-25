@@ -8,6 +8,7 @@
   },
   "pnpm": {
     "overrides": {
+      "body-parser": "2.4.0",
       "deepmerge-ts": "8.0.0",
       "proxy-addr": "2.0.8"
     }

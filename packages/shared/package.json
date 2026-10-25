@@ -19,7 +19,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "zod": "3.25.76"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@oshi-schedule/eslint-config": "workspace:*",

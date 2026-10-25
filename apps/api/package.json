@@ -50,7 +50,7 @@
     "jose": "6.2.3",
     "pino": "10.3.1",
     "prisma": "6.19.3",
-    "zod": "3.25.76"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@oshi-schedule/eslint-config": "workspace:*",
