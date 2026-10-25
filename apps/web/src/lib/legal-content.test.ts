@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   LEGAL_CONTACT_EMAIL,
   LEGAL_EFFECTIVE_DATE,
+  LEGAL_LAST_UPDATED_DATE,
   LEGAL_OPERATOR,
   privacySections,
   termsSections,
@@ -15,6 +16,7 @@ describe('formal legal content', () => {
     expect(LEGAL_OPERATOR).toBe('推しスケジュール運営者');
     expect(LEGAL_CONTACT_EMAIL).toBe('oshi.schedule@gmail.com');
     expect(LEGAL_EFFECTIVE_DATE).toBe('2026年8月30日');
+    expect(LEGAL_LAST_UPDATED_DATE).toBe('2026年10月21日');
     expect(contentOf(termsSections)).toContain(LEGAL_CONTACT_EMAIL);
     expect(contentOf(privacySections)).toContain(LEGAL_CONTACT_EMAIL);
   });
@@ -27,8 +29,17 @@ describe('formal legal content', () => {
     expect(privacy).toContain('販売せず');
     expect(privacy).toContain('AIモデルの学習にも利用しません');
     expect(privacy).toContain('Limited Use');
-    expect(privacySections.find((section) => section.link)?.link?.href).toBe(
+    expect(privacySections.find((section) => section.title.startsWith('10.'))?.link?.href).toBe(
       'https://developers.google.com/terms/api-services-user-data-policy',
+    );
+    expect(termsSections.find((section) => section.title.startsWith('5.'))?.link?.href).toBe(
+      'https://www.youtube.com/t/terms',
+    );
+    expect(privacySections.find((section) => section.title.startsWith('3.'))?.link?.href).toBe(
+      'https://www.google.com/policies/privacy',
+    );
+    expect(privacySections.find((section) => section.title.startsWith('11.'))?.link?.href).toBe(
+      'https://myaccount.google.com/connections?filters=3,4&hl=en',
     );
 
     for (const content of [contentOf(termsSections), privacy]) {
@@ -41,7 +52,7 @@ describe('formal legal content', () => {
     expect(privacy).toContain('90日');
     expect(privacy).toContain('完了から30日');
     expect(privacy).toContain('原則1日1回');
-    expect(privacy).toContain('7日後に自動削除');
+    expect(privacy).toContain('7日後に削除対象');
     expect(privacy).toContain('Supabase Authの認証データはこのアプリ独自バックアップの対象外');
     expect(privacy).toContain('IaC上30日保持');
     expect(privacy).toContain('法令上保持が必要な情報');

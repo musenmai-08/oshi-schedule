@@ -89,7 +89,35 @@ class ExpiringCalendar extends FakeCalendarGateway {
   }
 }
 
+class ReauthCalendar extends FakeCalendarGateway {
+  fail = true;
+  override async deleteCalendar(user: Parameters<FakeCalendarGateway['deleteCalendar']>[0], id: string) {
+    if (this.fail) throw new AppError('GOOGLE_REAUTH_REQUIRED', 'Reconnect', 401);
+    await super.deleteCalendar(user, id);
+  }
+}
+
 describe('account deletion state machine', () => {
+  it('retains mapping and queue when Calendar deletion needs reconnection, then resumes', async () => {
+    const store = new MemoryStore();
+    const youtube = new FakeYouTubeGateway();
+    const calendar = new ReauthCalendar();
+    const sync = new SyncService(store, youtube, calendar, clock, logger);
+    const service = new OshiService(store, youtube, calendar,
+      new AesTokenCipher(`v1:${Buffer.alloc(32, 7).toString('base64')}`), clock,
+      { deleteUser: async () => undefined }, sync);
+    const user = await service.onboard(identity, 'refresh-token');
+    const channel = await store.upsertChannel({ id: 'channel', youtubeChannelId: 'UC-deletion', title: 'channel', handle: '@deletion', thumbnailUrl: '', channelUrl: '' });
+    const [broadcast] = await store.upsertBroadcasts(channel.id, [{ youtubeVideoId: 'deletion-video', title: 'old', kind: 'LIVE', status: 'COMPLETED', youtubeUrl: '', thumbnailUrl: '', scheduledStartAt: clock.now(), endAt: clock.now(), endTimeProvisional: false, actualStartAt: null, actualEndAt: clock.now() }], clock.now());
+    await store.saveMapping({ userId: user.id, broadcastId: broadcast!.id, eventId: 'deletion-event', managedFieldsHash: 'hash' });
+    await expect(service.deleteAccount(identity)).rejects.toMatchObject({ code: 'GOOGLE_REAUTH_REQUIRED' });
+    expect(await store.getMapping(user.id, broadcast!.id)).not.toBeNull();
+    expect(store.cleanupTasks).toMatchObject([{ eventId: 'deletion-event' }]);
+    calendar.fail = false;
+    await service.onboard(identity, 'replacement-token');
+    await service.deleteAccount(identity);
+    expect(await store.findUserById(user.id)).toBeNull();
+  });
   it('survives an Auth deletion failure, blocks normal APIs and resumes idempotently', async () => {
     const store = new MemoryStore();
     const youtube = new FakeYouTubeGateway();

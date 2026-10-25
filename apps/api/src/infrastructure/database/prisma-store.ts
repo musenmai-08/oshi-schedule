@@ -1,5 +1,5 @@
 import { Prisma, PrismaClient } from '@prisma/client';
-import type { ChannelSummary, SubscriptionStatus } from '@oshi-schedule/shared';
+import { YOUTUBE_API_DATA_RETENTION_DAYS, type ChannelSummary, type SubscriptionStatus } from '@oshi-schedule/shared';
 import type {
   AuthIdentity,
   DeletionStep,
@@ -21,6 +21,7 @@ const toUser = (row: {
   email: string;
   onboardingCompletedAt: Date | null;
   reauthRequired: boolean;
+  channelReregistrationRequired: boolean;
   calendar?: { googleCalendarId: string | null } | null;
 }) => ({
   id: row.id,
@@ -28,6 +29,7 @@ const toUser = (row: {
   email: row.email,
   onboardingCompleted: Boolean(row.onboardingCompletedAt),
   reauthRequired: row.reauthRequired,
+  channelReregistrationRequired: row.channelReregistrationRequired,
   calendarId: row.calendar?.googleCalendarId ?? null,
 });
 const toChannel = (row: {
@@ -37,6 +39,9 @@ const toChannel = (row: {
   handle: string;
   thumbnailUrl: string;
   channelUrl: string;
+  createdAt: Date;
+  metadataFetchedAt: Date | null;
+  metadataAttemptedAt: Date | null;
   lastFetchedAt: Date | null;
   fetchStartedAt: Date | null;
   fetchCompletedAt: Date | null;
@@ -298,6 +303,7 @@ export class PrismaStore implements Store {
     return row ? toChannel(row) : null;
   }
   async upsertChannel(channel: ChannelSummary) {
+    const metadataFetchedAt = new Date();
     const row = await this.prisma.youTubeChannel.upsert({
       where: { youtubeChannelId: channel.youtubeChannelId },
       update: {
@@ -305,6 +311,7 @@ export class PrismaStore implements Store {
         handle: channel.handle,
         thumbnailUrl: channel.thumbnailUrl,
         channelUrl: channel.channelUrl,
+        metadataFetchedAt,
       },
       create: {
         youtubeChannelId: channel.youtubeChannelId,
@@ -312,24 +319,217 @@ export class PrismaStore implements Store {
         handle: channel.handle,
         thumbnailUrl: channel.thumbnailUrl,
         channelUrl: channel.channelUrl,
+        metadataFetchedAt,
       },
     });
     return toChannel(row);
   }
+  async refreshChannel(channelId: string, channel: ChannelSummary, at: Date) {
+    return this.serializable(async (transaction) => {
+      const previous = await transaction.youTubeChannel.findUniqueOrThrow({ where: { id: channelId } });
+      if (previous.youtubeChannelId !== channel.youtubeChannelId) {
+        // A changed ID cannot invalidate mappings before their remote events are removed.
+        throw new StoreConstraintError('CHANNEL_ID_CHANGED');
+      }
+      const row = await transaction.youTubeChannel.update({
+        where: { id: channelId },
+        data: {
+          youtubeChannelId: channel.youtubeChannelId,
+          title: channel.title,
+          handle: channel.handle,
+          thumbnailUrl: channel.thumbnailUrl,
+          channelUrl: channel.channelUrl,
+          metadataFetchedAt: at,
+        },
+      });
+      return toChannel(row);
+    });
+  }
+  async listChannelsNeedingMetadataRefresh(before: Date) {
+    const rows = await this.prisma.youTubeChannel.findMany({
+      where: {
+        subscriptions: { some: {} },
+        OR: [{ metadataFetchedAt: null }, { metadataFetchedAt: { lt: before } }],
+      },
+      orderBy: { metadataAttemptedAt: 'asc' },
+      take: 20,
+    });
+    return rows.map(toChannel);
+  }
+  async markChannelMetadataRefreshAttempt(channelId: string, at: Date) {
+    await this.prisma.youTubeChannel.update({
+      where: { id: channelId },
+      data: { metadataAttemptedAt: at },
+    });
+  }
+  async maintainYouTubeData(retainAfter: Date) {
+    await this.serializable(async (transaction) => {
+      const expiredChannels = await transaction.youTubeChannel.findMany({
+        where: {
+          OR: [
+            { metadataFetchedAt: { lt: retainAfter } },
+            { metadataFetchedAt: null, createdAt: { lt: retainAfter } },
+            { subscriptions: { none: {} }, createdAt: { lt: retainAfter } },
+          ],
+        },
+        select: { id: true },
+      });
+      const channelIds = expiredChannels.map((channel) => channel.id);
+      const expiredBroadcasts = await transaction.scheduledBroadcast.findMany({
+        where: {
+          OR: [
+            { channelId: { in: channelIds } },
+            { apiFetchedAt: { lt: retainAfter } },
+            { apiFetchedAt: null, createdAt: { lt: retainAfter } },
+          ],
+        },
+        select: { id: true },
+      });
+      const broadcastIds = expiredBroadcasts.map((broadcast) => broadcast.id);
+      const orphanRows = await transaction.$queryRaw<Array<{ id: string }>>`
+        SELECT m."id" FROM "app"."CalendarEventMapping" m
+        JOIN "app"."ScheduledBroadcast" b ON b."id" = m."broadcastId"
+        WHERE NOT EXISTS (
+          SELECT 1 FROM "app"."UserChannelSubscription" s
+          WHERE s."userId" = m."userId" AND s."channelId" = b."channelId"
+        )`;
+      const mappings = await transaction.calendarEventMapping.findMany({
+        where: {
+          OR: [
+            { broadcastId: { in: broadcastIds } },
+            { id: { in: orphanRows.map((row) => row.id) } },
+          ],
+        },
+        include: { user: { include: { calendar: true } } },
+      });
+      if (mappings.length) {
+        await transaction.calendarCleanupTask.createMany({
+          data: mappings.map((mapping) => ({
+            userId: mapping.userId,
+            calendarId: mapping.user.calendar?.googleCalendarId ?? '',
+            eventId: mapping.googleCalendarEventId,
+          })),
+          skipDuplicates: true,
+        });
+      }
+      if (broadcastIds.length)
+        await transaction.scheduledBroadcast.deleteMany({
+          where: { id: { in: broadcastIds }, calendarMappings: { none: {} } },
+        });
+      if (channelIds.length) {
+        const allExpiredSubscriptions = await transaction.userChannelSubscription.findMany({
+          where: { channelId: { in: channelIds } }, select: { userId: true },
+        });
+        if (allExpiredSubscriptions.length)
+          await transaction.user.updateMany({
+            where: { id: { in: allExpiredSubscriptions.map((row) => row.userId) } },
+            data: { channelReregistrationRequired: true },
+          });
+        const removable = await transaction.youTubeChannel.findMany({
+          where: { id: { in: channelIds }, broadcasts: { none: {} } },
+          select: { id: true },
+        });
+        const removableIds = removable.map((channel) => channel.id);
+        await transaction.userChannelSubscription.deleteMany({
+          where: { channelId: { in: removableIds } },
+        });
+        await transaction.youTubeChannel.deleteMany({ where: { id: { in: removableIds } } });
+      }
+    });
+  }
+  async listPendingCalendarCleanup(limit: number, userId?: string) {
+    return this.prisma.calendarCleanupTask.findMany({
+      where: { user: { reauthRequired: false }, ...(userId ? { userId } : {}) },
+      orderBy: { createdAt: 'asc' },
+      take: limit,
+      select: { id: true, userId: true, calendarId: true, eventId: true },
+    });
+  }
+  async queueCalendarCleanup(userId: string, broadcastId: string, calendarId: string) {
+    const mapping = await this.prisma.calendarEventMapping.findUnique({
+      where: { userId_broadcastId: { userId, broadcastId } },
+    });
+    if (!mapping) return null;
+    return this.prisma.calendarCleanupTask.upsert({
+      where: {
+        userId_calendarId_eventId: { userId, calendarId, eventId: mapping.googleCalendarEventId },
+      },
+      create: { userId, calendarId, eventId: mapping.googleCalendarEventId },
+      update: {},
+      select: { id: true, userId: true, calendarId: true, eventId: true },
+    });
+  }
+  async queueUserCalendarCleanup(userId: string, calendarId: string) {
+    await this.serializable(async (transaction) => {
+      const mappings = await transaction.calendarEventMapping.findMany({
+        where: { userId }, select: { googleCalendarEventId: true },
+      });
+      if (mappings.length)
+        await transaction.calendarCleanupTask.createMany({
+          data: mappings.map((mapping) => ({ userId, calendarId, eventId: mapping.googleCalendarEventId })),
+          skipDuplicates: true,
+        });
+    });
+  }
+  async deleteCalendarCleanupTask(id: string) {
+    await this.serializable(async (transaction) => {
+      const task = await transaction.calendarCleanupTask.findUnique({ where: { id } });
+      if (!task) return;
+      await transaction.calendarEventMapping.deleteMany({
+        where: { userId: task.userId, googleCalendarEventId: task.eventId },
+      });
+      await transaction.calendarCleanupTask.deleteMany({ where: { id } });
+    });
+  }
+  async hasMappingsForUser(userId: string) {
+    return (await this.prisma.calendarEventMapping.count({ where: { userId } })) > 0 ||
+      (await this.prisma.calendarCleanupTask.count({ where: { userId } })) > 0;
+  }
+  async hasCalendarCleanupOutside(userId: string, calendarId: string) {
+    return (await this.prisma.calendarCleanupTask.count({
+      where: { userId, calendarId: { not: calendarId } },
+    })) > 0;
+  }
+  async countStaleYouTubeData(retainAfter: Date) {
+    const [channels, broadcasts] = await Promise.all([
+      this.prisma.youTubeChannel.count({
+        where: {
+          subscriptions: { some: {} },
+          OR: [
+            { metadataFetchedAt: { lt: retainAfter } },
+            { metadataFetchedAt: null, createdAt: { lt: retainAfter } },
+          ],
+        },
+      }),
+      this.prisma.scheduledBroadcast.count({
+        where: {
+          OR: [
+            { apiFetchedAt: { lt: retainAfter } },
+            { apiFetchedAt: null, createdAt: { lt: retainAfter } },
+          ],
+        },
+      }),
+    ]);
+    return { channels, broadcasts };
+  }
   async createSubscriptionWithinLimit(userId: string, channelId: string, limit: number) {
     try {
-      return await this.serializable(
-        async (transaction) => {
-          await transaction.$queryRaw`
-            SELECT "id" FROM "app"."User" WHERE "id" = ${userId} FOR UPDATE
+      return await this.serializable(async (transaction) => {
+        const lockedUsers = await transaction.$queryRaw<Array<{ channelReregistrationRequired: boolean }>>`
+            SELECT "channelReregistrationRequired" FROM "app"."User" WHERE "id" = ${userId} FOR UPDATE
           `;
-          const count = await transaction.userChannelSubscription.count({ where: { userId } });
-          if (count >= limit) throw new StoreConstraintError('CHANNEL_LIMIT');
-          return toSubscription(
-            await transaction.userChannelSubscription.create({ data: { userId, channelId } }),
-          );
-        },
-      );
+        const count = await transaction.userChannelSubscription.count({ where: { userId } });
+        if (count >= limit) throw new StoreConstraintError('CHANNEL_LIMIT');
+        const subscription = await transaction.userChannelSubscription.create({
+          data: { userId, channelId },
+        });
+        if (lockedUsers[0]?.channelReregistrationRequired)
+          await transaction.user.update({
+            where: { id: userId },
+            data: { channelReregistrationRequired: false },
+          });
+        return toSubscription(subscription);
+      });
     } catch (error) {
       if (error instanceof StoreConstraintError) throw error;
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
@@ -440,6 +640,7 @@ export class PrismaStore implements Store {
           actualEndAt: item.actualEndAt,
           missingCount: 0,
           ...(changed ? { sourceUpdatedAt: completedAt } : {}),
+          apiFetchedAt: completedAt,
         };
         if (existing)
           await transaction.scheduledBroadcast.update({ where: { id: existing.id }, data });
@@ -528,11 +729,12 @@ export class PrismaStore implements Store {
             actualEndAt: item.actualEndAt,
             missingCount: 0,
             ...(changed ? { sourceUpdatedAt: observedAt } : {}),
+            apiFetchedAt: observedAt,
           },
         });
       else
         await this.prisma.scheduledBroadcast.create({
-          data: { channelId, ...item, sourceUpdatedAt: observedAt },
+          data: { channelId, ...item, sourceUpdatedAt: observedAt, apiFetchedAt: observedAt },
         });
     }
     const rows = await this.prisma.scheduledBroadcast.findMany({
@@ -545,9 +747,11 @@ export class PrismaStore implements Store {
     }));
   }
   async listTrackableBroadcasts(channelId: string, now: Date, limit: number, windowDays: number) {
+    const retainAfter = new Date(now.getTime() - YOUTUBE_API_DATA_RETENTION_DAYS * 86_400_000);
     const rows = await this.prisma.scheduledBroadcast.findMany({
       where: {
         channelId,
+        OR: [{ apiFetchedAt: { gt: retainAfter } }, { apiFetchedAt: null, createdAt: { gt: retainAfter } }],
         scheduledStartAt: { gte: new Date(now.getTime() - windowDays * 86_400_000) },
         status: { notIn: ['COMPLETED', 'CANCELLED'] },
       },
@@ -567,8 +771,14 @@ export class PrismaStore implements Store {
     });
   }
   async listFutureBroadcasts(channelId: string, now: Date) {
+    const retainAfter = new Date(now.getTime() - YOUTUBE_API_DATA_RETENTION_DAYS * 86_400_000);
     const rows = await this.prisma.scheduledBroadcast.findMany({
-      where: { channelId, scheduledStartAt: { gt: now }, status: { not: 'CANCELLED' } },
+      where: {
+        channelId,
+        scheduledStartAt: { gt: now },
+        status: { not: 'CANCELLED' },
+        OR: [{ apiFetchedAt: { gt: retainAfter } }, { apiFetchedAt: null, createdAt: { gt: retainAfter } }],
+      },
       orderBy: { scheduledStartAt: 'asc' },
     });
     return rows.map((row) => ({
@@ -578,10 +788,14 @@ export class PrismaStore implements Store {
     }));
   }
   async listBroadcastsForSync(channelId: string, now: Date, since: Date | null) {
+    const retainAfter = new Date(now.getTime() - YOUTUBE_API_DATA_RETENTION_DAYS * 86_400_000);
     const rows = await this.prisma.scheduledBroadcast.findMany({
       where: {
         channelId,
-        ...(since ? { OR: [{ endAt: { gte: now } }, { sourceUpdatedAt: { gt: since } }] } : {}),
+        AND: [
+          { OR: [{ apiFetchedAt: { gt: retainAfter } }, { apiFetchedAt: null, createdAt: { gt: retainAfter } }] },
+          ...(since ? [{ OR: [{ endAt: { gte: now } }, { sourceUpdatedAt: { gt: since } }] }] : []),
+        ],
       },
       orderBy: { scheduledStartAt: 'asc' },
     });
@@ -604,8 +818,29 @@ export class PrismaStore implements Store {
         }
       : null;
   }
+  async listMappingsForUserChannel(userId: string, channelId: string) {
+    const rows = await this.prisma.calendarEventMapping.findMany({
+      where: { userId, broadcast: { channelId } },
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      userId: row.userId,
+      broadcastId: row.broadcastId,
+      eventId: row.googleCalendarEventId,
+      managedFieldsHash: row.managedFieldsHash,
+    }));
+  }
   async saveMapping(input: Omit<MappingRecord, 'id'>) {
-    const row = await this.prisma.calendarEventMapping.upsert({
+    const row = await this.serializable(async (transaction) => {
+      if (await transaction.calendarCleanupTask.count({
+        where: { userId: input.userId, eventId: input.eventId },
+      })) throw new StoreConstraintError('CALENDAR_CLEANUP_PENDING');
+      const existing = await transaction.calendarEventMapping.findUnique({
+        where: { userId_broadcastId: { userId: input.userId, broadcastId: input.broadcastId } },
+      });
+      if (existing && existing.googleCalendarEventId !== input.eventId)
+        throw new StoreConstraintError('CALENDAR_MAPPING_EVENT_CHANGED');
+      const saved = await transaction.calendarEventMapping.upsert({
       where: { userId_broadcastId: { userId: input.userId, broadcastId: input.broadcastId } },
       update: {
         googleCalendarEventId: input.eventId,
@@ -619,11 +854,10 @@ export class PrismaStore implements Store {
         managedFieldsHash: input.managedFieldsHash,
         lastSyncedAt: new Date(),
       },
+      });
+      return saved;
     });
     return { id: row.id, ...input };
-  }
-  async deleteMapping(userId: string, broadcastId: string) {
-    await this.prisma.calendarEventMapping.deleteMany({ where: { userId, broadcastId } });
   }
   async saveSyncResult(subscriptionId: string, result: SyncResult, at: Date, manual: boolean) {
     await this.prisma.userChannelSubscription.update({
@@ -784,67 +1018,65 @@ export class PrismaStore implements Store {
     cooldownBefore: Date,
     trigger: 'INITIAL' | 'MANUAL',
   ) {
-    return this.serializable(
-      async (transaction) => {
-        const owned = await transaction.$queryRaw<
-          Array<{ id: string; lastManualSyncAt: Date | null }>
-        >`
+    return this.serializable(async (transaction) => {
+      const owned = await transaction.$queryRaw<
+        Array<{ id: string; lastManualSyncAt: Date | null }>
+      >`
           SELECT "id", "lastManualSyncAt" FROM "app"."UserChannelSubscription"
           WHERE "id" = ${subscriptionId} AND "userId" = ${userId}
           FOR UPDATE`;
-        if (!owned.length) throw new StoreConstraintError('SUBSCRIPTION_NOT_FOUND');
-        const active = await transaction.syncTargetResult.findFirst({
-          where: {
-            targetType: 'SUBSCRIPTION',
-            targetId: subscriptionId,
-            status: { in: ['QUEUED', 'RUNNING'] },
-            syncRun: { type: { in: ['INITIAL', 'MANUAL'] }, requestedById: userId },
-          },
-          orderBy: { queuedAt: 'asc' },
-          select: { syncRunId: true },
-        });
-        if (active) {
-          const run = await this.readManualSyncRun(transaction, active.syncRunId);
-          if (!run) throw new Error('active sync run is incomplete');
-          return { run, created: false };
-        }
-        if (
-          trigger === 'MANUAL' &&
-          owned[0]!.lastManualSyncAt &&
-          owned[0]!.lastManualSyncAt > cooldownBefore
-        )
-          throw new StoreConstraintError('SYNC_COOLDOWN');
-        const created = await transaction.syncRun.create({
-          data: {
-            type: trigger,
-            status: 'QUEUED',
-            requestedById: userId,
-            queuedAt: at,
-            channelsTotal: 1,
-            usersTotal: 1,
-            targetResults: {
-              create: {
-                targetType: 'SUBSCRIPTION',
-                targetId: subscriptionId,
-                status: 'QUEUED',
-                queuedAt: at,
-              },
+      if (!owned.length) throw new StoreConstraintError('SUBSCRIPTION_NOT_FOUND');
+      const active = await transaction.syncTargetResult.findFirst({
+        where: {
+          targetType: 'SUBSCRIPTION',
+          targetId: subscriptionId,
+          status: { in: ['QUEUED', 'RUNNING'] },
+          syncRun: { type: { in: ['INITIAL', 'MANUAL'] }, requestedById: userId },
+        },
+        orderBy: { queuedAt: 'asc' },
+        select: { syncRunId: true },
+      });
+      if (active) {
+        const run = await this.readManualSyncRun(transaction, active.syncRunId);
+        if (!run) throw new Error('active sync run is incomplete');
+        return { run, created: false };
+      }
+      if (
+        trigger === 'MANUAL' &&
+        owned[0]!.lastManualSyncAt &&
+        owned[0]!.lastManualSyncAt > cooldownBefore
+      )
+        throw new StoreConstraintError('SYNC_COOLDOWN');
+      const created = await transaction.syncRun.create({
+        data: {
+          type: trigger,
+          status: 'QUEUED',
+          requestedById: userId,
+          queuedAt: at,
+          channelsTotal: 1,
+          usersTotal: 1,
+          targetResults: {
+            create: {
+              targetType: 'SUBSCRIPTION',
+              targetId: subscriptionId,
+              status: 'QUEUED',
+              queuedAt: at,
             },
           },
-        });
-        const run = await this.readManualSyncRun(transaction, created.id);
-        if (!run) throw new Error('queued sync run is incomplete');
-        await transaction.userChannelSubscription.update({
-          where: { id: subscriptionId },
-          data: {
-            lastSyncStatus: 'QUEUED',
-            lastErrorCode: null,
-            lastErrorMessage: null,
-          },
-        });
-        return { run, created: true };
-      },
-    );
+        },
+      });
+      const run = await this.readManualSyncRun(transaction, created.id);
+      if (!run) throw new Error('queued sync run is incomplete');
+      await transaction.userChannelSubscription.update({
+        where: { id: subscriptionId },
+        data: {
+          lastSyncStatus: 'QUEUED',
+          lastErrorCode: null,
+          lastErrorMessage: null,
+        },
+      });
+      return { run, created: true };
+    });
   }
   async getSyncRunForUser(runId: string, userId: string) {
     const run = await this.readManualSyncRun(this.prisma, runId);

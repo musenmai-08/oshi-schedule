@@ -1,6 +1,10 @@
 import type { Metadata } from 'next';
 import { LegalDocument } from '@/components/legal-document';
-import { LEGAL_EFFECTIVE_DATE, privacySections } from '@/lib/legal-content';
+import {
+  LEGAL_EFFECTIVE_DATE,
+  LEGAL_LAST_UPDATED_DATE,
+  privacySections,
+} from '@/lib/legal-content';
 
 export const metadata: Metadata = { title: 'プライバシーポリシー | 推しスケジュール' };
 
@@ -9,6 +13,7 @@ export default function PrivacyPage() {
     <LegalDocument
       title="プライバシーポリシー"
       effectiveDate={LEGAL_EFFECTIVE_DATE}
+      lastUpdatedDate={LEGAL_LAST_UPDATED_DATE}
       sections={privacySections}
     />
   );

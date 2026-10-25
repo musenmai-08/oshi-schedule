@@ -22,14 +22,21 @@ export class FakeCalendarGateway implements CalendarGateway {
     _calendarId: string,
     eventId: string | null,
     event: CalendarEventInput,
-    deterministicId = false,
+    _deterministicId = false,
   ) {
-    const id = eventId && (deterministicId || this.events.has(eventId)) ? eventId : randomUUID();
+    void _deterministicId;
+    const id = eventId ?? randomUUID();
     this.events.set(id, event);
     return id;
   }
   async deleteEvent(_user: UserRecord, _calendarId: string, eventId: string) {
     this.events.delete(eventId);
+  }
+  async deleteManagedEvent(user: UserRecord, calendarId: string, eventId: string) {
+    const event = this.events.get(eventId);
+    if (event && event.extendedProperties.private.managedBy !== 'oshi-schedule')
+      throw new Error('GOOGLE_EVENT_NOT_MANAGED');
+    await this.deleteEvent(user, calendarId, eventId);
   }
   async deleteCalendar(_user: UserRecord, calendarId: string) {
     this.calendars.delete(calendarId);

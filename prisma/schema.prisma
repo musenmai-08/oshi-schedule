@@ -119,12 +119,14 @@ model User {
   email                 String                    @db.VarChar(320)
   onboardingCompletedAt DateTime?                 @db.Timestamptz(3)
   reauthRequired        Boolean                   @default(false)
+  channelReregistrationRequired Boolean            @default(false)
   createdAt             DateTime                  @default(now()) @db.Timestamptz(3)
   updatedAt             DateTime                  @updatedAt @db.Timestamptz(3)
   credential            GoogleCredential?
   calendar              CalendarConnection?
   subscriptions         UserChannelSubscription[]
   calendarEventMappings CalendarEventMapping[]
+  calendarCleanupTasks  CalendarCleanupTask[]
   syncRuns              SyncRun[]
   deletionRequest       AccountDeletionRequest?
 
@@ -169,6 +171,8 @@ model YouTubeChannel {
   title                String                    @db.VarChar(255)
   thumbnailUrl         String                    @db.Text
   channelUrl           String                    @db.Text
+  metadataFetchedAt    DateTime?                 @db.Timestamptz(3)
+  metadataAttemptedAt  DateTime?                 @db.Timestamptz(3)
   lastFetchedAt        DateTime?                 @db.Timestamptz(3)
   fetchStartedAt       DateTime?                 @db.Timestamptz(3)
   fetchCompletedAt     DateTime?                 @db.Timestamptz(3)
@@ -227,6 +231,7 @@ model ScheduledBroadcast {
   actualEndAt        DateTime?              @db.Timestamptz(3)
   missingCount       Int                    @default(0)
   sourceUpdatedAt    DateTime?              @db.Timestamptz(3)
+  apiFetchedAt       DateTime?              @db.Timestamptz(3)
   createdAt          DateTime               @default(now()) @db.Timestamptz(3)
   updatedAt          DateTime               @updatedAt @db.Timestamptz(3)
   channel            YouTubeChannel         @relation(fields: [channelId], references: [id], onDelete: Restrict)
@@ -252,6 +257,20 @@ model CalendarEventMapping {
 
   @@unique([userId, broadcastId])
   @@index([googleCalendarEventId])
+  @@schema("app")
+}
+
+/// YouTube metadata purge後もGoogle Calendarの管理対象eventを削除できるようにする。
+model CalendarCleanupTask {
+  id         String   @id @default(cuid())
+  userId     String
+  calendarId String   @db.VarChar(255)
+  eventId    String   @db.VarChar(255)
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, calendarId, eventId])
+  @@index([createdAt])
   @@schema("app")
 }
 

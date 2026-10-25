@@ -271,7 +271,7 @@ describe('GoogleCalendarGateway token refresh', () => {
     });
   });
 
-  it('recreates a deleted calendar and treats already-deleted calendar/token as idempotent', async () => {
+  it('recreates a deleted calendar and refuses an ambiguous 404 on calendar deletion', async () => {
     const { user, gateway } = await setup();
     const fetchMock = vi
       .fn<typeof fetch>()
@@ -282,8 +282,88 @@ describe('GoogleCalendarGateway token refresh', () => {
       .mockResolvedValueOnce(json({}, 400));
     vi.stubGlobal('fetch', fetchMock);
     await expect(gateway.ensureCalendar(user)).resolves.toBe('replacement-calendar');
-    await expect(gateway.deleteCalendar(user, 'already-deleted')).resolves.toBeUndefined();
+    await expect(gateway.deleteCalendar(user, 'already-deleted')).rejects.toMatchObject({
+      code: 'GOOGLE_CALENDAR_DELETE_FAILED',
+    });
     await expect(gateway.revokeAuthorization(user)).resolves.toBeUndefined();
+  });
+
+  it('deletes only an identified managed event', async () => {
+    const { user, gateway } = await setup();
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(json(token()))
+      .mockResolvedValueOnce(json({ id: 'event-id', status: 'confirmed', extendedProperties: { private: { managedBy: 'oshi-schedule' } } }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+    await gateway.deleteManagedEvent(user, 'calendar-id', 'event-id');
+    expect(fetchMock.mock.calls[2]?.[1]?.method).toBe('DELETE');
+  });
+
+  it('never deletes an unmanaged event', async () => {
+    const { user, gateway } = await setup();
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(json(token()))
+      .mockResolvedValueOnce(json({ id: 'event-id', status: 'confirmed', extendedProperties: { private: {} } }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(gateway.deleteManagedEvent(user, 'calendar-id', 'event-id')).rejects.toMatchObject({
+      code: 'GOOGLE_EVENT_NOT_MANAGED',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('treats an event 404 as gone only while the calendar is accessible', async () => {
+    const { user, gateway } = await setup();
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(json(token()))
+      .mockResolvedValueOnce(json({}, 404))
+      .mockResolvedValueOnce(json({ id: 'calendar-id' }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(gateway.deleteManagedEvent(user, 'calendar-id', 'event-id')).resolves.toBeUndefined();
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'DELETE')).toHaveLength(0);
+  });
+
+  it('retains cleanup when a 404 could mean calendar access was lost', async () => {
+    const { user, gateway } = await setup();
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(json(token()))
+      .mockResolvedValueOnce(json({}, 404))
+      .mockResolvedValueOnce(json({}, 404)));
+    await expect(gateway.deleteManagedEvent(user, 'calendar-id', 'event-id')).rejects.toMatchObject({
+      code: 'GOOGLE_CALENDAR_CHECK_FAILED',
+    });
+  });
+
+  it.each([401, 403])('marks reauthentication on Calendar %i', async (status) => {
+    const { store, user, gateway } = await setup();
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(json(token()))
+      .mockResolvedValueOnce(json({}, status)));
+    await expect(gateway.deleteManagedEvent(user, 'calendar-id', 'event-id')).rejects.toMatchObject({
+      code: 'GOOGLE_REAUTH_REQUIRED',
+    });
+    expect((await store.findUserById(user.id))?.reauthRequired).toBe(true);
+  });
+
+  it('retries a 403 rate limit without requiring reconnection', async () => {
+    const { store, user, gateway } = await setup();
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(json(token()))
+      .mockResolvedValueOnce(json({ error: { errors: [{ reason: 'rateLimitExceeded' }] } }, 403)));
+    await expect(gateway.deleteManagedEvent(user, 'calendar-id', 'event-id')).rejects.toMatchObject({
+      code: 'GOOGLE_CALENDAR_RATE_LIMIT', retryable: true,
+    });
+    expect((await store.findUserById(user.id))?.reauthRequired).toBe(false);
+  });
+
+  it('keeps transient Calendar failures retryable', async () => {
+    const { store, user, gateway } = await setup();
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(json(token()))
+      .mockResolvedValueOnce(json({}, 503)));
+    await expect(gateway.deleteManagedEvent(user, 'calendar-id', 'event-id')).rejects.toMatchObject({
+      code: 'GOOGLE_EVENT_CHECK_FAILED', retryable: true,
+    });
+    expect((await store.findUserById(user.id))?.reauthRequired).toBe(false);
   });
 
   it('resolves a deterministic insert conflict by patching the same event', async () => {
@@ -311,6 +391,22 @@ describe('GoogleCalendarGateway token refresh', () => {
         true,
       ),
     ).resolves.toBe('stable-event');
+  });
+
+  it('recreates a missing mapped event with its original ID', async () => {
+    const { user, gateway } = await setup();
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(json(token()))
+      .mockResolvedValueOnce(json({}, 404))
+      .mockResolvedValueOnce(json({ id: 'mapped-event' }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(gateway.upsertEvent(user, 'calendar-id', 'mapped-event', {
+      summary: 'Stream', description: 'description',
+      start: '2026-07-21T10:00:00.000Z', end: '2026-07-21T11:00:00.000Z',
+      status: 'confirmed', extendedProperties: { private: { managedBy: 'oshi-schedule' } },
+    })).resolves.toBe('mapped-event');
+    const created = JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body));
+    expect(created.id).toBe('mapped-event');
   });
 
   it('keeps every Calendar operation within the calendar.app.created scope contract', async () => {

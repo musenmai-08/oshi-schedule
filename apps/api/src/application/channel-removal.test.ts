@@ -33,7 +33,7 @@ class PartiallyFailingCalendar extends FakeCalendarGateway {
 }
 
 describe('channel removal', () => {
-  it('deletes only this user future events and resumes after a partial failure', async () => {
+  it('deletes this user past and future events and resumes after a partial failure', async () => {
     const store = new MemoryStore();
     const youtube = new FakeYouTubeGateway();
     const calendar = new PartiallyFailingCalendar();
@@ -127,7 +127,7 @@ describe('channel removal', () => {
     await service.remove(identity, subscription.id);
 
     expect(await store.getSubscription(user.id, subscription.id)).toBeNull();
-    expect(calendar.events.has('owner-past')).toBe(true);
+    expect(calendar.events.has('owner-past')).toBe(false);
     expect(calendar.events.has('owner-future-1')).toBe(false);
     expect(calendar.events.has('owner-future-2')).toBe(false);
     expect(calendar.events.has(otherEventId)).toBe(true);

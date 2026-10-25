@@ -75,7 +75,7 @@ export const notFound = () => new AppError('NOT_FOUND', '対象が見つかり�
 export class StoreConstraintError extends Error {
   constructor(
     public readonly reason:
-      'CHANNEL_LIMIT' | 'DUPLICATE_CHANNEL' | 'SUBSCRIPTION_NOT_FOUND' | 'SYNC_COOLDOWN',
+      'CHANNEL_LIMIT' | 'DUPLICATE_CHANNEL' | 'SUBSCRIPTION_NOT_FOUND' | 'SYNC_COOLDOWN' | 'CHANNEL_ID_CHANGED' | 'CALENDAR_CLEANUP_PENDING' | 'CALENDAR_MAPPING_EVENT_CHANGED',
   ) {
     super(reason);
     this.name = 'StoreConstraintError';

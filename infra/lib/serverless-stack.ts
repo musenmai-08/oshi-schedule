@@ -387,6 +387,61 @@ export class ServerlessOshiScheduleStack extends Stack {
       }),
     });
 
+    const scheduledCompletionMetric = new logs.MetricFilter(this, 'ScheduledCompletionMetric', {
+      logGroup: workerFunction.logGroup,
+      filterPattern: logs.FilterPattern.all(
+        logs.FilterPattern.stringValue('$.event', '=', 'scheduled_sync_completed'),
+        logs.FilterPattern.numberValue('$.failed', '=', 0),
+      ),
+      metricNamespace: `${resourcePrefix}/Compliance`,
+      metricName: 'ScheduledCompletions',
+      metricValue: '1',
+    });
+    const scheduledFailureMetric = new logs.MetricFilter(this, 'ScheduledFailureMetric', {
+      logGroup: workerFunction.logGroup,
+      filterPattern: logs.FilterPattern.all(
+        logs.FilterPattern.stringValue('$.event', '=', 'scheduled_sync_completed'),
+        logs.FilterPattern.numberValue('$.failed', '>', 0),
+      ),
+      metricNamespace: `${resourcePrefix}/Compliance`,
+      metricName: 'ScheduledFailures',
+      metricValue: '$.failed',
+    });
+    const staleChannelMetric = new logs.MetricFilter(this, 'StaleChannelMetric', {
+      logGroup: workerFunction.logGroup,
+      filterPattern: logs.FilterPattern.all(
+        logs.FilterPattern.stringValue('$.event', '=', 'youtube_stale_data_audit'),
+        logs.FilterPattern.numberValue('$.channels', '>', 0),
+      ),
+      metricNamespace: `${resourcePrefix}/Compliance`,
+      metricName: 'StaleChannels',
+      metricValue: '$.channels',
+    });
+    const staleBroadcastMetric = new logs.MetricFilter(this, 'StaleBroadcastMetric', {
+      logGroup: workerFunction.logGroup,
+      filterPattern: logs.FilterPattern.all(
+        logs.FilterPattern.stringValue('$.event', '=', 'youtube_stale_data_audit'),
+        logs.FilterPattern.numberValue('$.broadcasts', '>', 0),
+      ),
+      metricNamespace: `${resourcePrefix}/Compliance`,
+      metricName: 'StaleBroadcasts',
+      metricValue: '$.broadcasts',
+    });
+    const calendarCleanupFailureMetric = new logs.MetricFilter(this, 'CalendarCleanupFailureMetric', {
+      logGroup: workerFunction.logGroup,
+      filterPattern: logs.FilterPattern.stringValue('$.event', '=', 'calendar_retention_cleanup_failed'),
+      metricNamespace: `${resourcePrefix}/Compliance`,
+      metricName: 'CalendarCleanupFailures',
+      metricValue: '1',
+    });
+    const channelRefreshFailureMetric = new logs.MetricFilter(this, 'ChannelRefreshFailureMetric', {
+      logGroup: workerFunction.logGroup,
+      filterPattern: logs.FilterPattern.stringValue('$.event', '=', 'youtube_channel_metadata_refresh_failed'),
+      metricNamespace: `${resourcePrefix}/Compliance`,
+      metricName: 'ChannelRefreshFailures',
+      metricValue: '1',
+    });
+
     const httpApiLogGroup = new logs.LogGroup(this, 'HttpApiLogGroup', {
       logGroupName: `/aws/apigateway/${resourcePrefix}-http-api`,
       retention: logRetention,
@@ -651,6 +706,12 @@ export class ServerlessOshiScheduleStack extends Stack {
         evaluationPeriods: 1,
         treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
       }),
+      new cloudwatch.Alarm(this, 'WorkerThrottlesAlarm', {
+        metric: workerFunction.metricThrottles({ period: Duration.minutes(5) }),
+        threshold: 1,
+        evaluationPeriods: 1,
+        treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+      }),
       new cloudwatch.Alarm(this, 'WorkerDurationAlarm', {
         metric: workerFunction.metricDuration({ period: Duration.minutes(5) }),
         threshold: Duration.minutes(10).toMilliseconds(),
@@ -663,6 +724,56 @@ export class ServerlessOshiScheduleStack extends Stack {
         evaluationPeriods: 1,
         treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
       }),
+      new cloudwatch.Alarm(this, 'SchedulerDlqAlarm', {
+        metric: schedulerDlq.metricApproximateNumberOfMessagesVisible(),
+        threshold: 1,
+        evaluationPeriods: 1,
+        treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+      }),
+      new cloudwatch.Alarm(this, 'ScheduledFailureAlarm', {
+        metric: scheduledFailureMetric.metric({ period: Duration.minutes(5), statistic: 'Sum' }),
+        threshold: 1,
+        evaluationPeriods: 1,
+        treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+      }),
+      new cloudwatch.Alarm(this, 'StaleChannelAlarm', {
+        metric: staleChannelMetric.metric({ period: Duration.minutes(5), statistic: 'Sum' }),
+        threshold: 1,
+        evaluationPeriods: 1,
+        treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+      }),
+      new cloudwatch.Alarm(this, 'StaleBroadcastAlarm', {
+        metric: staleBroadcastMetric.metric({ period: Duration.minutes(5), statistic: 'Sum' }),
+        threshold: 1,
+        evaluationPeriods: 1,
+        treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+      }),
+      new cloudwatch.Alarm(this, 'CalendarCleanupFailureAlarm', {
+        metric: calendarCleanupFailureMetric.metric({ period: Duration.minutes(5), statistic: 'Sum' }),
+        threshold: 1,
+        evaluationPeriods: 1,
+        treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+      }),
+      new cloudwatch.Alarm(this, 'ChannelRefreshFailureAlarm', {
+        metric: channelRefreshFailureMetric.metric({ period: Duration.minutes(5), statistic: 'Sum' }),
+        threshold: 1,
+        evaluationPeriods: 1,
+        treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+      }),
+      ...(config.workerScheduleEnabled
+        ? [
+            new cloudwatch.Alarm(this, 'ScheduledCompletionMissingAlarm', {
+              metric: scheduledCompletionMetric.metric({
+                period: Duration.hours(6),
+                statistic: 'Sum',
+              }),
+              threshold: 1,
+              comparisonOperator: cloudwatch.ComparisonOperator.LESS_THAN_THRESHOLD,
+              evaluationPeriods: 1,
+              treatMissingData: cloudwatch.TreatMissingData.BREACHING,
+            }),
+          ]
+        : []),
     ])
       alarm.addAlarmAction(new cloudwatchActions.SnsAction(alerts));
 

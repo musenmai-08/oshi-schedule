@@ -210,6 +210,8 @@ export class GoogleCalendarGateway implements CalendarGateway {
     event: CalendarEventInput,
     deterministicId = false,
   ) {
+    if (deterministicId && !eventId)
+      throw new AppError('GOOGLE_EVENT_ID_REQUIRED', '予定のIDが必要です', 500);
     if (eventId) {
       const patched = await this.request(
         user.id,
@@ -231,11 +233,12 @@ export class GoogleCalendarGateway implements CalendarGateway {
       {
         method: 'POST',
         body: JSON.stringify(
-          this.eventBody(event, deterministicId ? (eventId ?? undefined) : undefined),
+          // Recreate a missing mapped event with its original ID; never orphan the old mapping.
+          this.eventBody(event, eventId ?? undefined),
         ),
       },
     );
-    if (created.status === 409 && eventId && deterministicId) {
+    if (created.status === 409 && eventId) {
       const patched = await this.request(
         user.id,
         `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
@@ -252,6 +255,8 @@ export class GoogleCalendarGateway implements CalendarGateway {
       );
     const body = (await created.json()) as { id?: string };
     if (!body.id) throw new AppError('GOOGLE_EVENT_CREATE_FAILED', '予定を作成できません', 502);
+    if (eventId && body.id !== eventId)
+      throw new AppError('GOOGLE_EVENT_ID_CHANGED', '予定のIDを確認できません', 502);
     return body.id;
   }
   async deleteEvent(user: UserRecord, calendarId: string, eventId: string) {
@@ -263,12 +268,62 @@ export class GoogleCalendarGateway implements CalendarGateway {
     if (!response.ok && ![404, 410].includes(response.status))
       throw new AppError('GOOGLE_EVENT_DELETE_FAILED', '未来の予定を削除できません', 502);
   }
+  private async rejectAuthorizationFailure(userId: string, response: Response) {
+    if (response.status === 403) {
+      const body = (await response.json().catch(() => ({}))) as {
+        error?: { errors?: Array<{ reason?: string }> };
+      };
+      const reasons = body.error?.errors?.map((item) => item.reason) ?? [];
+      if (reasons.some((reason) => ['rateLimitExceeded', 'userRateLimitExceeded', 'quotaExceeded'].includes(reason ?? '')))
+        throw new AppError('GOOGLE_CALENDAR_RATE_LIMIT', 'Googleカレンダーの制限に達しました', 502, true);
+    }
+    if (response.status === 401 || response.status === 403) {
+      await this.store.markReauthRequired(userId);
+      throw new AppError('GOOGLE_REAUTH_REQUIRED', 'Googleの再連携が必要です', 401);
+    }
+  }
+  async deleteManagedEvent(user: UserRecord, calendarId: string, eventId: string) {
+    const path = `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`;
+    const checkAccess = async () => {
+      const calendar = await this.request(user.id, `/calendars/${encodeURIComponent(calendarId)}`);
+      await this.rejectAuthorizationFailure(user.id, calendar);
+      if (!calendar.ok)
+        throw new AppError('GOOGLE_CALENDAR_CHECK_FAILED', 'カレンダーを確認できません', 502, calendar.status === 429 || calendar.status >= 500);
+    };
+    const event = await this.request(user.id, path);
+    await this.rejectAuthorizationFailure(user.id, event);
+    if (event.status === 404 || event.status === 410) {
+      // An inaccessible calendar can also return 404; prove access before treating it as gone.
+      await checkAccess();
+      return;
+    }
+    if (!event.ok)
+      throw new AppError('GOOGLE_EVENT_CHECK_FAILED', '予定を確認できません', 502, event.status === 429 || event.status >= 500);
+    const body = (await event.json()) as {
+      id?: string;
+      status?: string;
+      extendedProperties?: { private?: { managedBy?: string } };
+    };
+    if (body.status === 'cancelled') return;
+    if (body.id !== eventId || body.extendedProperties?.private?.managedBy !== 'oshi-schedule')
+      throw new AppError('GOOGLE_EVENT_NOT_MANAGED', '管理対象の予定ではありません', 409);
+    const deleted = await this.request(user.id, path, { method: 'DELETE' });
+    await this.rejectAuthorizationFailure(user.id, deleted);
+    if (deleted.status === 404 || deleted.status === 410) {
+      await checkAccess();
+      return;
+    }
+    if (!deleted.ok)
+      throw new AppError('GOOGLE_EVENT_DELETE_FAILED', '予定を削除できません', 502, deleted.status === 429 || deleted.status >= 500);
+  }
   async deleteCalendar(user: UserRecord, calendarId: string) {
     const response = await this.request(user.id, `/calendars/${encodeURIComponent(calendarId)}`, {
       method: 'DELETE',
     });
-    if (!response.ok && ![404, 410].includes(response.status))
-      throw new AppError('GOOGLE_CALENDAR_DELETE_FAILED', '専用カレンダーを削除できません', 502);
+    await this.rejectAuthorizationFailure(user.id, response);
+    // A 404 can also mean lost access; do not cascade-delete mappings on that response.
+    if (!response.ok && response.status !== 410)
+      throw new AppError('GOOGLE_CALENDAR_DELETE_FAILED', '専用カレンダーを削除できません', 502, response.status === 429 || response.status >= 500);
   }
   async revokeAuthorization(user: UserRecord) {
     const encrypted = await this.store.getEncryptedCredential(user.id);

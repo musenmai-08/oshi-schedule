@@ -135,8 +135,7 @@ export function Dashboard({
     }
   }, []);
   useEffect(() => {
-    void load();
-    void loadConnection();
+    void load().then(loadConnection);
   }, [load, loadConnection]);
   useEffect(() => {
     if (clearSetupQuery) router.replace(APP_ROUTES.dashboard, { scroll: false });
@@ -193,6 +192,7 @@ export function Dashboard({
       setPreview(null);
       setHandle('');
       await load();
+      await loadConnection();
       if (result.sync.status === 'FAILED') {
         setError('The channel was added, but the initial sync could not be started. Please retry.');
       } else {
@@ -312,6 +312,12 @@ export function Dashboard({
         >
           <AlertTitle>{connectionNotice.title}</AlertTitle>
           {connectionNotice.message}
+        </Alert>
+      )}
+      {connection.status === 'ready' && connection.me.channelReregistrationRequired && (
+        <Alert severity="warning" role="alert">
+          A channel registration expired because its YouTube data could not be refreshed. Add the
+          channel again to resume syncing.
         </Alert>
       )}
       {error && (

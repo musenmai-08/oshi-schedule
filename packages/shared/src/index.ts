@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const APP_NAME = 'Oshi Schedule';
 export const MAX_CHANNELS_PER_USER = 3;
 export const SYNC_LOOKAHEAD_DAYS = 30;
+export const YOUTUBE_API_DATA_RETENTION_DAYS = 22;
 export const MANUAL_SYNC_COOLDOWN_SECONDS = 300;
 export const entityIdSchema = z.string().cuid();
 
@@ -137,6 +138,7 @@ export interface MeView {
   email: string;
   onboardingCompleted: boolean;
   reauthRequired: boolean;
+  channelReregistrationRequired: boolean;
   calendarStatus: 'NOT_CONNECTED' | 'ACTIVE' | 'MISSING' | 'ERROR';
 }
 

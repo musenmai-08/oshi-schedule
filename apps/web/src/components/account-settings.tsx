@@ -163,7 +163,7 @@ export function AccountSettings() {
               アカウント削除
             </Typography>
             <Typography color="text.secondary">
-              登録チャンネル、同期情報、保存したGoogle認証情報と専用カレンダーを削除します。過去に別のカレンダーへコピーした予定は対象外です。
+              登録チャンネル、同期情報、保存したGoogle認証情報を削除します。Google連携が有効な場合は専用カレンダーも削除します。連携が失効している場合はGoogle Calendar側で削除してください。過去に別のカレンダーへコピーした予定は対象外です。
             </Typography>
             <Button
               color="error"
@@ -181,7 +181,7 @@ export function AccountSettings() {
         <DialogTitle>本当に削除しますか？</DialogTitle>
         <DialogContent>
           <Alert severity="error" sx={{ mb: 3 }}>
-            この操作は取り消せません。専用Googleカレンダーも削除されます。
+            この操作は取り消せません。Google連携が有効な場合は専用カレンダーも削除されます。
           </Alert>
           <Typography mb={1}>
             確認のため <strong>DELETE</strong> と入力してください。

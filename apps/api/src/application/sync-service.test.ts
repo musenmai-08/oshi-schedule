@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { SyncService } from './sync-service.js';
 import { MemoryStore } from '../infrastructure/database/memory-store.js';
 import { FakeCalendarGateway } from '../infrastructure/google-calendar/fake-calendar-gateway.js';
+import { GoogleCalendarGateway } from '../infrastructure/google-calendar/google-calendar-gateway.js';
+import { AesTokenCipher } from '../infrastructure/encryption/aes-token-cipher.js';
 import { AppError } from '../domain/errors.js';
 import type { AppLogger, MappingRecord, YouTubeGateway } from './models.js';
 import type { NormalizedBroadcast } from '../domain/scheduling.js';
@@ -15,12 +17,24 @@ class MutableYouTube implements YouTubeGateway {
   unavailableVideoIds: string[] = [];
   pause: Promise<void> | null = null;
   upcomingCalls = 0;
+  channelRefreshCalls = 0;
   async resolveHandle(handle: string) {
     return {
       id: 'external',
       youtubeChannelId: 'UC-sync',
       title: 'sync channel',
       handle,
+      thumbnailUrl: '',
+      channelUrl: '',
+    };
+  }
+  async resolveChannelId(youtubeChannelId: string) {
+    this.channelRefreshCalls += 1;
+    return {
+      id: youtubeChannelId,
+      youtubeChannelId,
+      title: 'sync channel',
+      handle: '@sync',
       thumbnailUrl: '',
       channelUrl: '',
     };
@@ -73,6 +87,12 @@ class CountingCalendar extends FakeCalendarGateway {
   }
 }
 
+class FailingDeleteCalendar extends FakeCalendarGateway {
+  override async deleteEvent() {
+    throw new AppError('GOOGLE_EVENT_DELETE_FAILED', 'failed', 502);
+  }
+}
+
 async function setup(store: MemoryStore) {
   const user = await store.ensureUser({ subject: 'sync-user', email: 'developer@example.com' });
   await store.completeOnboarding(
@@ -110,6 +130,28 @@ const broadcast = (overrides: Partial<NormalizedBroadcast> = {}): NormalizedBroa
 });
 
 describe('SyncService', () => {
+  it('refreshes channel metadata for a paused subscription before the retention deadline', async () => {
+    const store = new MemoryStore();
+    const { user, channel, subscription } = await setup(store);
+    channel.metadataFetchedAt = new Date('2026-07-01T00:00:00Z');
+    await store.updateSubscription(user.id, subscription.id, 'PAUSED');
+    const youtube = new MutableYouTube();
+    const sync = new SyncService(
+      store,
+      youtube,
+      new FakeCalendarGateway(),
+      { now: () => start },
+      logger,
+    );
+    await sync.runScheduled();
+    expect(youtube.channelRefreshCalls).toBe(1);
+    expect((await store.findChannelById(channel.id))?.metadataFetchedAt).not.toEqual(
+      new Date('2026-07-01T00:00:00Z'),
+    );
+    expect((await store.getSubscription(user.id, subscription.id))?.subscription.status).toBe(
+      'PAUSED',
+    );
+  });
   it('refreshes a stored started broadcast through videos details and applies the actual end once', async () => {
     const store = new MemoryStore();
     const { user, channel, subscription } = await setup(store);
@@ -165,7 +207,7 @@ describe('SyncService', () => {
     await service.syncSubscription(user.id, subscription.id, false);
     expect(calendar.events.size).toBe(1);
     const recreatedId = [...calendar.events.keys()][0]!;
-    expect(recreatedId).not.toBe(eventId);
+    expect(recreatedId).toBe(eventId);
     const [stored] = await store.listBroadcastsForSync(channel.id, current, null);
     expect((await store.getMapping(user.id, stored!.id))?.eventId).toBe(recreatedId);
   });
@@ -495,8 +537,20 @@ describe('SyncService', () => {
     const store = new MemoryStore();
     const { user, subscription } = await setup(store);
     const clock = { now: () => new Date('2026-07-20T10:00:00Z') };
-    const first = new SyncService(store, new MutableYouTube(), new FakeCalendarGateway(), clock, logger);
-    const second = new SyncService(store, new MutableYouTube(), new FakeCalendarGateway(), clock, logger);
+    const first = new SyncService(
+      store,
+      new MutableYouTube(),
+      new FakeCalendarGateway(),
+      clock,
+      logger,
+    );
+    const second = new SyncService(
+      store,
+      new MutableYouTube(),
+      new FakeCalendarGateway(),
+      clock,
+      logger,
+    );
     const queued = await first.queueSubscription(user.id, subscription.id);
 
     const results = await Promise.all([
@@ -803,5 +857,152 @@ describe('SyncService', () => {
       runId: store.syncRuns[0]?.id,
       errorCode: 'GOOGLE_CALENDAR_ERROR',
     });
+  });
+
+  it('deletes a 27-day-old channel without sending its old ID to YouTube', async () => {
+    const store = new MemoryStore();
+    const { user, channel, subscription } = await setup(store);
+    const now = new Date('2026-07-30T00:00:00Z');
+    channel.metadataFetchedAt = new Date(now.getTime() - 27 * 86_400_000);
+    const youtube = new MutableYouTube();
+    youtube.resolveChannelId = async () => {
+      youtube.channelRefreshCalls += 1;
+      throw new AppError('YOUTUBE_API_ERROR', 'failed', 502);
+    };
+    const service = new SyncService(store, youtube, new FakeCalendarGateway(), { now: () => now }, logger);
+    await service.runScheduled();
+    expect(youtube.channelRefreshCalls).toBe(0);
+    expect(await store.findChannelById(channel.id)).toBeNull();
+    expect(await store.getSubscription(user.id, subscription.id)).toBeNull();
+    expect((await store.findUserById(user.id))?.channelReregistrationRequired).toBe(true);
+    expect(youtube.upcomingCalls).toBe(0);
+  });
+
+  it('retries channel metadata refresh failures before the 22-day cleanup threshold', async () => {
+    const store = new MemoryStore();
+    const { user, channel, subscription } = await setup(store);
+    const now = new Date('2026-07-30T00:00:00Z');
+    channel.metadataFetchedAt = new Date(now.getTime() - 19 * 86_400_000);
+    const youtube = new MutableYouTube();
+    youtube.resolveChannelId = async () => {
+      youtube.channelRefreshCalls += 1;
+      throw new AppError('YOUTUBE_API_ERROR', 'failed', 502);
+    };
+    const service = new SyncService(store, youtube, new FakeCalendarGateway(), { now: () => now }, logger);
+    await service.runScheduled();
+    await service.runScheduled();
+    expect(youtube.channelRefreshCalls).toBe(2);
+    expect(await store.findChannelById(channel.id)).not.toBeNull();
+    expect(await store.getSubscription(user.id, subscription.id)).not.toBeNull();
+  });
+
+  it('preserves Calendar deletion targets when expired broadcasts are purged and retries failures', async () => {
+    const store = new MemoryStore();
+    const { user, channel } = await setup(store);
+    const observed = new Date('2026-07-01T00:00:00Z');
+    const now = new Date('2026-07-30T00:00:00Z');
+    channel.metadataFetchedAt = now;
+    const [saved] = await store.upsertBroadcasts(channel.id, [broadcast()], observed);
+    await store.saveMapping({ userId: user.id, broadcastId: saved!.id, eventId: 'event-stale', managedFieldsHash: 'hash' });
+    const failed = new SyncService(store, new MutableYouTube(), new FailingDeleteCalendar(), { now: () => now }, logger);
+    await failed.maintainYouTubeData(now);
+    expect(await store.getMapping(user.id, saved!.id)).not.toBeNull();
+    expect(await store.listPendingCalendarCleanup(100)).toMatchObject([{ eventId: 'event-stale' }]);
+    const calendar = new FakeCalendarGateway();
+    calendar.events.set('event-stale', { summary: 'old', description: 'old', start: now.toISOString(), end: now.toISOString(), status: 'confirmed', extendedProperties: { private: { managedBy: 'oshi-schedule' } } });
+    await new SyncService(store, new MutableYouTube(), calendar, { now: () => now }, logger).maintainYouTubeData(now);
+    expect(calendar.events.has('event-stale')).toBe(false);
+    expect(await store.listPendingCalendarCleanup(100)).toHaveLength(0);
+    expect(await store.getMapping(user.id, saved!.id)).toBeNull();
+    await new SyncService(store, new MutableYouTube(), calendar, { now: () => now }, logger).maintainYouTubeData(now);
+    expect(await store.listPendingCalendarCleanup(100)).toHaveLength(0);
+  });
+
+  it('removes mapping only after Calendar DELETE succeeds, then purges API data', async () => {
+    const store = new MemoryStore();
+    const { user, channel } = await setup(store);
+    const now = new Date('2026-07-30T00:00:00Z');
+    channel.metadataFetchedAt = now;
+    const [saved] = await store.upsertBroadcasts(channel.id, [broadcast()], new Date('2026-07-01T00:00:00Z'));
+    await store.saveMapping({ userId: user.id, broadcastId: saved!.id, eventId: 'managed-old', managedFieldsHash: 'hash' });
+    const calendar = new FakeCalendarGateway();
+    calendar.events.set('managed-old', { summary: 'old', description: 'old', start: now.toISOString(), end: now.toISOString(), status: 'confirmed', extendedProperties: { private: { managedBy: 'oshi-schedule' } } });
+    const order: string[] = [];
+    const originalDelete = calendar.deleteEvent.bind(calendar);
+    vi.spyOn(calendar, 'deleteEvent').mockImplementation(async (...args) => {
+      expect(await store.getMapping(user.id, saved!.id)).not.toBeNull();
+      order.push('calendar');
+      await originalDelete(...args);
+    });
+    const originalComplete = store.deleteCalendarCleanupTask.bind(store);
+    vi.spyOn(store, 'deleteCalendarCleanupTask').mockImplementation(async (id) => {
+      order.push('mapping');
+      await originalComplete(id);
+    });
+    await new SyncService(store, new MutableYouTube(), calendar, { now: () => now }, logger).maintainYouTubeData(now);
+    expect(order).toEqual(['calendar', 'mapping']);
+    expect(await store.getMapping(user.id, saved!.id)).toBeNull();
+    expect(await store.listPendingCalendarCleanup(100)).toHaveLength(0);
+    expect(await store.listBroadcastsForSync(channel.id, now, null)).toHaveLength(0);
+  });
+
+  it('does not retry Calendar deletion with revoked credentials while removing expired API data', async () => {
+    const store = new MemoryStore();
+    const { user, channel } = await setup(store);
+    const now = new Date('2026-07-30T00:00:00Z');
+    channel.metadataFetchedAt = now;
+    const [saved] = await store.upsertBroadcasts(channel.id, [broadcast()], new Date('2026-07-01T00:00:00Z'));
+    await store.saveMapping({ userId: user.id, broadcastId: saved!.id, eventId: 'event-revoked', managedFieldsHash: 'hash' });
+    await store.markReauthRequired(user.id);
+    await new SyncService(store, new MutableYouTube(), new FailingDeleteCalendar(), { now: () => now }, logger).maintainYouTubeData(now);
+    expect(await store.getMapping(user.id, saved!.id)).not.toBeNull();
+    expect(await store.listPendingCalendarCleanup(100)).toHaveLength(0);
+    expect(store.cleanupTasks).toMatchObject([{ eventId: 'event-revoked' }]);
+    await store.completeOnboarding(user.id, 'new-encrypted', 'v1', 'calendar-sync', 'scopes');
+    const calendar = new FakeCalendarGateway();
+    calendar.events.set('event-revoked', { summary: 'old', description: 'old', start: now.toISOString(), end: now.toISOString(), status: 'confirmed', extendedProperties: { private: { managedBy: 'oshi-schedule' } } });
+    await new SyncService(store, new MutableYouTube(), calendar, { now: () => now }, logger).maintainYouTubeData(now);
+    expect(await store.getMapping(user.id, saved!.id)).toBeNull();
+    expect(store.cleanupTasks).toHaveLength(0);
+  });
+
+  it.each(['decrypt', 'invalid_grant'] as const)('retains mapping and queue after %s credential failure', async (failure) => {
+    const store = new MemoryStore();
+    const { user, channel } = await setup(store);
+    const now = new Date('2026-07-30T00:00:00Z');
+    channel.metadataFetchedAt = now;
+    const [saved] = await store.upsertBroadcasts(channel.id, [broadcast()], new Date('2026-07-01T00:00:00Z'));
+    await store.saveMapping({ userId: user.id, broadcastId: saved!.id, eventId: 'credential-event', managedFieldsHash: 'hash' });
+    const key = new AesTokenCipher(`v1:${Buffer.alloc(32, 5).toString('base64')}`);
+    const encrypted = key.encrypt('refresh-token');
+    await store.saveCredential(user.id, encrypted.ciphertext, encrypted.keyId, 'scope');
+    const cipher = failure === 'decrypt'
+      ? new AesTokenCipher(`v1:${Buffer.alloc(32, 6).toString('base64')}`)
+      : key;
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ error: 'invalid_grant' }), { status: 400 }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const calendar = new GoogleCalendarGateway(store, cipher, 'client', 'secret');
+      await new SyncService(store, new MutableYouTube(), calendar, { now: () => now }, logger).maintainYouTubeData(now);
+      expect(await store.getMapping(user.id, saved!.id)).not.toBeNull();
+      expect(store.cleanupTasks).toMatchObject([{ eventId: 'credential-event' }]);
+      expect((await store.findUserById(user.id))?.reauthRequired).toBe(true);
+      expect(fetchMock).toHaveBeenCalledTimes(failure === 'decrypt' ? 0 : 1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('does not discard Calendar mappings when a channel ID changes', async () => {
+    const store = new MemoryStore();
+    const { user, channel } = await setup(store);
+    const [saved] = await store.upsertBroadcasts(channel.id, [broadcast()], start);
+    await store.saveMapping({ userId: user.id, broadcastId: saved!.id, eventId: 'event-old-channel', managedFieldsHash: 'hash' });
+    await expect(store.refreshChannel(channel.id, {
+      id: 'new', youtubeChannelId: 'UC-new', title: 'New channel', handle: '@new', thumbnailUrl: 'new', channelUrl: 'new',
+    }, new Date('2026-07-21T00:00:00Z'))).rejects.toMatchObject({ reason: 'CHANNEL_ID_CHANGED' });
+    expect((await store.findChannelById(channel.id))?.youtubeChannelId).not.toBe('UC-new');
+    expect(await store.getMapping(user.id, saved!.id)).not.toBeNull();
+    expect(store.broadcasts).toHaveLength(1);
   });
 });

@@ -30,6 +30,7 @@ export function createApiRouter(container: Container): ExpressRouter {
         email: user.email,
         onboardingCompleted: user.onboardingCompleted,
         reauthRequired: user.reauthRequired,
+        channelReregistrationRequired: user.channelReregistrationRequired,
         calendarStatus: user.calendarId ? 'ACTIVE' : 'NOT_CONNECTED',
       });
     }),

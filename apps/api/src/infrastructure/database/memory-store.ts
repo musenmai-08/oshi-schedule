@@ -1,9 +1,10 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import type { ChannelSummary, SubscriptionStatus } from '@oshi-schedule/shared';
+import { YOUTUBE_API_DATA_RETENTION_DAYS, type ChannelSummary, type SubscriptionStatus } from '@oshi-schedule/shared';
 import type {
   AuthIdentity,
   AccountDeletionRecord,
   BroadcastRecord,
+  CalendarCleanupRecord,
   ChannelRecord,
   MappingRecord,
   Store,
@@ -27,6 +28,7 @@ export class MemoryStore implements Store {
   private subscriptions: SubscriptionRecord[] = [];
   private broadcasts: BroadcastRecord[] = [];
   private mappings: MappingRecord[] = [];
+  private cleanupTasks: CalendarCleanupRecord[] = [];
   private deletions: AccountDeletionRecord[] = [];
   private leases = new Map<string, { ownerToken: string; expiresAt: Date; version: number }>();
   private quota = new Map<string, { unitsUsed: number; unitsReserved: number }>();
@@ -71,6 +73,7 @@ export class MemoryStore implements Store {
       email: 'developer@example.com',
       onboardingCompleted: true,
       reauthRequired: false,
+      channelReregistrationRequired: false,
       calendarId: 'fake-calendar-demo',
     });
   }
@@ -83,6 +86,7 @@ export class MemoryStore implements Store {
     this.subscriptions = [];
     this.broadcasts = [];
     this.mappings = [];
+    this.cleanupTasks = [];
     this.deletions = [];
     this.leases.clear();
     this.quota.clear();
@@ -105,6 +109,7 @@ export class MemoryStore implements Store {
       email: identity.email,
       onboardingCompleted: false,
       reauthRequired: false,
+      channelReregistrationRequired: false,
       calendarId: null,
     };
     this.users.push(user);
@@ -216,11 +221,21 @@ export class MemoryStore implements Store {
   async upsertChannel(input: ChannelSummary) {
     const found = await this.findChannelByYoutubeId(input.youtubeChannelId);
     if (found) {
-      Object.assign(found, input);
+      Object.assign(found, {
+        youtubeChannelId: input.youtubeChannelId,
+        title: input.title,
+        handle: input.handle,
+        thumbnailUrl: input.thumbnailUrl,
+        channelUrl: input.channelUrl,
+        metadataFetchedAt: new Date(),
+      });
       return found;
     }
     const channel: ChannelRecord = {
       ...input,
+      createdAt: new Date(),
+      metadataFetchedAt: new Date(),
+      metadataAttemptedAt: null,
       lastFetchedAt: null,
       fetchStartedAt: null,
       fetchCompletedAt: null,
@@ -231,6 +246,160 @@ export class MemoryStore implements Store {
     };
     this.channels.push(channel);
     return channel;
+  }
+  async refreshChannel(channelId: string, input: ChannelSummary, at: Date) {
+    const channel = await this.findChannelById(channelId);
+    if (!channel) throw new Error('channel not found');
+    if (channel.youtubeChannelId !== input.youtubeChannelId) {
+      throw new StoreConstraintError('CHANNEL_ID_CHANGED');
+    }
+    Object.assign(channel, {
+      youtubeChannelId: input.youtubeChannelId,
+      title: input.title,
+      handle: input.handle,
+      thumbnailUrl: input.thumbnailUrl,
+      channelUrl: input.channelUrl,
+      metadataFetchedAt: at,
+    });
+    return channel;
+  }
+  async listChannelsNeedingMetadataRefresh(before: Date) {
+    return this.channels
+      .filter(
+        (channel) =>
+          this.subscriptions.some((subscription) => subscription.channelId === channel.id) &&
+          (!channel.metadataFetchedAt || channel.metadataFetchedAt < before),
+      )
+      .sort(
+        (left, right) =>
+          (left.metadataAttemptedAt?.getTime() ?? 0) - (right.metadataAttemptedAt?.getTime() ?? 0),
+      )
+      .slice(0, 20);
+  }
+  async markChannelMetadataRefreshAttempt(channelId: string, at: Date) {
+    const channel = await this.findChannelById(channelId);
+    if (channel) channel.metadataAttemptedAt = at;
+  }
+  async maintainYouTubeData(retainAfter: Date) {
+    const expiredChannelIds = new Set(
+      this.channels
+        .filter((channel) => {
+          const fetchedOrCreated = channel.metadataFetchedAt ?? channel.createdAt;
+          return Boolean(
+            (fetchedOrCreated && fetchedOrCreated < retainAfter) ||
+              (!this.subscriptions.some((item) => item.channelId === channel.id) &&
+                channel.createdAt && channel.createdAt < retainAfter),
+          );
+        })
+        .map((channel) => channel.id),
+    );
+    const staleIds = new Set(
+      this.broadcasts
+        .filter((broadcast) => {
+          const fetchedOrCreated = broadcast.apiFetchedAt ?? broadcast.createdAt;
+          return (
+            expiredChannelIds.has(broadcast.channelId) ||
+            Boolean(fetchedOrCreated && fetchedOrCreated < retainAfter)
+          );
+        })
+        .map((broadcast) => broadcast.id),
+    );
+    const mappingsToRemove = this.mappings.filter((mapping) => {
+      const broadcast = this.broadcasts.find((item) => item.id === mapping.broadcastId);
+      return Boolean(
+        staleIds.has(mapping.broadcastId) ||
+          (broadcast &&
+            !this.subscriptions.some(
+              (subscription) =>
+                subscription.userId === mapping.userId &&
+                subscription.channelId === broadcast.channelId,
+            )),
+      );
+    });
+    for (const mapping of mappingsToRemove) {
+      const user = await this.findUserById(mapping.userId);
+      const calendarId = user?.calendarId ?? '';
+      if (
+        !this.cleanupTasks.some(
+          (task) =>
+            task.userId === mapping.userId &&
+            task.calendarId === calendarId &&
+            task.eventId === mapping.eventId,
+        )
+      )
+        this.cleanupTasks.push({
+          id: this.cuid(), userId: mapping.userId, calendarId, eventId: mapping.eventId,
+        });
+    }
+    const mappedIds = new Set(this.mappings.map((mapping) => mapping.broadcastId));
+    this.broadcasts = this.broadcasts.filter(
+      (broadcast) => !staleIds.has(broadcast.id) || mappedIds.has(broadcast.id),
+    );
+    const removableChannelIds = new Set(
+      [...expiredChannelIds].filter(
+        (id) => !this.broadcasts.some((broadcast) => broadcast.channelId === id),
+      ),
+    );
+    for (const subscription of this.subscriptions)
+      if (expiredChannelIds.has(subscription.channelId)) {
+        const user = await this.findUserById(subscription.userId);
+        if (user) user.channelReregistrationRequired = true;
+      }
+    this.subscriptions = this.subscriptions.filter(
+      (subscription) => !removableChannelIds.has(subscription.channelId),
+    );
+    this.channels = this.channels.filter((channel) => !removableChannelIds.has(channel.id));
+  }
+  async listPendingCalendarCleanup(limit: number, userId?: string) {
+    return this.cleanupTasks
+      .filter((task) => (!userId || task.userId === userId) && !this.users.find((user) => user.id === task.userId)?.reauthRequired)
+      .slice(0, limit);
+  }
+  async queueCalendarCleanup(userId: string, broadcastId: string, calendarId: string) {
+    const mapping = await this.getMapping(userId, broadcastId);
+    if (!mapping) return null;
+    const existing = this.cleanupTasks.find(
+      (task) => task.userId === userId && task.calendarId === calendarId && task.eventId === mapping.eventId,
+    );
+    if (existing) return existing;
+    const task = { id: this.cuid(), userId, calendarId, eventId: mapping.eventId };
+    this.cleanupTasks.push(task);
+    return task;
+  }
+  async queueUserCalendarCleanup(userId: string, calendarId: string) {
+    for (const mapping of this.mappings.filter((item) => item.userId === userId))
+      await this.queueCalendarCleanup(userId, mapping.broadcastId, calendarId);
+  }
+  async deleteCalendarCleanupTask(id: string) {
+    const task = this.cleanupTasks.find((item) => item.id === id);
+    if (!task) return;
+    this.mappings = this.mappings.filter(
+      (mapping) => mapping.userId !== task.userId || mapping.eventId !== task.eventId,
+    );
+    this.cleanupTasks = this.cleanupTasks.filter((task) => task.id !== id);
+  }
+  async hasMappingsForUser(userId: string) {
+    return this.mappings.some((mapping) => mapping.userId === userId) ||
+      this.cleanupTasks.some((task) => task.userId === userId);
+  }
+  async hasCalendarCleanupOutside(userId: string, calendarId: string) {
+    return this.cleanupTasks.some((task) => task.userId === userId && task.calendarId !== calendarId);
+  }
+  async countStaleYouTubeData(retainAfter: Date) {
+    return {
+      channels: this.channels.filter((channel) => {
+        const fetchedOrCreated = channel.metadataFetchedAt ?? channel.createdAt;
+        return Boolean(
+          fetchedOrCreated &&
+          fetchedOrCreated < retainAfter &&
+          this.subscriptions.some((subscription) => subscription.channelId === channel.id),
+        );
+      }).length,
+      broadcasts: this.broadcasts.filter((broadcast) => {
+        const fetchedOrCreated = broadcast.apiFetchedAt ?? broadcast.createdAt;
+        return Boolean(fetchedOrCreated && fetchedOrCreated < retainAfter);
+      }).length,
+    };
   }
   async createSubscriptionWithinLimit(userId: string, channelId: string, limit: number) {
     if (this.subscriptions.some((item) => item.userId === userId && item.channelId === channelId))
@@ -248,6 +417,8 @@ export class MemoryStore implements Store {
       lastErrorMessage: null,
     };
     this.subscriptions.push(item);
+    const user = await this.findUserById(userId);
+    if (user) user.channelReregistrationRequired = false;
     return item;
   }
   async getSubscription(userId: string, id: string) {
@@ -354,6 +525,7 @@ export class MemoryStore implements Store {
           found.actualEndAt?.getTime() !== input.actualEndAt?.getTime();
         Object.assign(found, input, {
           missingCount: 0,
+          apiFetchedAt: observedAt,
           ...(changed ? { sourceUpdatedAt: observedAt } : {}),
         });
         return found;
@@ -363,17 +535,21 @@ export class MemoryStore implements Store {
         id: this.cuid(),
         channelId,
         missingCount: 0,
+        createdAt: new Date(),
         sourceUpdatedAt: observedAt,
+        apiFetchedAt: observedAt,
       };
       this.broadcasts.push(item);
       return item;
     });
   }
   async listTrackableBroadcasts(channelId: string, now: Date, limit: number, windowDays: number) {
+    const retainAfter = now.getTime() - YOUTUBE_API_DATA_RETENTION_DAYS * 86_400_000;
     return this.broadcasts
       .filter(
         (item) =>
           item.channelId === channelId &&
+          ((item.apiFetchedAt ?? item.createdAt)?.getTime() ?? 0) > retainAfter &&
           item.scheduledStartAt >= new Date(now.getTime() - windowDays * 86_400_000) &&
           !['COMPLETED', 'CANCELLED'].includes(item.status),
       )
@@ -393,15 +569,20 @@ export class MemoryStore implements Store {
       );
   }
   async listFutureBroadcasts(channelId: string, now: Date) {
-    return this.broadcasts.filter(
-      (item) =>
-        item.channelId === channelId && item.scheduledStartAt > now && item.status !== 'CANCELLED',
-    );
-  }
-  async listBroadcastsForSync(channelId: string, now: Date, since: Date | null) {
+    const retainAfter = now.getTime() - YOUTUBE_API_DATA_RETENTION_DAYS * 86_400_000;
     return this.broadcasts.filter(
       (item) =>
         item.channelId === channelId &&
+        ((item.apiFetchedAt ?? item.createdAt)?.getTime() ?? 0) > retainAfter &&
+        item.scheduledStartAt > now && item.status !== 'CANCELLED',
+    );
+  }
+  async listBroadcastsForSync(channelId: string, now: Date, since: Date | null) {
+    const retainAfter = now.getTime() - YOUTUBE_API_DATA_RETENTION_DAYS * 86_400_000;
+    return this.broadcasts.filter(
+      (item) =>
+        item.channelId === channelId &&
+        ((item.apiFetchedAt ?? item.createdAt)?.getTime() ?? 0) > retainAfter &&
         (item.endAt >= now ||
           !since ||
           Boolean(item.sourceUpdatedAt && item.sourceUpdatedAt > since)),
@@ -413,20 +594,27 @@ export class MemoryStore implements Store {
       null
     );
   }
+  async listMappingsForUserChannel(userId: string, channelId: string) {
+    const broadcastIds = new Set(
+      this.broadcasts.filter((item) => item.channelId === channelId).map((item) => item.id),
+    );
+    return this.mappings.filter(
+      (item) => item.userId === userId && broadcastIds.has(item.broadcastId),
+    );
+  }
   async saveMapping(input: Omit<MappingRecord, 'id'>) {
+    if (this.cleanupTasks.some((task) => task.userId === input.userId && task.eventId === input.eventId))
+      throw new StoreConstraintError('CALENDAR_CLEANUP_PENDING');
     const found = await this.getMapping(input.userId, input.broadcastId);
     if (found) {
+      if (found.eventId !== input.eventId)
+        throw new StoreConstraintError('CALENDAR_MAPPING_EVENT_CHANGED');
       Object.assign(found, input);
       return found;
     }
     const item = { ...input, id: randomUUID() };
     this.mappings.push(item);
     return item;
-  }
-  async deleteMapping(userId: string, broadcastId: string) {
-    this.mappings = this.mappings.filter(
-      (item) => !(item.userId === userId && item.broadcastId === broadcastId),
-    );
   }
   async saveSyncResult(subscriptionId: string, result: SyncResult, at: Date, manual: boolean) {
     const item = this.subscriptions.find((row) => row.id === subscriptionId);
@@ -734,6 +922,7 @@ export class MemoryStore implements Store {
     this.credentials.delete(userId);
     this.subscriptions = this.subscriptions.filter((item) => item.userId !== userId);
     this.mappings = this.mappings.filter((item) => item.userId !== userId);
+    this.cleanupTasks = this.cleanupTasks.filter((item) => item.userId !== userId);
     const request = this.deletions.find((item) => item.id === requestId);
     if (request) {
       request.userId = null;

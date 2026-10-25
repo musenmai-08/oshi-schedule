@@ -49,6 +49,16 @@ upcoming 検索に加え、DB に保存済みで直近 `YOUTUBE_TRACKING_WINDOW_
 
 quota不足は `YOUTUBE_QUOTA_DEFERRED` と次回reset時刻へ変換する。YouTube requestは行わず、保存済みDBデータのCalendar同期を続け、target/subscription履歴をDEFERREDとして保存する。取得・DB更新・Calendar同期のphaseは別々に記録し、同期run全体は他targetを継続する。
 
+### YouTube API データの保持
+
+YouTube Data APIへの要求は`channels.list(part=snippet)`、`search.list(part=id)`、`videos.list(part=snippet,contentDetails,liveStreamingDetails,status)`であり、`statistics`は取得・保存しない。これらはAPI keyで取得する公開データ（Non-Authorized Data）である。Google OAuthは認証と専用Calendar用であり、YouTube所有者の認可を得るものではない。
+
+定期workerは登録中チャンネルのメタデータとIDを最終取得から18日を超えたら`channels.list(id)`で再取得する。配信は通常の予定・追跡取得時に最終API取得日時`apiFetchedAt`を更新する。再取得に成功すれば応答のID・名称・ハンドル・URL・サムネイルを保存する。IDが変わった場合、旧配信のCalendar mappingを先に消すことはせずrefreshを失敗扱いとし、期限到達時のcleanupへ委ねる。22日超のチャンネル・配信はまず`CalendarCleanupTask`へ削除対象を永続化する。workerは管理タグを確認してGoogle Calendar DELETEを行い、成功後にmappingとtaskを同一transactionで削除し、その後に参照されなくなった期限切れYouTube API Dataを削除する。DELETE失敗、credential復号不能、OAuth失効時はmapping・task・参照元データを保持し、再連携後に再試行する。404/410は対象Calendarへのアクセスを別途確認できた場合だけevent不存在として扱う。NULL取得日時は作成日時を基準とし、現在日時で補填しない。通常の表示・追跡・同期queryは22日以上古い配信を除外し、チャンネルも表示・同期・refresh前に期限を確認する。権限失効等でmappingが残る間はDB上の期限切れデータの物理削除も遅れるため、監視と利用者再連携が必要であり、30日以内の無条件の物理削除は保証しない。backupからのrestoreは切替前の期限検査・cleanupを必須とする。
+
+Schedulerを有効にする環境では、定期workerの`scheduled_sync_completed`ログをCloudWatch metricへ変換し、6時間失敗0件の完了がない場合にSNSで通知する。定期同期の失敗件数、Scheduler DLQ滞留、cleanup後に残る22日超のチャンネル・配信件数も通知する。これは停止・失敗・stale行の早期検知であり、自動修復・Google Calendar/S3上の残存監視・30日以内削除の絶対保証ではない。SNS購読の確認と通知先の対応運用が必要である。
+
+チャンネル登録解除は当該利用者・チャンネルの管理対象Calendar eventを過去分も含めて削除した後にsubscriptionを削除する。アカウント削除は対象mappingをqueueへ記録し、専用Calendarの削除に成功してからGoogle認可、利用者レコードと関連mappingを段階的に削除する。共有チャンネルは他の登録者がいれば保持期限に従う。Google連携が失効してCalendarを削除できない場合はmapping・queue・利用者レコードを保持して再連携を待つ。旧Calendarにアクセスできない等で再連携だけでは解消しない場合は、削除済みの証跡を得たうえで別途運用判断が必要であり、404のみでは自動的に成功扱いしない。Google側での権限取り消しはCalendar tokenの`invalid_grant`で再認証要求として検知する。保存データの削除は設定画面のアカウント削除または問い合わせで申請する。
+
 ## 差分・冪等性
 
 - Broadcast は YouTube video ID、Mapping は `(userId,broadcastId)` が一意。
@@ -80,4 +90,4 @@ SQS/Pipesはat-least-onceでありexactly-onceではない。PipeがRunTaskを�
 
 定期workerは対象ごとの結果を `total/success/skipped/deferred/failed` だけに集計して構造化ログへ出し、利用者・subscription・Calendar・tokenをサマリーへ含めない。SUCCESS/SKIPPED/DEFERREDと対象0件は終了コード0、FAILEDが1件以上または未処理例外・DB/設定不正は終了コード1とし、schedulerが部分失敗も検知できるようにする。
 
-登録解除は所有者条件で subscription を取得し、`scheduledStartAt` が現在より未来の mapping だけを処理する。Google DELETE 成功または 404/410 の後に mapping を削除し、全件完了後に subscription を削除する。一部失敗時は subscription と未処理 mapping が残るため再実行でき、過去 event、他 User の mapping、共有 Channel/Broadcast は保持する。
+登録解除は所有者条件で subscription を取得し、当該チャンネルの全 mapping を処理する。削除対象をqueueへ記録し、管理タグを確認してGoogle DELETEに成功した後だけmappingとqueueを削除し、全件完了後にsubscriptionを削除する。404/410はCalendarへのアクセスを確認できた場合のみ不存在として扱う。一部失敗時はsubscription、未処理mappingとqueueが残るため再実行でき、他Userのmapping、共有Channel/Broadcastは保持する。

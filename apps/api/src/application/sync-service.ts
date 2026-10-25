@@ -1,4 +1,4 @@
-import { MANUAL_SYNC_COOLDOWN_SECONDS, SYNC_LOOKAHEAD_DAYS } from '@oshi-schedule/shared';
+import { MANUAL_SYNC_COOLDOWN_SECONDS, SYNC_LOOKAHEAD_DAYS, YOUTUBE_API_DATA_RETENTION_DAYS } from '@oshi-schedule/shared';
 import { createHash, randomUUID } from 'node:crypto';
 import { AppError, StoreConstraintError, WorkerExecutionError } from '../domain/errors.js';
 import {
@@ -21,6 +21,8 @@ import type {
 const STALE_SYNC_RUN_MILLISECONDS = 24 * 60 * 60_000;
 const SYNC_RUN_RETENTION_MILLISECONDS = 90 * 24 * 60 * 60_000;
 const ACCOUNT_DELETION_TOMBSTONE_RETENTION_MILLISECONDS = 30 * 24 * 60 * 60_000;
+const YOUTUBE_API_DATA_REFRESH_MILLISECONDS = 18 * 24 * 60 * 60_000;
+const YOUTUBE_API_DATA_RETENTION_MILLISECONDS = YOUTUBE_API_DATA_RETENTION_DAYS * 86_400_000;
 const TARGETED_RUN_STALE_MILLISECONDS = 30 * 60_000;
 
 const deterministicEventId = (userId: string, youtubeVideoId: string) =>
@@ -43,6 +45,35 @@ export class SyncService {
     private readonly sleep: (milliseconds: number) => Promise<void> = (milliseconds) =>
       new Promise((resolve) => setTimeout(resolve, milliseconds)),
   ) {}
+
+  async maintainYouTubeData(now: Date, cleanupCalendar = true) {
+    const retainAfter = new Date(now.getTime() - YOUTUBE_API_DATA_RETENTION_MILLISECONDS);
+    // The first pass records deletion targets but retains mappings and their parent API data.
+    await this.store.maintainYouTubeData(retainAfter);
+    if (!cleanupCalendar) return;
+    await this.retryCalendarCleanup();
+    // Only rows whose Calendar mappings were successfully removed can be purged.
+    await this.store.maintainYouTubeData(retainAfter);
+  }
+
+  async retryCalendarCleanup(userId?: string) {
+    const tasks = await this.store.listPendingCalendarCleanup(100, userId);
+    for (const task of tasks) {
+      const user = await this.store.findUserById(task.userId);
+      if (!user || user.reauthRequired) continue;
+      const calendarId = task.calendarId || user.calendarId;
+      if (!calendarId) continue;
+      try {
+        await this.calendar.deleteManagedEvent(user, calendarId, task.eventId);
+        await this.store.deleteCalendarCleanupTask(task.id);
+      } catch (error) {
+        this.logger.error(
+          { event: 'calendar_retention_cleanup_failed', errorCode: error instanceof AppError ? error.code : 'CALENDAR_ERROR' },
+          'Calendar retention cleanup failed',
+        );
+      }
+    }
+  }
 
   private async renewLease(lease: LeaseOwnership, runId?: string) {
     const now = this.clock.now();
@@ -175,8 +206,12 @@ export class SyncService {
     quotaMode: YouTubeQuotaMode = manual ? 'MANUAL' : 'SCHEDULED',
     finishExistingRun = false,
   ) {
+    if (manual) await this.maintainYouTubeData(this.clock.now());
     const target = await this.store.getSubscription(userId, subscriptionId);
     if (!target) throw new AppError('NOT_FOUND', '対象が見つかりません', 404);
+    const fetchedOrCreated = target.channel.metadataFetchedAt ?? target.channel.createdAt;
+    if (!fetchedOrCreated || fetchedOrCreated.getTime() <= this.clock.now().getTime() - YOUTUBE_API_DATA_RETENTION_MILLISECONDS)
+      throw new AppError('CHANNEL_RE_REGISTRATION_REQUIRED', 'チャンネルを再登録してください', 409);
     if (target.subscription.status === 'PAUSED')
       throw new AppError('SUBSCRIPTION_PAUSED', '一時停止中です', 409);
     const now = this.clock.now();
@@ -479,6 +514,35 @@ export class SyncService {
 
   async runScheduled() {
     const now = this.clock.now();
+    await this.maintainYouTubeData(now);
+    const staleChannels = await this.store.listChannelsNeedingMetadataRefresh(
+      new Date(now.getTime() - YOUTUBE_API_DATA_REFRESH_MILLISECONDS),
+    );
+    for (const channel of staleChannels) {
+      const fetchedOrCreated = channel.metadataFetchedAt ?? channel.createdAt;
+      if (!fetchedOrCreated || fetchedOrCreated < new Date(now.getTime() - YOUTUBE_API_DATA_RETENTION_MILLISECONDS))
+        continue;
+      try {
+        await this.store.markChannelMetadataRefreshAttempt(channel.id, this.clock.now());
+        const refreshed = await this.youtube.resolveChannelId(channel.youtubeChannelId, {
+          mode: 'SCHEDULED',
+        });
+        await this.store.refreshChannel(channel.id, refreshed, this.clock.now());
+      } catch (error) {
+        this.logger.error(
+          {
+            event: 'youtube_channel_metadata_refresh_failed',
+            channelId: channel.id,
+            errorCode: error instanceof AppError ? error.code : 'YOUTUBE_API_ERROR',
+          },
+          'YouTube channel metadata refresh failed',
+        );
+      }
+    }
+    const staleData = await this.store.countStaleYouTubeData(
+      new Date(now.getTime() - YOUTUBE_API_DATA_RETENTION_MILLISECONDS),
+    );
+    this.logger.info({ event: 'youtube_stale_data_audit', ...staleData }, 'YouTube data age audit');
     await this.store.maintainSyncRuns(
       new Date(now.getTime() - STALE_SYNC_RUN_MILLISECONDS),
       new Date(now.getTime() - SYNC_RUN_RETENTION_MILLISECONDS),
@@ -487,7 +551,9 @@ export class SyncService {
     await this.store.purgeCompletedAccountDeletionRequests(
       new Date(now.getTime() - ACCOUNT_DELETION_TOMBSTONE_RETENTION_MILLISECONDS),
     );
-    const targets = await this.store.listActiveSubscriptions();
+    const targets = (await this.store.listActiveSubscriptions()).filter(({ channel }) =>
+      ((channel.metadataFetchedAt ?? channel.createdAt)?.getTime() ?? 0) > now.getTime() - YOUTUBE_API_DATA_RETENTION_MILLISECONDS,
+    );
     const runId = await this.store.startSyncRun('SCHEDULED', null, targets.length, now);
     const results: Array<{ subscriptionId: string; status: string }> = [];
     for (const target of targets) {

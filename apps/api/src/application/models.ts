@@ -11,9 +11,13 @@ export interface UserRecord {
   email: string;
   onboardingCompleted: boolean;
   reauthRequired: boolean;
+  channelReregistrationRequired: boolean;
   calendarId: string | null;
 }
 export interface ChannelRecord extends ChannelSummary {
+  createdAt?: Date;
+  metadataFetchedAt?: Date | null;
+  metadataAttemptedAt?: Date | null;
   lastFetchedAt: Date | null;
   fetchStartedAt: Date | null;
   fetchCompletedAt: Date | null;
@@ -35,8 +39,10 @@ export interface SubscriptionRecord {
 export interface BroadcastRecord extends NormalizedBroadcast {
   id: string;
   channelId: string;
+  createdAt?: Date;
   missingCount: number;
   sourceUpdatedAt: Date | null;
+  apiFetchedAt?: Date | null;
 }
 export interface MappingRecord {
   id: string;
@@ -44,6 +50,12 @@ export interface MappingRecord {
   broadcastId: string;
   eventId: string;
   managedFieldsHash: string;
+}
+export interface CalendarCleanupRecord {
+  id: string;
+  userId: string;
+  calendarId: string;
+  eventId: string;
 }
 export interface SyncResult {
   status: 'QUEUED' | 'RUNNING' | 'SUCCESS' | 'FAILED' | 'SKIPPED' | 'DEFERRED';
@@ -163,6 +175,17 @@ export interface Store {
   findChannelByYoutubeId(youtubeChannelId: string): Promise<ChannelRecord | null>;
   findChannelById(id: string): Promise<ChannelRecord | null>;
   upsertChannel(channel: ChannelSummary): Promise<ChannelRecord>;
+  refreshChannel(channelId: string, channel: ChannelSummary, at: Date): Promise<ChannelRecord>;
+  listChannelsNeedingMetadataRefresh(before: Date): Promise<ChannelRecord[]>;
+  markChannelMetadataRefreshAttempt(channelId: string, at: Date): Promise<void>;
+  maintainYouTubeData(retainAfter: Date): Promise<void>;
+  countStaleYouTubeData(retainAfter: Date): Promise<{ channels: number; broadcasts: number }>;
+  listPendingCalendarCleanup(limit: number, userId?: string): Promise<CalendarCleanupRecord[]>;
+  queueCalendarCleanup(userId: string, broadcastId: string, calendarId: string): Promise<CalendarCleanupRecord | null>;
+  queueUserCalendarCleanup(userId: string, calendarId: string): Promise<void>;
+  deleteCalendarCleanupTask(id: string): Promise<void>;
+  hasMappingsForUser(userId: string): Promise<boolean>;
+  hasCalendarCleanupOutside(userId: string, calendarId: string): Promise<boolean>;
   createSubscriptionWithinLimit(
     userId: string,
     channelId: string,
@@ -220,8 +243,8 @@ export interface Store {
     since: Date | null,
   ): Promise<BroadcastRecord[]>;
   getMapping(userId: string, broadcastId: string): Promise<MappingRecord | null>;
+  listMappingsForUserChannel(userId: string, channelId: string): Promise<MappingRecord[]>;
   saveMapping(mapping: Omit<MappingRecord, 'id'>): Promise<MappingRecord>;
-  deleteMapping(userId: string, broadcastId: string): Promise<void>;
   saveSyncResult(
     subscriptionId: string,
     result: SyncResult,
@@ -287,6 +310,10 @@ export interface Store {
 
 export interface YouTubeGateway {
   resolveHandle(handle: string, context?: YouTubeRequestContext): Promise<ChannelSummary>;
+  resolveChannelId(
+    youtubeChannelId: string,
+    context?: YouTubeRequestContext,
+  ): Promise<ChannelSummary>;
   listUpcoming(
     channel: ChannelRecord,
     from: Date,
@@ -312,6 +339,7 @@ export interface CalendarGateway {
     deterministicId?: boolean,
   ): Promise<string>;
   deleteEvent(user: UserRecord, calendarId: string, eventId: string): Promise<void>;
+  deleteManagedEvent(user: UserRecord, calendarId: string, eventId: string): Promise<void>;
   deleteCalendar(user: UserRecord, calendarId: string): Promise<void>;
   revokeAuthorization(user: UserRecord): Promise<void>;
 }

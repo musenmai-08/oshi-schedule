@@ -4,6 +4,7 @@
 
 - GitHub Actions `Backup production database`が毎日02:15 JST頃にproduction Supabase Postgresの`app` schemaだけを`pg_dump --format custom`で取得する。
 - dumpは公開しないS3 bucketへSSE-S3で保存し、bucket lifecycleで作成から7日後に削除する。
+- dumpにはYouTube API由来のチャンネルID、チャンネル・配信メタデータ、Calendar対応情報が含まれる。bucketはversioning無効。Lifecycleの7日経過は削除対象化の時点であり、物理削除の厳密な上限ではない。
 - Authを含むSupabase管理schemaはこのdumpの対象外である。Supabase Authの復旧はSupabase側のproject recoveryと別に扱う。
 - backup jobはdirect接続またはSupavisor session mode用のmigration URLを使う。transaction poolerは使わない。
 - Secret値、DB URL、dump内容をActions log、artifact、Gitへ出さない。
@@ -37,9 +38,11 @@ restoreは既存production DBへ直接上書きしない。
    ```
 
 4. 一時DBの`app._prisma_migrations`から完了済み・未rollbackの`migration_name,checksum`だけをCSV取得し、`node scripts/database/migration-state.mjs verify-restored state.csv migrations.json <release-commit>`を実行する。manifest・復元DB・release commitの3者が一致しなければ復旧先へ昇格しない。その後table件数、foreign key、unique index、SyncLease/quotaの整合を確認する。credential暗号文や個人情報は表示しない。
-5. アプリをread-only確認先へ接続して`/ready`と匿名化した主要件数を確認する。
-6. 復旧先をproductionへ昇格する場合は、OAuth/Calendar/Syncを停止したmaintenance windowと別承認を必要とする。DNSやSecretを自動的に切り替えない。
-7. rehearsal用DB、credential、local dumpは別承認で削除し、結果と実RPOだけを記録する。
+5. 復旧先のYouTube API Data年齢を必ず調べる。`metadataFetchedAt`/`apiFetchedAt`がNULLなら`createdAt`を基準にする。22日超と30日以上のチャンネル・配信の件数、orphan mapping件数、Calendar削除待ち件数を記録する。NULLを現在時刻でbackfillして期限を延長しない。
+6. アプリをread-only確認先へ接続して`/ready`と匿名化した主要件数を確認する。アプリの通常表示・同期は22日以上の古いYouTube API Dataを除外するが、これはDBからの物理削除の代わりではない。
+7. 復旧先をproductionへ昇格する前に、OAuth/Calendar/Syncを停止したmaintenance windowと別承認を得る。旧production workerを停止し、移行後のコード・migrationを適用してから、復旧先でretention cleanupを実行する。Calendar削除対象を永続queueへ記録し、管理イベントのDELETE成功後だけmappingと対応するAPI Dataを削除する。DELETE失敗時はmapping・queueを保持して再連携/再試行する。30日以上のYouTube API Dataが0件であること、cleanup queueの未処理件数と理由を確認し、期限超過データが残る場合は切替を中止する。
+8. 上記の確認が完了するまで、復旧先へ通常API・web trafficを流さない。DNSやSecretを自動的に切り替えない。
+9. rehearsal用DB、credential、local dumpは別承認で削除し、結果と実RPOだけを記録する。
 
 ## Recovery point
 

@@ -1,4 +1,4 @@
-import { MAX_CHANNELS_PER_USER } from '@oshi-schedule/shared';
+import { MAX_CHANNELS_PER_USER, YOUTUBE_API_DATA_RETENTION_DAYS } from '@oshi-schedule/shared';
 import { randomUUID } from 'node:crypto';
 import { AppError, StoreConstraintError } from '../domain/errors.js';
 import type {
@@ -43,7 +43,8 @@ export class OshiService {
   }
 
   async onboard(identity: AuthIdentity, refreshToken: string) {
-    if (await this.store.findAccountDeletion(identity.subject))
+    const deletion = await this.store.findAccountDeletion(identity.subject);
+    if (deletion && !(deletion.status === 'FAILED' && deletion.userId && !deletion.calendarDeletedAt))
       throw new AppError('ACCOUNT_DELETED', '削除済みのアカウントです', 410);
     const user = await this.store.ensureUser(identity);
     let scopes: string;
@@ -60,13 +61,15 @@ export class OshiService {
     const encrypted = this.cipher.encrypt(refreshToken);
     await this.store.saveCredential(user.id, encrypted.ciphertext, encrypted.keyId, scopes);
     const calendarId = await this.calendar.ensureCalendar(user);
-    return this.store.completeOnboarding(
+    const connected = await this.store.completeOnboarding(
       user.id,
       encrypted.ciphertext,
       encrypted.keyId,
       calendarId,
       scopes,
     );
+    await this.sync.retryCalendarCleanup(user.id);
+    return connected;
   }
 
   async resolve(identity: AuthIdentity, handle: string) {
@@ -77,12 +80,22 @@ export class OshiService {
 
   async list(identity: AuthIdentity) {
     const user = await this.requireActiveUser(identity);
-    return this.store.listSubscriptions(user.id);
+    await this.sync.maintainYouTubeData(this.clock.now(), false);
+    const retainAfter = this.clock.now().getTime() - YOUTUBE_API_DATA_RETENTION_DAYS * 86_400_000;
+    return (await this.store.listSubscriptions(user.id)).filter(({ channel }) =>
+      ((channel.metadataFetchedAt ?? channel.createdAt)?.getTime() ?? 0) > retainAfter,
+    );
   }
 
   async register(identity: AuthIdentity, youtubeChannelId: string) {
     const user = await this.requireActiveUser(identity);
-    const channel = await this.store.findChannelByYoutubeId(youtubeChannelId);
+    let channel = await this.store.findChannelByYoutubeId(youtubeChannelId);
+    const fetchedOrCreated = channel?.metadataFetchedAt ?? channel?.createdAt;
+    if (channel && (!fetchedOrCreated || fetchedOrCreated.getTime() <= this.clock.now().getTime() - YOUTUBE_API_DATA_RETENTION_DAYS * 86_400_000)) {
+      await this.sync.maintainYouTubeData(this.clock.now(), false);
+      channel = await this.store.findChannelByYoutubeId(youtubeChannelId);
+      if (channel) throw new AppError('CHANNEL_RE_REGISTRATION_REQUIRED', 'チャンネルを再検索してください', 409);
+    }
     if (!channel)
       throw new AppError('CHANNEL_NOT_RESOLVED', '先にチャンネルを検索してください', 409);
     try {
@@ -188,15 +201,14 @@ export class OshiService {
     const user = await this.requireActiveUser(identity);
     const target = await this.store.getSubscription(user.id, id);
     if (!target) throw new AppError('NOT_FOUND', '対象が見つかりません', 404);
-    if (user.calendarId) {
-      const broadcasts = await this.store.listFutureBroadcasts(target.channel.id, this.clock.now());
-      for (const item of broadcasts) {
-        const mapping = await this.store.getMapping(user.id, item.id);
-        if (mapping) {
-          await this.calendar.deleteEvent(user, user.calendarId, mapping.eventId);
-          await this.store.deleteMapping(user.id, item.id);
-        }
-      }
+    const mappings = await this.store.listMappingsForUserChannel(user.id, target.channel.id);
+    if (mappings.length && !user.calendarId)
+      throw new AppError('GOOGLE_REAUTH_REQUIRED', 'Googleの再連携が必要です', 401);
+    for (const mapping of mappings) {
+      const task = await this.store.queueCalendarCleanup(user.id, mapping.broadcastId, user.calendarId!);
+      if (!task) continue;
+      await this.calendar.deleteManagedEvent(user, task.calendarId, task.eventId);
+      await this.store.deleteCalendarCleanupTask(task.id);
     }
     await this.store.deleteSubscription(user.id, id);
   }
@@ -246,13 +258,13 @@ export class OshiService {
     try {
       if (!deletion.calendarDeletedAt) {
         await renewLease();
+        if (user && !deletion.calendarIdSnapshot && await this.store.hasMappingsForUser(user.id))
+          throw new AppError('GOOGLE_REAUTH_REQUIRED', 'Googleの再連携が必要です', 401);
         if (user && deletion.calendarIdSnapshot) {
-          try {
-            await this.calendar.deleteCalendar(user, deletion.calendarIdSnapshot);
-          } catch (error) {
-            if (!(error instanceof AppError) || error.code !== 'GOOGLE_REAUTH_REQUIRED')
-              throw error;
-          }
+          await this.store.queueUserCalendarCleanup(user.id, deletion.calendarIdSnapshot);
+          if (await this.store.hasCalendarCleanupOutside(user.id, deletion.calendarIdSnapshot))
+            throw new AppError('CALENDAR_CLEANUP_PENDING', 'Googleカレンダーの予定削除が保留中です', 409, true);
+          await this.calendar.deleteCalendar(user, deletion.calendarIdSnapshot);
         }
         await renewLease();
         const at = now();

@@ -40,6 +40,32 @@ describe('YouTubeDataGateway', () => {
     retryBaseDelayMs: 1,
     retryMaxDelayMs: 5_000,
   };
+  it('refreshes channel metadata by stable ID without requesting statistics', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      json({
+        items: [
+          {
+            id: 'UC-test',
+            snippet: {
+              title: 'Current title',
+              customUrl: '@current',
+              thumbnails: { default: { url: 'https://example.com/current.png' } },
+            },
+          },
+        ],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const gateway = new YouTubeDataGateway('test-key');
+    expect(await gateway.resolveChannelId('UC-test')).toMatchObject({
+      youtubeChannelId: 'UC-test',
+      title: 'Current title',
+      handle: '@current',
+    });
+    const request = new URL(String(fetchMock.mock.calls[0]?.[0]));
+    expect(request.searchParams.get('part')).toBe('snippet');
+    expect(request.searchParams.get('id')).toBe('UC-test');
+  });
   it('does not infer premiere from duration and follows a completed broadcast by video ID', async () => {
     const fetchMock = vi
       .fn<typeof fetch>()

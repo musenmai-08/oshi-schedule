@@ -252,6 +252,28 @@ export class YouTubeDataGateway implements YouTubeGateway {
       channelUrl: `https://www.youtube.com/channel/${item.id}`,
     };
   }
+  async resolveChannelId(
+    youtubeChannelId: string,
+    context: YouTubeRequestContext = { mode: 'SCHEDULED' },
+  ) {
+    const response = await this.get<YouTubeList<ChannelItem>>(
+      'channels',
+      new URLSearchParams({ part: 'snippet', id: youtubeChannelId }),
+      context,
+    );
+    const item = response.items?.[0];
+    if (!item?.id || !item.snippet?.title)
+      throw new AppError('CHANNEL_NOT_FOUND', 'チャンネルが見つかりません', 404);
+    return {
+      id: item.id,
+      youtubeChannelId: item.id,
+      title: item.snippet.title,
+      handle: item.snippet.customUrl ?? '',
+      thumbnailUrl:
+        item.snippet.thumbnails?.high?.url ?? item.snippet.thumbnails?.default?.url ?? '',
+      channelUrl: `https://www.youtube.com/channel/${item.id}`,
+    };
+  }
   async listUpcoming(
     channel: ChannelRecord,
     from: Date,

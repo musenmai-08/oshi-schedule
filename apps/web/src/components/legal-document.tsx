@@ -14,10 +14,12 @@ export interface LegalSection {
 export function LegalDocument({
   title,
   effectiveDate,
+  lastUpdatedDate,
   sections,
 }: {
   title: string;
   effectiveDate: string;
+  lastUpdatedDate: string;
   sections: LegalSection[];
 }) {
   return (
@@ -43,7 +45,7 @@ export function LegalDocument({
                   {title}
                 </Typography>
                 <Typography color="text.secondary" mt={1}>
-                  制定日・最終更新日：{effectiveDate}
+                  制定日：{effectiveDate}・最終更新日：{lastUpdatedDate}
                 </Typography>
               </Box>
               {sections.map((section) => (

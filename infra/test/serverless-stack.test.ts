@@ -72,8 +72,7 @@ const renderStack = (stackName: string, stackConfig: DeploymentConfig) => {
 };
 
 let productionTemplate: Template | undefined;
-const render = () =>
-  (productionTemplate ??= renderStack('serverless-production', config));
+const render = () => (productionTemplate ??= renderStack('serverless-production', config));
 
 const productionPhaseTemplates = new Map<'detached' | 'connected', Template>();
 const renderProductionPhase = (amplifyConnectionPhase: 'detached' | 'connected') => {
@@ -98,6 +97,53 @@ const renderStagingPreview = () =>
   }));
 
 describe('ServerlessOshiScheduleStack', () => {
+  it('alarms on missing scheduled completions and scheduler DLQ messages', () => {
+    render().hasResourceProperties('AWS::Logs::MetricFilter', {
+      FilterPattern: Match.stringLikeRegexp('scheduled_sync_completed'),
+      MetricTransformations: [
+        Match.objectLike({ MetricName: 'ScheduledCompletions', MetricValue: '1' }),
+      ],
+    });
+    render().hasResourceProperties('AWS::Logs::MetricFilter', {
+      FilterPattern: Match.stringLikeRegexp('failed > 0'),
+      MetricTransformations: [
+        Match.objectLike({ MetricName: 'ScheduledFailures', MetricValue: '$.failed' }),
+      ],
+    });
+    render().hasResourceProperties('AWS::Logs::MetricFilter', {
+      FilterPattern: Match.stringLikeRegexp('channels > 0'),
+      MetricTransformations: [Match.objectLike({ MetricName: 'StaleChannels' })],
+    });
+    render().hasResourceProperties('AWS::Logs::MetricFilter', {
+      FilterPattern: Match.stringLikeRegexp('broadcasts > 0'),
+      MetricTransformations: [Match.objectLike({ MetricName: 'StaleBroadcasts' })],
+    });
+    render().hasResourceProperties('AWS::Logs::MetricFilter', {
+      FilterPattern: Match.stringLikeRegexp('calendar_retention_cleanup_failed'),
+      MetricTransformations: [Match.objectLike({ MetricName: 'CalendarCleanupFailures' })],
+    });
+    render().hasResourceProperties('AWS::Logs::MetricFilter', {
+      FilterPattern: Match.stringLikeRegexp('youtube_channel_metadata_refresh_failed'),
+      MetricTransformations: [Match.objectLike({ MetricName: 'ChannelRefreshFailures' })],
+    });
+    render().hasResourceProperties('AWS::CloudWatch::Alarm', {
+      ComparisonOperator: 'LessThanThreshold',
+      TreatMissingData: 'breaching',
+      Threshold: 1,
+      Period: 21600,
+    });
+    render().hasResourceProperties('AWS::CloudWatch::Alarm', {
+      MetricName: 'ApproximateNumberOfMessagesVisible',
+      Threshold: 1,
+    });
+    expect(
+      Object.values(renderStagingPreview().findResources('AWS::CloudWatch::Alarm')).some(
+        (resource) =>
+          (resource as { Properties?: { TreatMissingData?: string } }).Properties
+            ?.TreatMissingData === 'breaching',
+      ),
+    ).toBe(false);
+  }, 20_000);
   it('supplies Node createRequire to ESM Lambda bundles with CommonJS dependencies', () => {
     expect(lambdaBundling.format).toBeDefined();
     expect(lambdaBundling.banner).toContain('createRequire');

@@ -16,6 +16,16 @@ export class FakeYouTubeGateway implements YouTubeGateway {
       channelUrl: `https://www.youtube.com/${handle}`,
     };
   }
+  async resolveChannelId(youtubeChannelId: string): Promise<ChannelSummary> {
+    return {
+      id: youtubeChannelId,
+      youtubeChannelId,
+      title: 'YouTube channel',
+      handle: '',
+      thumbnailUrl: '',
+      channelUrl: `https://www.youtube.com/channel/${youtubeChannelId}`,
+    };
+  }
   async listUpcoming(channel: ChannelRecord, from: Date, to: Date) {
     const start = new Date(from.getTime() + 24 * 60 * 60_000);
     if (start > to) return [];
