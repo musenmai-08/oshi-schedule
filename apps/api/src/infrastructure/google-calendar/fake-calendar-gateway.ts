@@ -32,10 +32,16 @@ export class FakeCalendarGateway implements CalendarGateway {
   async deleteEvent(_user: UserRecord, _calendarId: string, eventId: string) {
     this.events.delete(eventId);
   }
-  async deleteManagedEvent(user: UserRecord, calendarId: string, eventId: string) {
+  async deleteManagedEvent(user: UserRecord, calendarId: string, eventId: string, notAfter?: Date) {
     const event = this.events.get(eventId);
     if (event && event.extendedProperties.private.managedBy !== 'oshi-schedule')
       throw new Error('GOOGLE_EVENT_NOT_MANAGED');
+    if (event && notAfter) {
+      const start = Date.parse(event.start);
+      const end = Date.parse(event.end);
+      if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || end > notAfter.getTime())
+        throw new Error('GOOGLE_EVENT_NOT_PAST');
+    }
     await this.deleteEvent(user, calendarId, eventId);
   }
   async deleteCalendar(_user: UserRecord, calendarId: string) {

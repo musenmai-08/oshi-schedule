@@ -339,7 +339,7 @@ export interface CalendarGateway {
     deterministicId?: boolean,
   ): Promise<string>;
   deleteEvent(user: UserRecord, calendarId: string, eventId: string): Promise<void>;
-  deleteManagedEvent(user: UserRecord, calendarId: string, eventId: string): Promise<void>;
+  deleteManagedEvent(user: UserRecord, calendarId: string, eventId: string, notAfter?: Date): Promise<void>;
   deleteCalendar(user: UserRecord, calendarId: string): Promise<void>;
   revokeAuthorization(user: UserRecord): Promise<void>;
 }

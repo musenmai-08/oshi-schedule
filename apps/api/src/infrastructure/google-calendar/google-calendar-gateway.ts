@@ -282,7 +282,7 @@ export class GoogleCalendarGateway implements CalendarGateway {
       throw new AppError('GOOGLE_REAUTH_REQUIRED', 'Googleの再連携が必要です', 401);
     }
   }
-  async deleteManagedEvent(user: UserRecord, calendarId: string, eventId: string) {
+  async deleteManagedEvent(user: UserRecord, calendarId: string, eventId: string, notAfter?: Date) {
     const path = `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`;
     const checkAccess = async () => {
       const calendar = await this.request(user.id, `/calendars/${encodeURIComponent(calendarId)}`);
@@ -302,11 +302,19 @@ export class GoogleCalendarGateway implements CalendarGateway {
     const body = (await event.json()) as {
       id?: string;
       status?: string;
+      start?: { dateTime?: string; date?: string };
+      end?: { dateTime?: string; date?: string };
       extendedProperties?: { private?: { managedBy?: string } };
     };
     if (body.status === 'cancelled') return;
     if (body.id !== eventId || body.extendedProperties?.private?.managedBy !== 'oshi-schedule')
       throw new AppError('GOOGLE_EVENT_NOT_MANAGED', '管理対象の予定ではありません', 409);
+    if (notAfter) {
+      const start = Date.parse(body.start?.dateTime ?? body.start?.date ?? '');
+      const end = Date.parse(body.end?.dateTime ?? body.end?.date ?? '');
+      if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || end > notAfter.getTime())
+        throw new AppError('GOOGLE_EVENT_NOT_PAST', '過去の予定であることを確認できません', 409);
+    }
     const deleted = await this.request(user.id, path, { method: 'DELETE' });
     await this.rejectAuthorizationFailure(user.id, deleted);
     if (deleted.status === 404 || deleted.status === 410) {

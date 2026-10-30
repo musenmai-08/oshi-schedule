@@ -62,7 +62,7 @@ export class SyncService {
       const calendarId = task.calendarId || user.calendarId;
       if (!calendarId) continue;
       try {
-        await this.calendar.deleteManagedEvent(user, calendarId, task.eventId);
+        await this.calendar.deleteManagedEvent(user, calendarId, task.eventId, this.clock.now());
         await this.store.deleteCalendarCleanupTask(task.id);
       } catch (error) {
         this.logger.error(

@@ -299,6 +299,40 @@ describe('GoogleCalendarGateway token refresh', () => {
     expect(fetchMock.mock.calls[2]?.[1]?.method).toBe('DELETE');
   });
 
+  it.each([
+    { start: { dateTime: '2026-10-31T00:00:00Z' }, end: { dateTime: '2026-10-31T01:00:00Z' } },
+    { start: { dateTime: '2026-10-29T00:00:00Z' }, end: { dateTime: '2026-10-31T01:00:00Z' } },
+    { start: undefined, end: undefined },
+  ])('keeps future, ongoing, or ambiguous retention events pending', async ({ start, end }) => {
+    const { user, gateway } = await setup();
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(json(token()))
+      .mockResolvedValueOnce(json({
+        id: 'event-id', status: 'confirmed', start, end,
+        extendedProperties: { private: { managedBy: 'oshi-schedule' } },
+      }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(gateway.deleteManagedEvent(user, 'calendar-id', 'event-id', new Date('2026-10-30T00:00:00Z')))
+      .rejects.toMatchObject({ code: 'GOOGLE_EVENT_NOT_PAST' });
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'DELETE')).toHaveLength(0);
+  });
+
+  it('deletes a managed past event through the retention cutoff', async () => {
+    const { user, gateway } = await setup();
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(json(token()))
+      .mockResolvedValueOnce(json({
+        id: 'event-id', status: 'confirmed',
+        start: { dateTime: '2026-10-29T00:00:00Z' },
+        end: { dateTime: '2026-10-29T01:00:00Z' },
+        extendedProperties: { private: { managedBy: 'oshi-schedule' } },
+      }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+    await gateway.deleteManagedEvent(user, 'calendar-id', 'event-id', new Date('2026-10-30T00:00:00Z'));
+    expect(fetchMock.mock.calls[2]?.[1]?.method).toBe('DELETE');
+  });
+
   it('never deletes an unmanaged event', async () => {
     const { user, gateway } = await setup();
     const fetchMock = vi.fn<typeof fetch>()

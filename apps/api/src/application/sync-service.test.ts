@@ -949,6 +949,26 @@ describe('SyncService', () => {
     expect(await store.listBroadcastsForSync(channel.id, now, null)).toHaveLength(0);
   });
 
+  it('keeps a task when the managed Calendar event has moved into the future', async () => {
+    const store = new MemoryStore();
+    const { user, channel } = await setup(store);
+    const now = new Date('2026-07-30T00:00:00Z');
+    channel.metadataFetchedAt = now;
+    const [saved] = await store.upsertBroadcasts(channel.id, [broadcast()], new Date('2026-07-01T00:00:00Z'));
+    await store.saveMapping({ userId: user.id, broadcastId: saved!.id, eventId: 'moved-future', managedFieldsHash: 'hash' });
+    const calendar = new FakeCalendarGateway();
+    calendar.events.set('moved-future', {
+      summary: 'old', description: 'old', status: 'confirmed',
+      start: '2026-08-01T00:00:00Z', end: '2026-08-01T01:00:00Z',
+      extendedProperties: { private: { managedBy: 'oshi-schedule' } },
+    });
+    await new SyncService(store, new MutableYouTube(), calendar, { now: () => now }, logger).maintainYouTubeData(now);
+    expect(await store.getMapping(user.id, saved!.id)).toBeNull();
+    expect(await store.listBroadcastsForSync(channel.id, now, null)).toHaveLength(0);
+    expect(calendar.events.has('moved-future')).toBe(true);
+    expect(await store.listPendingCalendarCleanup(100)).toMatchObject([{ eventId: 'moved-future' }]);
+  });
+
   it('does not retry Calendar deletion with revoked credentials while removing expired API data', async () => {
     const store = new MemoryStore();
     const { user, channel } = await setup(store);
