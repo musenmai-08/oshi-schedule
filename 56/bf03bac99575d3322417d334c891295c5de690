@@ -1,0 +1,33 @@
+apps/api/src/application/sync-service.ts
+  s_76c578e1a41b62::t_2440c159f4e1ad 65
+docs/operations/youtube-compliance-rollout.md
+  s_76c578e1a41b62::t_d090e7d4bce4a7 15
+apps/api/src/infrastructure/google-calendar/fake-calendar-gateway.ts
+  s_76c578e1a41b62::t_521cc02164e2b1 39-44
+  s_76c578e1a41b62::t_2440c159f4e1ad 35
+apps/api/src/infrastructure/google-calendar/google-calendar-gateway.test.ts
+  s_76c578e1a41b62::t_521cc02164e2b1 302-319
+  s_76c578e1a41b62::t_e195e70f79f3a1 320-335
+apps/api/src/application/sync-service.test.ts
+  s_76c578e1a41b62::t_c0853637fbb746 952-971
+apps/api/src/infrastructure/google-calendar/google-calendar-gateway.ts
+  s_76c578e1a41b62::t_2440c159f4e1ad 285,305-306,312-317
+apps/api/src/application/models.ts
+  s_76c578e1a41b62::t_2440c159f4e1ad 342
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "56bf03bac99575d3322417d334c891295c5de690",
+  "prompts": {},
+  "sessions": {
+    "s_76c578e1a41b62": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a147ff-c279-7d23-9517-71d7c37256ed",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "tezuka.genki <tezuka.genki@gmail.com>"
+    }
+  }
+}
