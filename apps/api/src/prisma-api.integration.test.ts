@@ -92,6 +92,17 @@ describe.runIf(Boolean(databaseUrl))('API with Prisma/PostgreSQL IDs and constra
       where: { id: created.body.data.subscription.id as string },
       include: { channel: true },
     });
+    await prisma.userChannelSubscription.update({
+      where: { id: subscription.id },
+      data: { status: 'PAUSED' },
+    });
+    const otherUser = await prisma.user.findUniqueOrThrow({
+      where: { supabaseUserId: 'prisma-other' },
+    });
+    const otherCredentialBefore = await prisma.googleCredential.findUniqueOrThrow({
+      where: { userId: otherUser.id },
+      select: { encryptedRefreshToken: true },
+    });
     const old = new Date('2026-01-01T00:00:00Z');
     const item: NormalizedBroadcast = {
       youtubeVideoId: 'prisma-retention-video',
@@ -107,6 +118,11 @@ describe.runIf(Boolean(databaseUrl))('API with Prisma/PostgreSQL IDs and constra
       actualEndAt: new Date('2026-01-01T01:00:00Z'),
     };
     const [broadcast] = await store.upsertBroadcasts(subscription.channelId, [item], old);
+    await store.upsertBroadcasts(
+      subscription.channelId,
+      [{ ...item, youtubeVideoId: 'prisma-retention-video-2', title: 'Another old stream' }],
+      old,
+    );
     await store.saveMapping({
       userId: subscription.userId,
       broadcastId: broadcast!.id,
@@ -124,25 +140,92 @@ describe.runIf(Boolean(databaseUrl))('API with Prisma/PostgreSQL IDs and constra
       await store.listChannelsNeedingMetadataRefresh(new Date('2026-02-01T00:00:00Z')),
     ).toHaveLength(1);
     await store.maintainYouTubeData(new Date('2026-02-01T00:00:00Z'));
-    expect(await prisma.scheduledBroadcast.findUnique({ where: { id: broadcast!.id } })).not.toBeNull();
+    expect(await prisma.scheduledBroadcast.findUnique({ where: { id: broadcast!.id } })).toBeNull();
     expect(await prisma.calendarEventMapping.count({ where: { broadcastId: broadcast!.id } })).toBe(
-      1,
+      0,
     );
     const tasks = await store.listPendingCalendarCleanup(10);
-    expect(tasks).toMatchObject([
-      { userId: subscription.userId, eventId: 'retention-event' },
-    ]);
-    await store.deleteCalendarCleanupTask(tasks[0]!.id);
+    expect(tasks).toMatchObject([{ userId: subscription.userId, eventId: 'retention-event' }]);
+    expect(
+      await prisma.youTubeChannel.findUnique({ where: { id: subscription.channelId } }),
+    ).toBeNull();
+    expect(
+      await prisma.userChannelSubscription.findUnique({ where: { id: subscription.id } }),
+    ).toBeNull();
+    expect(
+      await prisma.scheduledBroadcast.count({ where: { channelId: subscription.channelId } }),
+    ).toBe(0);
+    expect(
+      await prisma.googleCredential.findUniqueOrThrow({
+        where: { userId: otherUser.id },
+        select: { encryptedRefreshToken: true },
+      }),
+    ).toEqual(otherCredentialBefore);
     await store.maintainYouTubeData(new Date('2026-02-01T00:00:00Z'));
-    expect(await prisma.scheduledBroadcast.findUnique({ where: { id: broadcast!.id } })).toBeNull();
+    expect(await store.listPendingCalendarCleanup(10)).toHaveLength(1);
+    await store.deleteCalendarCleanupTask(tasks[0]!.id);
+    expect(await store.listPendingCalendarCleanup(10)).toHaveLength(0);
     expect(await store.countStaleYouTubeData(new Date('2026-02-01T00:00:00Z'))).toEqual({
       channels: 0,
       broadcasts: 0,
     });
-    expect(await prisma.youTubeChannel.findUnique({ where: { id: subscription.channelId } })).toBeNull();
     expect(await prisma.user.findUnique({ where: { id: subscription.userId } })).toMatchObject({
       channelReregistrationRequired: true,
     });
+  });
+
+  it('keeps 47 Calendar deletion targets after purging their shared stale channel', async () => {
+    const created = await register('@prisma-batch-retention');
+    const subscription = await prisma.userChannelSubscription.findUniqueOrThrow({
+      where: { id: created.body.data.subscription.id as string },
+    });
+    const old = new Date('2026-01-01T00:00:00Z');
+    const broadcasts = await store.upsertBroadcasts(
+      subscription.channelId,
+      Array.from({ length: 47 }, (_, index): NormalizedBroadcast => ({
+        youtubeVideoId: `prisma-batch-retention-${index}`,
+        title: `Old stream ${index}`,
+        kind: 'UNKNOWN',
+        status: 'COMPLETED',
+        youtubeUrl: `https://youtube.example/old-${index}`,
+        thumbnailUrl: '',
+        scheduledStartAt: old,
+        endAt: new Date('2026-01-01T01:00:00Z'),
+        endTimeProvisional: false,
+        actualStartAt: old,
+        actualEndAt: new Date('2026-01-01T01:00:00Z'),
+      })),
+      old,
+    );
+    for (const [index, broadcast] of broadcasts.entries())
+      await store.saveMapping({
+        userId: subscription.userId,
+        broadcastId: broadcast.id,
+        eventId: `batch-retention-event-${index}`,
+        managedFieldsHash: 'hash',
+      });
+    await prisma.youTubeChannel.update({
+      where: { id: subscription.channelId },
+      data: { metadataFetchedAt: old },
+    });
+    await store.maintainYouTubeData(new Date('2026-02-01T00:00:00Z'));
+    const tasks = await store.listPendingCalendarCleanup(100, subscription.userId);
+    expect(tasks).toHaveLength(47);
+    expect(new Set(tasks.map((task) => task.eventId)).size).toBe(47);
+    expect(
+      tasks.every((task) => Object.keys(task).sort().join(',') === 'calendarId,eventId,id,userId'),
+    ).toBe(true);
+    expect(
+      await prisma.calendarEventMapping.count({ where: { userId: subscription.userId } }),
+    ).toBe(0);
+    expect(
+      await prisma.scheduledBroadcast.count({ where: { channelId: subscription.channelId } }),
+    ).toBe(0);
+    expect(
+      await prisma.youTubeChannel.findUnique({ where: { id: subscription.channelId } }),
+    ).toBeNull();
+    await store.maintainYouTubeData(new Date('2026-02-01T00:00:00Z'));
+    expect(await store.listPendingCalendarCleanup(100, subscription.userId)).toHaveLength(47);
   });
 
   it('accepts an actual Prisma CUID for pause, resume, sync and delete', async () => {

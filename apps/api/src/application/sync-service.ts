@@ -48,12 +48,10 @@ export class SyncService {
 
   async maintainYouTubeData(now: Date, cleanupCalendar = true) {
     const retainAfter = new Date(now.getTime() - YOUTUBE_API_DATA_RETENTION_MILLISECONDS);
-    // The first pass records deletion targets but retains mappings and their parent API data.
+    // Persist Calendar deletion targets and release their YouTube parent rows atomically.
     await this.store.maintainYouTubeData(retainAfter);
     if (!cleanupCalendar) return;
     await this.retryCalendarCleanup();
-    // Only rows whose Calendar mappings were successfully removed can be purged.
-    await this.store.maintainYouTubeData(retainAfter);
   }
 
   async retryCalendarCleanup(userId?: string) {

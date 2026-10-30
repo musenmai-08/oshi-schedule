@@ -411,6 +411,11 @@ export class PrismaStore implements Store {
           })),
           skipDuplicates: true,
         });
+        // The task owns the Calendar deletion target independently of YouTube data.
+        // Keep both writes in this transaction so no mapping can be lost without a task.
+        await transaction.calendarEventMapping.deleteMany({
+          where: { id: { in: mappings.map((mapping) => mapping.id) } },
+        });
       }
       if (broadcastIds.length)
         await transaction.scheduledBroadcast.deleteMany({

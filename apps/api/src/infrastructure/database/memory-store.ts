@@ -331,6 +331,8 @@ export class MemoryStore implements Store {
           id: this.cuid(), userId: mapping.userId, calendarId, eventId: mapping.eventId,
         });
     }
+    const removedMappingIds = new Set(mappingsToRemove.map((mapping) => mapping.id));
+    this.mappings = this.mappings.filter((mapping) => !removedMappingIds.has(mapping.id));
     const mappedIds = new Set(this.mappings.map((mapping) => mapping.broadcastId));
     this.broadcasts = this.broadcasts.filter(
       (broadcast) => !staleIds.has(broadcast.id) || mappedIds.has(broadcast.id),

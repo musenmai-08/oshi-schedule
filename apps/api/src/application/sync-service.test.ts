@@ -906,7 +906,8 @@ describe('SyncService', () => {
     await store.saveMapping({ userId: user.id, broadcastId: saved!.id, eventId: 'event-stale', managedFieldsHash: 'hash' });
     const failed = new SyncService(store, new MutableYouTube(), new FailingDeleteCalendar(), { now: () => now }, logger);
     await failed.maintainYouTubeData(now);
-    expect(await store.getMapping(user.id, saved!.id)).not.toBeNull();
+    expect(await store.getMapping(user.id, saved!.id)).toBeNull();
+    expect(await store.listBroadcastsForSync(channel.id, now, null)).toHaveLength(0);
     expect(await store.listPendingCalendarCleanup(100)).toMatchObject([{ eventId: 'event-stale' }]);
     const calendar = new FakeCalendarGateway();
     calendar.events.set('event-stale', { summary: 'old', description: 'old', start: now.toISOString(), end: now.toISOString(), status: 'confirmed', extendedProperties: { private: { managedBy: 'oshi-schedule' } } });
@@ -918,7 +919,7 @@ describe('SyncService', () => {
     expect(await store.listPendingCalendarCleanup(100)).toHaveLength(0);
   });
 
-  it('removes mapping only after Calendar DELETE succeeds, then purges API data', async () => {
+  it('purges API data before Calendar DELETE and retains the independent task until success', async () => {
     const store = new MemoryStore();
     const { user, channel } = await setup(store);
     const now = new Date('2026-07-30T00:00:00Z');
@@ -930,17 +931,19 @@ describe('SyncService', () => {
     const order: string[] = [];
     const originalDelete = calendar.deleteEvent.bind(calendar);
     vi.spyOn(calendar, 'deleteEvent').mockImplementation(async (...args) => {
-      expect(await store.getMapping(user.id, saved!.id)).not.toBeNull();
+      expect(await store.getMapping(user.id, saved!.id)).toBeNull();
+      expect(await store.listBroadcastsForSync(channel.id, now, null)).toHaveLength(0);
+      expect(await store.listPendingCalendarCleanup(100)).toHaveLength(1);
       order.push('calendar');
       await originalDelete(...args);
     });
     const originalComplete = store.deleteCalendarCleanupTask.bind(store);
     vi.spyOn(store, 'deleteCalendarCleanupTask').mockImplementation(async (id) => {
-      order.push('mapping');
+      order.push('task');
       await originalComplete(id);
     });
     await new SyncService(store, new MutableYouTube(), calendar, { now: () => now }, logger).maintainYouTubeData(now);
-    expect(order).toEqual(['calendar', 'mapping']);
+    expect(order).toEqual(['calendar', 'task']);
     expect(await store.getMapping(user.id, saved!.id)).toBeNull();
     expect(await store.listPendingCalendarCleanup(100)).toHaveLength(0);
     expect(await store.listBroadcastsForSync(channel.id, now, null)).toHaveLength(0);
@@ -955,9 +958,10 @@ describe('SyncService', () => {
     await store.saveMapping({ userId: user.id, broadcastId: saved!.id, eventId: 'event-revoked', managedFieldsHash: 'hash' });
     await store.markReauthRequired(user.id);
     await new SyncService(store, new MutableYouTube(), new FailingDeleteCalendar(), { now: () => now }, logger).maintainYouTubeData(now);
-    expect(await store.getMapping(user.id, saved!.id)).not.toBeNull();
+    expect(await store.getMapping(user.id, saved!.id)).toBeNull();
     expect(await store.listPendingCalendarCleanup(100)).toHaveLength(0);
     expect(store.cleanupTasks).toMatchObject([{ eventId: 'event-revoked' }]);
+    expect(await store.listBroadcastsForSync(channel.id, now, null)).toHaveLength(0);
     await store.completeOnboarding(user.id, 'new-encrypted', 'v1', 'calendar-sync', 'scopes');
     const calendar = new FakeCalendarGateway();
     calendar.events.set('event-revoked', { summary: 'old', description: 'old', start: now.toISOString(), end: now.toISOString(), status: 'confirmed', extendedProperties: { private: { managedBy: 'oshi-schedule' } } });
@@ -966,7 +970,7 @@ describe('SyncService', () => {
     expect(store.cleanupTasks).toHaveLength(0);
   });
 
-  it.each(['decrypt', 'invalid_grant'] as const)('retains mapping and queue after %s credential failure', async (failure) => {
+  it.each(['decrypt', 'invalid_grant'] as const)('retains task but purges API data after %s credential failure', async (failure) => {
     const store = new MemoryStore();
     const { user, channel } = await setup(store);
     const now = new Date('2026-07-30T00:00:00Z');
@@ -984,8 +988,9 @@ describe('SyncService', () => {
     try {
       const calendar = new GoogleCalendarGateway(store, cipher, 'client', 'secret');
       await new SyncService(store, new MutableYouTube(), calendar, { now: () => now }, logger).maintainYouTubeData(now);
-      expect(await store.getMapping(user.id, saved!.id)).not.toBeNull();
+      expect(await store.getMapping(user.id, saved!.id)).toBeNull();
       expect(store.cleanupTasks).toMatchObject([{ eventId: 'credential-event' }]);
+      expect(await store.listBroadcastsForSync(channel.id, now, null)).toHaveLength(0);
       expect((await store.findUserById(user.id))?.reauthRequired).toBe(true);
       expect(fetchMock).toHaveBeenCalledTimes(failure === 'decrypt' ? 0 : 1);
     } finally {
